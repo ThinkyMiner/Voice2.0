@@ -59,6 +59,10 @@ make loop ARGS=--yes-send-real-transcripts   # one cycle: judge, root causes, fi
 make loop-status                 # the prompt registry, the cycles and the next action
 ```
 
+The loop fixes the buyer-side prompt, so it runs on the buyer-side calls IndiaMART's QA team
+audited (`LOOP_CORPUS=audited`, the default). The 250-call production sample is the seller-side
+Vani; `LOOP_CORPUS=production` runs the loop on it instead.
+
 The `--yes-send-real-*` flags send real customer calls to the model provider; nothing goes out
 without them. Loop artifacts (recordings, transcripts, audits, prompt versions) live under
 `data/derived/loop/`, git-ignored like the rest of `data/`. The API is in

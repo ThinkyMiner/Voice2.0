@@ -12,7 +12,7 @@ test, and rolls the winner out. Then it starts again on the new prompt.
 | Stage | What happens | Built with |
 |---|---|---|
 | **Listen** | Call recordings become diarised bot / buyer transcripts, phone numbers masked, Hinglish in Latin script as IndiaMART's auditors write it | Gemini 3 Flash (audio input) via OpenRouter |
-| **Judge** | Every call graded Pass / Non-Fatal / Fatal on 18 rubrics copied from IndiaMART's human QA checklist plus 3 prompt rules, each with a reason and the quote that proves it; the call's overall grade is its worst rubric, the QA team's own rule | Claude Sonnet 5.5 via OpenRouter; agreement measured against 1,963 human-audited calls |
+| **Judge** | Every call graded Pass / Non-Fatal / Fatal on 18 rubrics copied from IndiaMART's human QA checklist plus 3 prompt rules, each with a reason and the quote that proves it; the call's overall grade is its worst rubric, the QA team's own rule | Claude Sonnet 5.5 via OpenRouter; agreement measured on 160 calls IndiaMART's QA team had audited, calibrated on the first 40 and reported on the rest |
 | **Improve** | Failures grouped into named root causes, ranked by a published formula, priority = 100 × (3·fatal + non-fatal) / (3·audited); the top prompt-fixable cause gets 1–3 minimal edits to the prompt, each citing the calls it should repair | Claude Opus 5.5 |
 | **Gate** | A safety check reads the diff and blocks any change that adds a promise, weakens an honesty rule (for example "never claim to be human") or contradicts the prompt | Claude Sonnet 5.5 |
 | **Replay** | The same buyers, simulated twice, once against Prompt A and once against Prompt B, then graded by the same judge: a fair before/after for the root cause | Claude Haiku 5.5 as bot and buyer |
