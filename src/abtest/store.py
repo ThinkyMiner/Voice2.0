@@ -197,6 +197,6 @@ def insert_df(conn: sqlite3.Connection, table: str, df: pd.DataFrame) -> int:
     return len(out)
 
 
-def read_df(conn: sqlite3.Connection, sql: str, params: tuple = (),
+def read_df(conn: sqlite3.Connection, sql: str, params: tuple | dict = (),
             parse_dates: list[str] | None = None) -> pd.DataFrame:
     return pd.read_sql_query(sql, conn, params=params, parse_dates=parse_dates)
