@@ -119,21 +119,21 @@ def test_continue_logs_one_look_row(conn, jsonl):
 
 @pytest.mark.parametrize("to, kw, phrase", [
     (State.PROMOTED, {"z": 3.5},
-     "B now gets 100% of traffic, worth ≈ +132 Meeting Fixed a week (+44 per 1,000 triggered leads)."),
+     "Business impact: ≈ +132 Meeting Fixed a week at full traffic (+44 per 1,000 triggered leads)."),
     (State.PENDING_APPROVAL, {"z": 3.5},
-     "Approving B is worth ≈ +132 Meeting Fixed a week; B keeps its 10% share"),
+     "Business impact: approving B is worth ≈ +132 Meeting Fixed a week; B keeps its 10% share"),
     (State.STOPPED_HARM, {"z": -3.0, "lift": -0.05},
-     "All traffic back to A; at full rollout B would have cost ≈ 150 Meeting Fixed a week."),
+     "Business impact: at full rollout B would have cost ≈ 150 Meeting Fixed a week."),
     (State.STOPPED_HARM, {"rci": (0.12, 0.2)},
-     "B moved dur by +16.0% (RCI [+12.0%, +20.0%]), beyond the +10.0% margin."),
+     "at full rollout B would move dur by +16.0% for ≈ +132 Meeting Fixed a week; the guardrail does not allow that trade."),
     (State.STOPPED_HARM, {"rci": (0.03, 0.07), "absolute": True},
-     "B moved dur by +5.0 pp (RCI [+3.0 pp, +7.0 pp]), beyond the +2.0 pp margin."),
+     "B would move dur by +5.0 pp for"),
     (State.BLOCKED_GUARDRAIL, {"z": 3.5, "rci": (0.05, 0.15), "final": True},
-     "A stays; B's ≈ +132 Meeting Fixed a week does not clear the dur guardrail (RCI [+5.0%, +15.0%] vs margin +10.0%)."),
+     "Business impact: B's ≈ +132 Meeting Fixed a week comes with dur +10.0%, which the guardrail does not allow."),
     (State.INCONCLUSIVE, {"lift": 0.01, "final": True},
-     "A stays; B's effect is between -60 and +120 Meeting Fixed a week (95% CI)"),
+     "Business impact: B's effect is between −60 and +120 Meeting Fixed a week (95% CI)"),
     (State.HALTED_SRM, {"srm_p": 1e-6, "share_b": 0.085},
-     "the split is broken (B got 8.50% of leads vs 10% configured)"),
+     "Business impact: no estimate; the split is broken, so fix routing and rerun."),
 ])
 def test_state_verdicts(conn, jsonl, to, kw, phrase):
     s = decision.start(conn, FROZEN, T0)

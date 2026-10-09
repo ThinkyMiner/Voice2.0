@@ -547,7 +547,14 @@ class SplitSummary(_Frozen):
 
 # --- decision log (§2.9) ------------------------------------------------------------------
 
-class PrimaryLog(_Frozen):
+class _LogRow(_Frozen):
+    """A degenerate look (an arm with no events) can carry NaN or inf. Written as the JSON strings
+    "NaN"/"Infinity" (the default, null, would not parse back into a float), so the log stays strict
+    JSON and store.read_decisions round-trips it."""
+    model_config = ConfigDict(frozen=True, extra="forbid", ser_json_inf_nan="strings")
+
+
+class PrimaryLog(_LogRow):
     """Boundaries on the z scale as plotted: win = +w_k, harm = -h_k (negative)."""
     rate_A: float
     rate_B: float
@@ -559,7 +566,7 @@ class PrimaryLog(_Frozen):
     harm_boundary: float
 
 
-class GuardrailLog(_Frozen):
+class GuardrailLog(_LogRow):
     mean_A: float
     mean_B: float
     rel_change: float
@@ -568,7 +575,7 @@ class GuardrailLog(_Frozen):
     margin: float | None
 
 
-class SrmLog(_Frozen):
+class SrmLog(_LogRow):
     configured_share_B: float
     observed_share_B: float           # assigned leads
     p: float
@@ -576,7 +583,7 @@ class SrmLog(_Frozen):
     p_triggered: float
 
 
-class Decision(_Frozen):
+class Decision(_LogRow):
     """One append-only log row: kind="look" per look (including CONTINUE), kind="state_change"
     per transition. Look-only fields are None on state-change rows that no look produced
     (for example an approval)."""
@@ -681,7 +688,7 @@ class Power:  # src/abtest/power.py — frozen at phase-1. CLI: python -m abtest
 
     @staticmethod
     def inflation_factor(cfg: ExperimentConfig) -> float:
-        """Group-sequential inflation R. Returns 1.0 until Phase 3 computes it from boundaries."""
+        """Group-sequential inflation R from the win boundaries at the planned look schedule (§2.7)."""
 
     @staticmethod
     def n_max(cfg: ExperimentConfig) -> NMax: ...
