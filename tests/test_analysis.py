@@ -148,19 +148,43 @@ def test_continuous_secondary_follows_the_formulas():
     assert (s.name, s.type, s.role, s.margin) == ("answered_duration_s", "continuous", "guardrail", 0.10)
 
 
-def test_binary_guardrail_delta_is_absolute_with_the_unpooled_se():
-    n_a, n_b, k_a, k_b = 200, 100, 30, 10
+def _binary_sec(n_a, n_b, k_a, k_b, k=1):
+    """Binary-guardrail stats for k_a/n_a events in A and k_b/n_b in B (all mature)."""
     sec = np.r_[np.ones(k_a), np.zeros(n_a - k_a), np.ones(k_b), np.zeros(n_b - k_b)]
-    rng = np.random.default_rng(2)
-    r = look(outcomes(["A"] * n_a + ["B"] * n_b, rng.integers(0, 2, n_a + n_b), sec), BUYER)
-    s = r.secondary
+    prim = np.random.default_rng(2).integers(0, 2, n_a + n_b)
+    return look(outcomes(["A"] * n_a + ["B"] * n_b, prim, sec), BUYER, k=k).secondary
+
+
+def _agresti_caffo_se(n_a, n_b, k_a, k_b):
+    pa, pb = (k_a + 1) / (n_a + 2), (k_b + 1) / (n_b + 2)
+    return math.sqrt(pa * (1 - pa) / (n_a + 2) + pb * (1 - pb) / (n_b + 2))
+
+
+def test_binary_guardrail_delta_is_absolute_with_the_agresti_caffo_se():
+    n_a, n_b, k_a, k_b = 200, 100, 30, 10
+    s = _binary_sec(n_a, n_b, k_a, k_b)
     assert (s.mean_A, s.mean_B) == (0.15, 0.10)
-    assert s.delta == pytest.approx(-0.05) and s.delta_type == "absolute"
+    assert s.delta == pytest.approx(-0.05) and s.delta_type == "absolute"  # unadjusted pB - pA
     assert s.rel_change == pytest.approx(-0.05 / 0.15)  # always relative
-    assert s.se == pytest.approx(math.sqrt(0.15 * 0.85 / n_a + 0.10 * 0.90 / n_b))
-    lo, hi = confint_proportions_2indep(k_b, n_b, k_a, n_a, method="wald", compare="diff", alpha=1 - CONFIDENCE)
-    assert s.ci95 == pytest.approx((lo, hi))
+    assert s.se == pytest.approx(_agresti_caffo_se(n_a, n_b, k_a, k_b))
+    assert s.ci95 == pytest.approx((s.delta - Z_CI * s.se, s.delta + Z_CI * s.se))
     assert (s.name, s.type, s.role, s.margin) == ("abrupt_disconnect", "binary", "guardrail", 0.02)
+
+
+def test_binary_guardrail_with_no_b_events_is_not_cleared_on_a_zero_se():
+    margin = BUYER.secondary.margin  # worse_if increase: cleared iff rci[1] < margin
+    for k_a in (0, 3):  # Wald SE: 0 with no events anywhere, sqrt(pA(1-pA)/nA) with none in B
+        s = _binary_sec(150, 20, k_a, 0, k=3)
+        assert s.delta == pytest.approx(-k_a / 150)
+        assert s.se == pytest.approx(_agresti_caffo_se(150, 20, k_a, 0))
+        assert s.rci[1] > margin  # 20 B leads without a disconnect are no evidence of safety
+
+
+def test_binary_guardrail_se_matches_the_plain_unpooled_se_at_large_n():
+    n_a, n_b, k_a, k_b = 50_000, 10_000, 2_500, 575
+    pa, pb = k_a / n_a, k_b / n_b
+    wald = math.sqrt(pa * (1 - pa) / n_a + pb * (1 - pb) / n_b)
+    assert _binary_sec(n_a, n_b, k_a, k_b).se == pytest.approx(wald, rel=1e-3)
 
 
 def test_rci_uses_the_win_boundary_of_this_look():
@@ -217,10 +241,16 @@ def test_immature_and_untriggered_leads_are_out_of_n_but_inside_srm():
 
 
 def test_info_fraction_is_matured_n_b_over_n_b_max():
-    df = two_arms(np.random.default_rng(8), 900, 150, 0.2, 0.2)
-    r = look(df)
+    # A: 900 mature, 100 immature. B: 150 mature, 40 triggered but immature, 30 untriggered.
+    variant = ["A"] * 1000 + ["B"] * 220
+    mature = np.r_[np.arange(1000) < 900, np.arange(220) < 150]
+    triggered = np.r_[np.ones(1000, bool), np.arange(220) < 190]
+    rng = np.random.default_rng(8)
+    prim, sec = rng.random(1220) < 0.2, rng.gamma(2, 60, 1220)
+    r = look(outcomes(variant, prim, sec, mature, triggered))
+    assert r.n_B == 150 and r.srm_assigned.n_B == 220 and r.srm_triggered.n_B == 190
     assert r.info_fraction == 150 / n_max(MEETING).n_b_max
-    binary = outcomes(df.variant, df.primary, (df.secondary > 120).astype(float))  # BUYER's guardrail is binary
+    binary = outcomes(variant, prim, (sec > 120).astype(float), mature, triggered)  # BUYER's guardrail is binary
     assert look(binary, BUYER).info_fraction == 150 / n_max(BUYER).n_b_max
 
 
@@ -331,7 +361,8 @@ def test_zero_baseline_gives_nan_relative_quantities():
     assert r.primary.rate_A == 0.0 and r.primary.lift_abs == pytest.approx(0.2) and math.isnan(r.primary.lift_rel)
     assert math.isfinite(r.primary.z) and r.primary.z > 0
     s = r.secondary  # abrupt-disconnect rate is 0 in both arms
-    assert s.mean_A == 0.0 and math.isnan(s.rel_change) and s.delta == 0.0 and s.se == 0.0
+    assert s.mean_A == 0.0 and math.isnan(s.rel_change) and s.delta == 0.0
+    assert s.se == pytest.approx(_agresti_caffo_se(10, 10, 0, 0))  # not Wald's 0
     c = look(outcomes(["A"] * 10 + ["B"] * 10, [0, 1] * 10, zeros))  # continuous mean_A == 0
     assert math.isnan(c.secondary.rel_change) and math.isnan(c.secondary.delta) and math.isnan(c.secondary.se)
     assert math.isfinite(c.primary.z)

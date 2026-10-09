@@ -37,8 +37,8 @@ def _div(num: float, den: float) -> float:
 
 
 def _arm(values: np.ndarray, rows: np.ndarray, binary: bool) -> tuple[int, float, float]:
-    """(n, mean, variance) of values[rows]. Binary: the plug-in p(1-p) that the unpooled SE
-    uses. Continuous: the per-lead sample variance (ddof=1), NaN for a single lead."""
+    """(n, mean, variance) of values[rows]. Binary: the plug-in p(1-p) that the primary's
+    unpooled SE uses. Continuous: the per-lead sample variance (ddof=1), NaN for a single lead."""
     v = values[rows]
     n = len(v)
     if n == 0:
@@ -116,7 +116,11 @@ def _secondary(sec: np.ndarray, a: np.ndarray, b: np.ndarray, cfg: ExperimentCon
         raise ValueError("a binary secondary must be 0/1 per lead")
     if binary:  # absolute difference, unpooled SE
         delta, delta_type = diff, "absolute"
-        se = math.sqrt(_div(var_a, n_a) + _div(var_b, n_b))
+        # Agresti-Caffo for the SE only (one success and one failure added per arm): an arm with
+        # no events, or only events, keeps some variance, so a guardrail is never cleared on a
+        # Wald SE of 0. Delta stays the raw pB - pA; an empty arm (mean NaN) gives NaN.
+        pa, pb = (mean_a * n_a + 1) / (n_a + 2), (mean_b * n_b + 1) / (n_b + 2)
+        se = math.sqrt(pa * (1 - pa) / (n_a + 2) + pb * (1 - pb) / (n_b + 2))
     else:  # relative change of means; delta-method variance of the ratio mean_B / mean_A
         delta, delta_type = rel_change, "relative"
         se = math.sqrt(_div(var_b, n_b * mean_a**2) + _div(mean_b**2 * var_a, n_a * mean_a**4))

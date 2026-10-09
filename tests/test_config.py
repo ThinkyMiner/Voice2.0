@@ -48,7 +48,10 @@ def test_every_yaml_loads(path):
 def test_scenarios():
     assert set(SCENARIOS) <= {p.stem for p in (CONFIGS_DIR / "scenarios").glob("*.yaml")}
     loaded = {n: config.load_scenario(n) for n in SCENARIOS}
-    assert len({s.seed for s in loaded.values()}) == len(SCENARIOS)
+    seeds = {n: s.seed for n, s in loaded.items()}
+    assert seeds["approval"] == seeds["win"]  # same traffic: the approval demo is the win run, gated
+    others = [v for n, v in seeds.items() if n != "approval"]
+    assert len(set(others)) == len(others)
     exps = {n: config.scenario_experiment(s) for n, s in loaded.items()}
     assert {n: e.id for n, e in exps.items()} == {n: f"vani-meeting-v1-{n}" for n in SCENARIOS}
     assert exps["win"].promotion == "auto" and exps["approval"].promotion == "approval"

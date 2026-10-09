@@ -1,20 +1,18 @@
 """Engine isolation (PLAN.md §2.3, required test): nothing on the engine path can see sim truth.
 
-The engine is metrics -> boundaries -> analysis -> rules (-> decision). It accepts only events,
-aggregates and the experiment config. Three layers of evidence:
+The engine is metrics -> boundaries -> power -> analysis -> rules (-> decision). It accepts only
+events, aggregates and the experiment config. Three layers of evidence:
 
 (a) static   : the source never imports the simulator or names a sim type/path;
 (b) signature: no parameter or return annotation is a sim type;
-(c) runtime  : a full lead_outcomes -> compute_boundaries -> analyze_look -> evaluate_look pass
-               completes while every attempt to open anything under configs/sims/ raises.
+(c) runtime  : in a subprocess whose audit hook raises on any open or listing under configs/sims/,
+               the engine modules import and a full lead_outcomes -> compute_boundaries ->
+               analyze_look -> evaluate_look pass completes; a deliberate open is the control.
 """
 
 import ast
-import builtins
 import importlib
 import inspect
-import io
-import os
 import pathlib
 import re
 import subprocess
@@ -29,12 +27,13 @@ import yaml
 
 from abtest.contracts import CONFIGS_DIR, ROOT, SIMS_DIR, ExperimentConfig
 
-ENGINE_MODULES = ("metrics", "analysis", "rules", "boundaries", "decision")
+ENGINE_MODULES = ("metrics", "analysis", "rules", "boundaries", "power", "decision")
 OPTIONAL_MODULES = {"decision"}  # built in Phase 4; skipped until it exists
 FORBIDDEN_NAMES = ("SIMS_DIR", "configs/sims", "SimConfig", "load_sim", "Scenario", "SimTruth")
 SIM_TYPES = frozenset({"SimConfig", "Scenario", "SimTruth", "Pool", "SimDay"})
 ENGINE_FUNCTIONS = (("metrics", "lead_outcomes"), ("analysis", "analyze_look"),
-                    ("rules", "evaluate_look"), ("boundaries", "compute_boundaries"))
+                    ("rules", "evaluate_look"), ("boundaries", "compute_boundaries"),
+                    ("power", "n_max"), ("power", "detectable_lift"), ("power", "preflight"))
 
 
 def _engine_module(name: str):
@@ -132,46 +131,6 @@ def test_signature_has_no_sim_types(module, func):
 
 # --- (c) runtime -----------------------------------------------------------------------------
 
-def _under_sims(target) -> bool:
-    if isinstance(target, int):  # a file descriptor: nothing to resolve
-        return False
-    try:
-        path = pathlib.Path(os.fspath(target)).resolve()
-    except (TypeError, ValueError, OSError):
-        return False
-    return path == SIMS_DIR.resolve() or SIMS_DIR.resolve() in path.parents
-
-
-@pytest.fixture
-def sims_guard(monkeypatch):
-    """Make every way of opening, reading or listing configs/sims/ raise."""
-    def guard(orig, arg_of=lambda args, kwargs: args[0] if args else kwargs.get("file")):
-        def wrapper(*args, **kwargs):
-            if _under_sims(arg_of(args, kwargs)):
-                raise AssertionError(f"engine path touched {SIMS_DIR}")
-            return orig(*args, **kwargs)
-        return wrapper
-
-    def self_arg(args, kwargs):
-        return args[0]
-
-    monkeypatch.setattr(builtins, "open", guard(builtins.open))
-    monkeypatch.setattr(io, "open", guard(io.open))
-    for name in ("open", "read_text", "read_bytes", "iterdir", "glob", "rglob"):
-        monkeypatch.setattr(pathlib.Path, name, guard(getattr(pathlib.Path, name), self_arg))
-    monkeypatch.setattr(os, "listdir", guard(os.listdir, lambda a, k: a[0] if a else k.get("path")))
-    monkeypatch.setattr(os, "scandir", guard(os.scandir, lambda a, k: a[0] if a else k.get("path")))
-
-
-def test_the_guard_itself_blocks_sims_and_allows_everything_else(sims_guard):
-    sim_file = SIMS_DIR / "win.yaml"
-    for attempt in (lambda: open(sim_file), lambda: io.open(sim_file), sim_file.read_text,
-                    sim_file.read_bytes, lambda: list(SIMS_DIR.iterdir()), lambda: os.listdir(SIMS_DIR)):
-        with pytest.raises(AssertionError, match="engine path touched"):
-            attempt()
-    assert (CONFIGS_DIR / "experiments" / "vani-meeting-v1.yaml").read_text()  # other paths still work
-
-
 def _synthetic_world(cfg: ExperimentConfig, n_leads: int = 900, seed: int = 7):
     """Exposures and calls for a tiny experiment: ~half of leads answer, ~20% of those succeed."""
     rng = np.random.default_rng(seed)
@@ -194,7 +153,8 @@ def _synthetic_world(cfg: ExperimentConfig, n_leads: int = 900, seed: int = 7):
     return pd.DataFrame(rows), exposures, t0
 
 
-def test_runtime_full_engine_pass_never_touches_sims(sims_guard):
+def _engine_pass() -> None:
+    """lead_outcomes -> compute_boundaries -> analyze_look -> evaluate_look at every look."""
     from abtest import analysis, boundaries, metrics, rules
 
     base = ExperimentConfig.model_validate(
@@ -215,3 +175,48 @@ def test_runtime_full_engine_pass_never_touches_sims(sims_guard):
     assert len(verdicts) == cfg.window.looks
     assert all(v.reason for v in verdicts)
     assert verdicts[-1].decision != "CONTINUE"  # the final look always decides
+
+
+# A fresh interpreter whose audit hook fires on every open (builtins, io, os.open, the import
+# system's open_code) and listing under SIMS_DIR. It is installed before anything is imported, so
+# import-time reads count too. Touches are also recorded, in case engine code swallows the error.
+_AUDITED = """
+import importlib, os, sys
+SIMS = os.path.realpath(sys.argv[1])
+touched = []
+class SimsTouched(Exception): pass
+def hook(event, args):
+    if event in ("open", "os.listdir", "os.scandir") and isinstance(args[0], (str, bytes, os.PathLike)):
+        path = os.path.realpath(os.fsdecode(args[0]))
+        if path == SIMS or path.startswith(SIMS + os.sep):
+            touched.append(path)
+            raise SimsTouched(path)
+sys.addaudithook(hook)
+sys.path.insert(0, sys.argv[2])
+import test_engine_isolation as t
+for m in t.ENGINE_MODULES:
+    try:
+        importlib.import_module("abtest." + m)
+    except ModuleNotFoundError as e:
+        if m not in t.OPTIONAL_MODULES or e.name != "abtest." + m:
+            raise
+t._engine_pass()
+if touched:
+    sys.exit(f"engine path touched {touched}")
+win = os.path.join(SIMS, "win.yaml")
+for control in (lambda: open(win), lambda: os.open(win, os.O_RDONLY), lambda: os.listdir(SIMS)):
+    try:
+        control()
+        sys.exit("control not caught: the hook does not guard " + SIMS)
+    except SimsTouched:
+        pass
+print("engine pass clean, controls caught")
+"""
+
+
+def test_runtime_full_engine_pass_never_touches_sims():
+    tests_dir = str(pathlib.Path(__file__).parent)
+    res = subprocess.run([sys.executable, "-c", _AUDITED, str(SIMS_DIR), tests_dir],
+                         capture_output=True, text=True, cwd=ROOT, timeout=120)
+    assert res.returncode == 0, res.stderr or res.stdout
+    assert res.stdout.strip() == "engine pass clean, controls caught"
