@@ -5,6 +5,7 @@ the whole engine (the Phase 3 stats chain plus decision.py and runner.EXPECTED),
 the reason until both are present. The purity tests need neither and run in CI.
 """
 
+import ast
 import importlib
 import importlib.util
 import inspect
@@ -39,10 +40,38 @@ def _types(t) -> typing.Iterator:
         yield from _types(arg)
 
 
+def _code_words(src: str) -> list[str]:
+    """Imported names, identifiers, attributes and string values: the code, not its docstrings or
+    comments (a docstring may say "nothing from the simulator")."""
+    tree = ast.parse(src)
+    docs = {id(n.body[0].value) for n in ast.walk(tree)
+            if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.body and isinstance(n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant)}
+    words = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            words += [a.name for a in n.names]
+        elif isinstance(n, ast.ImportFrom):
+            words += [n.module or ""] + [a.name for a in n.names]
+        elif isinstance(n, ast.Name):
+            words.append(n.id)
+        elif isinstance(n, ast.Attribute):
+            words.append(n.attr)
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docs:
+            words.append(n.value)
+    return words
+
+
 @pytest.mark.parametrize("name", ENGINE)
-def test_engine_source_never_mentions_sim_ground_truth(name):
-    found = [tok for tok in SIM_TOKENS if tok in _source(name)]
-    assert not found, f"abtest.{name} mentions {found}; the engine path must never see sim truth (§2.3)"
+def test_engine_code_never_mentions_sim_ground_truth(name):
+    words = _code_words(_source(name))
+    found = [tok for tok in SIM_TOKENS if any(tok in w for w in words)]
+    assert not found, f"abtest.{name} uses {found}; the engine path must never see sim truth (§2.3)"
+
+
+def test_code_words_sees_code_not_prose():
+    words = _code_words('"""nothing from the simulator"""\nfrom abtest import simulator  # simulator\nx = "configs/sims/a.yaml"\n')
+    assert "nothing from the simulator" not in words and "simulator" in words and "configs/sims/a.yaml" in words
 
 
 @pytest.mark.parametrize("name", ENGINE)
