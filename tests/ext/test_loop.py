@@ -14,7 +14,7 @@ import yaml
 
 from abtest import decision, simulator, store
 from abtest.contracts import BASE_PROMPT, ROOT, State
-from abtest.ext import loop, models
+from abtest.ext import llm, loop, models
 from abtest.ext.models import (CallAudit, Fix, GateCheck, GateResult, PromptVersion, ReplayResult, RootCause,
                                RubricVerdict, Transcript, Turn, load, save)
 
@@ -333,6 +333,14 @@ def test_cli_advance_status_and_approve(world, capsys):
     assert loop.main(["approve", "vani-loop-c1", "--actor", "kartik"]) == 1  # not PENDING_APPROVAL any more
     assert "only PENDING_APPROVAL" in capsys.readouterr().err
     assert loop.main(["status"]) == 0
+
+
+def test_cli_stops_cleanly_at_the_spend_limit(monkeypatch, capsys):
+    def broke(*a):
+        raise llm.BudgetExceeded("OpenRouter refused on the key's spend limit")
+    monkeypatch.setattr(loop, "advance", broke)
+    assert loop.main(["advance"]) == 1
+    assert "resumes where it stopped" in capsys.readouterr().err
 
 
 # --- recovery and integrity (the Codex review's findings) -------------------------------------------

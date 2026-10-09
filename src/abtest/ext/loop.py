@@ -597,11 +597,16 @@ def main(argv: list[str] | None = None) -> int:
     ok.add_argument("--actor", required=True, help="who decides; recorded on the decision log row")
     ok.add_argument("--reject", action="store_true")
     a = ap.parse_args(argv)
+    from abtest.ext.llm import BudgetExceeded
     try:
         if a.cmd == "advance":
             advance(a.until, a.real)
         elif a.cmd == "approve":
             approve(a.experiment_id, a.actor, not a.reject)
+    except BudgetExceeded as e:  # every finished model call is cached: a rerun resumes at this stage
+        print(f"stopped: {e}\nthe cycle resumes where it stopped: raise the limit and rerun the same command",
+              file=sys.stderr)
+        return 1
     except (Busy, KeyError, ValueError) as e:
         print(f"error: {e.args[0] if e.args else e}", file=sys.stderr)
         return 1
