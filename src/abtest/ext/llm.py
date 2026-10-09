@@ -26,7 +26,7 @@ from abtest.ext.models import LLM_CACHE_DIR, LOOP_DIR
 URL = "https://openrouter.ai/api/v1/chat/completions"
 SPEND = LOOP_DIR / "llm_spend.json"
 MODELS = {  # role -> default model; override with LLM_MODEL_<ROLE>
-    "transcribe": "google/gemini-2.5-flash",
+    "transcribe": "google/gemini-3-flash-preview",  # listen pilot: Latin script first time, best text, cheapest
     "judge": "anthropic/claude-sonnet-5.5",
     "judge_fast": "anthropic/claude-haiku-5.5",
     "fixer": "anthropic/claude-opus-5.5",
