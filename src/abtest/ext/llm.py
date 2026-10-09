@@ -144,6 +144,9 @@ def chat(model: str, messages: list[dict], *, schema: dict | None = None, schema
     for attempt in range(5):
         try:
             r = httpx.post(URL, json=body, headers=headers, timeout=timeout)
+            if r.status_code == 402 or (r.status_code == 403 and "Budget limit" in r.text):
+                # The key's own cap (credits, or the org's monthly limit): stop the batch, not one call.
+                raise BudgetExceeded(f"OpenRouter refused on the key's spend limit: {r.text[:200]}")
             # A 403 "not in the allowlist" is transient on a network that leaves from more than one
             # public IP: retry it like a rate limit.
             transient = r.status_code in (429, 500, 502, 503, 504) or (
