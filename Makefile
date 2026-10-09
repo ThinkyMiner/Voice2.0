@@ -9,6 +9,7 @@ EXP      ?= $(EXP_$(DATASET))
 SCENARIO ?= win
 SPEED    ?= 1
 ACTOR    ?= $(USER)
+PORT     ?= 8000
 PROMPT_DOCX := data/Sarvam Prompt - Buyer Side VANI.docx
 
 setup:  ## install deps; (re)extract the base prompt if it is missing
@@ -24,8 +25,14 @@ profile:  ## make profile DATASET=bttc|buyer_logs
 preflight:  ## make preflight EXP=configs/experiments/<id>.yaml
 	$(RUN) python -m abtest.power $(EXP)
 
-simulate split-report api:
-	@echo "not built yet (Phase 2)"; exit 1
+simulate:  ## make simulate SCENARIO=win
+	$(RUN) python -m abtest.runner $(SCENARIO)
+
+split-report:  ## make split-report SCENARIO=win
+	$(RUN) python -m abtest.srm $(SCENARIO)
+
+api:  ## GET http://localhost:$(PORT)/assign?experiment_id=&lead_id=
+	$(RUN) uvicorn abtest.api:app --port $(PORT)
 
 boundaries validate:
 	@echo "not built yet (Phase 3)"; exit 1

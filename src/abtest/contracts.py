@@ -12,6 +12,7 @@ Stubs for later modules are PROVISIONAL until their phase starts; each class say
 
 import math
 import os
+from dataclasses import dataclass
 import sqlite3
 from collections.abc import Sequence
 from datetime import date, datetime
@@ -451,6 +452,82 @@ class Verdict(_Frozen):
     reason: str
 
 
+# --- simulation and split evidence (§2.5, Phase 2) ---------------------------------------
+
+@dataclass(frozen=True, eq=False)
+class Pool:
+    """Bootstrap pool, built once per run; only simulator functions read its frames.
+
+    The pool unit is a LEAD-WINDOW: one lead's calls inside one non-overlapping
+    `window.days` block of the reference period (blocks as in VolumeStats), with timing
+    relative to that lead's first call in the block. This matches how `volume.daily_leads`
+    is measured (distinct leads dialed per block / window days)."""
+    calls: pd.DataFrame   # one row per pool call; simulator-defined columns (incl. pool lead key, offset)
+    leads: pd.DataFrame   # one row per pool lead-window; simulator-defined columns
+    start: datetime       # sim day 0 = midnight after the reference period's last day
+    p: float              # primary success rate per triggered pool lead (the §2.5 injection p)
+    secondary_base: float  # binary: per-triggered-lead rate; continuous: mean per-lead mean
+
+
+@dataclass(frozen=True, eq=False)
+class SimDay:
+    """What one simulated day produces. `exposures` and `calls` have exactly the store columns
+    of their tables and are inserted as is; dropped B exposures (fault injection) are absent
+    from `exposures` but their calls are still in `calls`.
+
+    truth: one row per new lead (both arms) with columns lead_id, variant, exposure_logged,
+    triggered, primary_cf, primary, secondary_cf, secondary, injected_primary,
+    injected_secondary. *_cf = historical (counterfactual) outcome; the others = realised.
+    Outcomes use every generated call (calls after the window end are never generated)."""
+    exposures: pd.DataFrame
+    calls: pd.DataFrame
+    truth: pd.DataFrame
+
+
+class SimTruth(_Frozen):
+    """Ground truth for one run. Stored in the sim_truth table and reports/sim_truth_<scenario>.md.
+    The engine never reads it. Rates are over triggered leads."""
+    experiment_id: str
+    scenario: str
+    seed: int
+    injected_primary_rel_lift: float
+    injected_secondary_change: float
+    secondary_change_type: Literal["relative", "absolute"]
+    pool_leads: int
+    pool_p: float
+    leads: dict[Variant, int]
+    triggered: dict[Variant, int]
+    exposures_dropped: int
+    rate_A: float
+    rate_B_counterfactual: float
+    rate_B: float
+    realised_primary_rel_lift: float          # rate_B / rate_B_counterfactual - 1
+    secondary_A: float
+    secondary_B_counterfactual: float
+    secondary_B: float
+    realised_secondary_change: float          # relative or absolute, per secondary_change_type
+
+
+class DaySplit(_Frozen):
+    date: date
+    n_A: int
+    n_B: int
+    share_B: float
+
+
+class SplitSummary(_Frozen):
+    """Split evidence (§2.4, §2.8 rule 1). Leads are counted once, by their first exposure."""
+    experiment_id: str
+    configured_share_B: float
+    assigned: SrmResult
+    triggered: SrmResult      # assigned leads with >= 1 answered call in the store
+    per_day: list[DaySplit]   # by first-exposure date
+    leads_in_both_arms: int
+    rehash_checked: int       # exposures re-bucketed with router.bucket
+    rehash_mismatches: int    # stored bucket or variant disagrees with a fresh re-hash
+    rehash_pass: bool
+
+
 # --- decision log (§2.9) ------------------------------------------------------------------
 
 class PrimaryLog(_Frozen):
@@ -578,13 +655,14 @@ class Power:  # src/abtest/power.py — frozen at phase-1. CLI: python -m abtest
     def preflight(cfg: ExperimentConfig, daily_triggered_leads: float) -> Preflight: ...
 
 
-class Router:  # src/abtest/router.py — PROVISIONAL until Phase 2
+class Router:  # src/abtest/router.py — frozen at phase-2
     @staticmethod
     def bucket(salt: str, lead_id: str) -> int:
         """int(sha256(f"{salt}:{lead_id}").hexdigest()[:15], 16) % 10000"""
 
     @staticmethod
-    def variant_for(bucket: int, allocation: Allocation) -> Variant: ...
+    def variant_for(bucket: int, allocation: Allocation) -> Variant:
+        """B if bucket < allocation.B * 10000, else A."""
 
     @staticmethod
     def route(state: ExperimentState, lead_id: str) -> Assignment:
@@ -593,32 +671,47 @@ class Router:  # src/abtest/router.py — PROVISIONAL until Phase 2
     @staticmethod
     def assign(conn: sqlite3.Connection, experiment_id: str, lead_id: str,
                ts: datetime) -> Assignment:
-        """Load state, route, log the Exposure."""
+        """Load state from the store, route, append the Exposure to the exposures table."""
 
 
-# src/abtest/api.py — PROVISIONAL until Phase 2: `app = FastAPI()` with
-# GET /assign?experiment_id=&lead_id= -> {variant, state, config_hash, prompt_hash}.
+# src/abtest/api.py — frozen at phase-2: `app = FastAPI()` with
+# GET /assign?experiment_id=&lead_id= -> {variant, state, config_hash, prompt_hash}
+# (calls router.assign with the wall clock; 404 for an unknown experiment).
 
 
-class Simulator:  # src/abtest/simulator.py — PROVISIONAL until Phase 2
+class Simulator:  # src/abtest/simulator.py — frozen at phase-2
     @staticmethod
-    def build_pool(cfg: ExperimentConfig, sim: SimConfig, data_dir: Path = DATA_DIR) -> pd.DataFrame:
-        """Reference leads' calls with each call's offset from the lead's first call."""
+    def build_pool(cfg: ExperimentConfig, sim: SimConfig, data_dir: Path = DATA_DIR) -> Pool: ...
 
     @staticmethod
-    def simulate_day(pool: pd.DataFrame, cfg: ExperimentConfig, sim: SimConfig,
-                     state: ExperimentState, day: int, start: datetime,
-                     rng: np.random.Generator) -> dict[str, pd.DataFrame]:
-        """New leads for one sim day -> {"exposures", "calls", "truth"} frames."""
+    def simulate_day(pool: Pool, cfg: ExperimentConfig, sim: SimConfig, state: ExperimentState,
+                     day: int, seed: int) -> SimDay:
+        """Leads entering on sim day `day` (0-based), routed with router.route(state, ...).
+        All randomness comes from np.random.default_rng((seed, day)), so any day can be
+        regenerated alone; lead ids are f"sim-{seed}-{n}" with n global across days."""
 
-
-class Srm:  # src/abtest/srm.py — PROVISIONAL until Phase 2
     @staticmethod
-    def srm_test(n_a: int, n_b: int, share_b: float) -> SrmResult: ...
+    def truth_summary(truth: pd.DataFrame, pool: Pool, cfg: ExperimentConfig, sim: SimConfig,
+                      scenario: str, seed: int) -> SimTruth:
+        """`truth` = every SimDay.truth of the run, concatenated."""
+
+    @staticmethod
+    def write_truth_report(truth: SimTruth, out_dir: Path = REPORTS_DIR) -> Path:
+        """Writes out_dir / f"sim_truth_{truth.scenario}.md"."""
+
+
+class Srm:  # src/abtest/srm.py — frozen at phase-2. CLI: python -m abtest.srm <scenario>
+    @staticmethod
+    def srm_test(n_a: int, n_b: int, share_b: float) -> SrmResult:
+        """Chi-square goodness of fit (1 df) against the configured share; Wilson 95% CI."""
+
+    @staticmethod
+    def split_summary(conn: sqlite3.Connection, experiment_id: str) -> SplitSummary: ...
 
     @staticmethod
     def split_report(conn: sqlite3.Connection, experiment_id: str,
-                     out_dir: Path = REPORTS_DIR) -> Path: ...
+                     out_dir: Path = REPORTS_DIR) -> Path:
+        """Writes out_dir / f"split_{scenario or experiment_id}.md" and a PNG beside it."""
 
 
 class BoundariesModule:  # src/abtest/boundaries.py — PROVISIONAL until Phase 3
@@ -671,7 +764,7 @@ class DecisionModule:  # src/abtest/decision.py — PROVISIONAL until Phase 4
                 approved: bool) -> ExperimentState: ...
 
 
-class Runner:  # src/abtest/runner.py — PROVISIONAL until Phase 2 (stub) / Phase 4 (full)
+class Runner:  # src/abtest/runner.py — orchestrator stub in Phase 2, PROVISIONAL until Phase 4
     @staticmethod
     def run_scenario(scenario: Scenario, conn: sqlite3.Connection,
                      speed: float | None = None) -> ExperimentState: ...
