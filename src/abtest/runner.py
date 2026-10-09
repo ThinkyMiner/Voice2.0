@@ -43,6 +43,13 @@ def _engine():
     return metrics, analysis, boundaries, rules
 
 
+def _look_fraction(t: float, done: tuple[float, ...]) -> float:
+    """The fraction a look is computed at. Boundaries need strictly increasing fractions > 0, so
+    a forced final look with no newly matured B leads moves a hair past the last one: that spends
+    no new alpha, so its boundary is effectively uncrossable and the rules end the test honestly."""
+    return max(t, done[-1] * (1 + 1e-9) if done else 1e-9)
+
+
 def _pct(x: float) -> str:
     return f"{x:+.1%}"
 
@@ -99,7 +106,8 @@ def _run(scenario: Scenario, conn: sqlite3.Connection, speed: float | None = Non
         if is_final or t >= next_tau:
             # Lan-DeMets at the observed fractions, uncapped: boundaries.py clips the spending at
             # t = 1, so a final look past n_max spends exactly alpha with the right correlations.
-            bounds = boundaries.compute_boundaries(state.info_fractions + (t,), cfg)
+            fractions = state.info_fractions + (_look_fraction(t, state.info_fractions),)
+            bounds = boundaries.compute_boundaries(fractions, cfg)
             look = analysis.analyze_look(outcomes, cfg, state.looks_done + 1, look_ts, bounds, is_final)
             verdict = rules.evaluate_look(look, bounds, cfg)
             state = decision.apply_verdict(conn, state, look, bounds, verdict)

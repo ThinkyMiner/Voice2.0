@@ -247,6 +247,12 @@ def test_look_schedule(fakes, leads_per_day, n_b_max, ends):
         assert len(log.looks) < K
 
 
+def test_forced_final_look_without_new_information_still_increases():
+    assert runner._look_fraction(0.62, (0.2, 0.47)) == 0.62
+    assert 0.47 < runner._look_fraction(0.47, (0.2, 0.47)) < 0.4700001  # nothing new matured
+    assert 0 < runner._look_fraction(0.0, ()) < 1e-6                    # nothing matured at all
+
+
 @pytest.mark.parametrize("decided", [State.STOPPED_HARM, State.PENDING_APPROVAL])
 def test_stops_right_after_a_decision(fakes, decided):
     log = fakes(evaluate=stop_at(2, decided))
