@@ -1,0 +1,23 @@
+# Dashboard theme (PLAN.md §2.10): IndiaMART navy / gold / crimson, Calibri-style font stack.
+[theme]
+base = "light"
+primaryColor = "#003366"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f5f9"
+textColor = "#1a2433"
+linkColor = "#003366"
+codeTextColor = "#003366"
+redColor = "#C8102E"
+yellowColor = "#e8a517"
+blueColor = "#003366"
+font = "Calibri, Carlito, 'Segoe UI', Helvetica, Arial, sans-serif"
+headingFont = "Calibri, Carlito, 'Segoe UI', Helvetica, Arial, sans-serif"
+
+[theme.sidebar]
+backgroundColor = "#eef2f8"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
