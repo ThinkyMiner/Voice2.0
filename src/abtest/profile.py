@@ -25,7 +25,7 @@ CALL_PCTS = (50, 75, 90, 95, 99)
 DUR_PCTS = (10, 50, 90, 99)
 ENVELOPE_PCTS = (0.1, 1, 5, 50)
 CALLS_CAP = 10       # calls-per-lead count table: 1..CALLS_CAP-1, then CALLS_CAP+
-TOP_LEADS = 5
+TOP_LEADS = 5  # shown by rank: reports are committed, and lead IDs are real seller/buyer GLIDs
 UNIT_FACTORS = {"milliseconds": 0.001, "seconds": 1.0, "minutes": 60.0}  # unit -> seconds
 SECTIONS = (
     "## 1. Adapter",
@@ -120,6 +120,11 @@ def _md(df: pd.DataFrame) -> str:
     return "\n".join(out)
 
 
+def _ranked(calls) -> dict[str, int]:
+    """Excluded leads by rank, never by ID."""
+    return {f"#{i}": int(n) for i, n in enumerate(sorted(calls, reverse=True), 1)}
+
+
 def _kv(items: dict, key: str = "item", value: str = "value") -> str:
     return _md(pd.DataFrame({value: pd.Series(items, dtype=object)}).rename_axis(key))
 
@@ -176,7 +181,7 @@ def build_profile(cfg: ExperimentConfig, data_dir: Path = DATA_DIR) -> DataProfi
            "", "Inferred values:", "",
            _kv(rep.inferred, "rule", "rows") if rep.inferred else "none",
            "", "Excluded leads:", "",
-           _kv(rep.excluded_leads, "lead_id", "calls") if rep.excluded_leads else "none"]
+           _kv(_ranked(rep.excluded_leads.values()), "lead", "calls") if rep.excluded_leads else "none"]
     md += [""] + [f"- {n}" for n in rep.notes]
 
     # 2. Overview
@@ -215,9 +220,10 @@ def build_profile(cfg: ExperimentConfig, data_dir: Path = DATA_DIR) -> DataProfi
            _md(_pcts(cpl, CALL_PCTS, {"calls": 1})), "",
            _md(pd.DataFrame({"leads": counts, "share": counts / len(cpl)}).rename_axis("calls")), "",
            f"Top {TOP_LEADS} leads by calls:", "",
-           _md(pd.DataFrame({"calls": top, "excluded": top.index.isin(list(rep.excluded_leads))}).rename_axis("lead_id")),
+           _md(pd.DataFrame({"calls": top.to_numpy(), "excluded": top.index.isin(list(rep.excluded_leads))},
+                            index=pd.Index(range(1, len(top) + 1), name="rank"))),
            "", (f"Outliers excluded by `exclude_leads_with_calls_gt = {k}`: "
-                + (", ".join(f"lead {lid} ({n} calls)" for lid, n in rep.excluded_leads.items()) or "none")
+                + (", ".join(f"{n} calls" for n in rep.excluded_leads.values()) or "none")
                 + ". They are absent from every other section.")
            if k is not None else "`exclude_leads_with_calls_gt` is not set: no outlier exclusion."]
 

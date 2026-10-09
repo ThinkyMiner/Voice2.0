@@ -98,13 +98,13 @@ Over all 148,833 leads after the adapter's row drops, including leads then exclu
 
 Top 5 leads by calls:
 
-| lead_id | calls | excluded |
+| rank | calls | excluded |
 |---|---|---|
-| 253532672 | 87 | False |
-| 251427613 | 85 | False |
-| 40898508 | 78 | False |
-| 89314990 | 76 | False |
-| 245909668 | 74 | False |
+| 1 | 87 | False |
+| 2 | 85 | False |
+| 3 | 78 | False |
+| 4 | 76 | False |
+| 5 | 74 | False |
 
 `exclude_leads_with_calls_gt` is not set: no outlier exclusion.
 
