@@ -1,15 +1,21 @@
 """Pre-flight power: fixed-design n_B, group-sequential n_B,max and days needed (PLAN.md §2.7).
 
+n_B,max = R * fixed-design n_B, where R is computed from the win boundaries at the planned look
+schedule (boundaries.py), never hard-coded.
+
 CLI: python -m abtest.power <exp.yaml>   (make preflight EXP=...)
 """
 
 import math
 import sys
+from functools import lru_cache
 
 import numpy as np
 from scipy.optimize import brentq
+from scipy.special import ndtri
 from scipy.stats import norm
 
+from abtest.boundaries import crossing_probability, planned_info_fractions, win_boundaries
 from abtest.contracts import Direction, ExperimentConfig, NMax, Preflight
 
 _EDGE = float(np.sqrt(np.finfo(float).eps))  # numerical margin keeping brentq inside open limits
@@ -30,14 +36,30 @@ def fixed_n_b(p: float, mde_rel: float, share_b: float, alpha: float, power: flo
         raise ValueError(f"p_B = {p_b} is outside (0, 1) for p={p}, mde_rel={mde_rel}, {better}")
     k = (1 - share_b) / share_b
     p_bar = (k * p_a + p_b) / (k + 1)
-    h0 = norm.ppf(1 - alpha) * math.sqrt(p_bar * (1 - p_bar) * (1 + 1 / k))
-    h1 = norm.ppf(power) * math.sqrt(p_a * (1 - p_a) / k + p_b * (1 - p_b))
+    # ndtri is norm.ppf without scipy.stats overhead (~1 us vs ~100 us): analysis calls
+    # detectable_lift at every look, and its root-find calls this dozens of times.
+    h0 = ndtri(1 - alpha) * math.sqrt(p_bar * (1 - p_bar) * (1 + 1 / k))
+    h1 = ndtri(power) * math.sqrt(p_a * (1 - p_a) / k + p_b * (1 - p_b))
     return (h0 + h1) ** 2 / (p_b - p_a) ** 2
 
 
+@lru_cache(maxsize=None)
+def _inflation(alpha_win: float, power: float, planned: tuple[float, ...]) -> float:
+    """R = (theta / (z_{1-alpha} + z_power))^2, where theta is the drift at which the win
+    boundaries at `planned` are crossed by the final look with probability `power` (§2.7).
+    Cached: ExperimentConfig is not hashable, and detectable_lift calls _n_max dozens of times
+    per root-find while the validation harness calls it thousands of times."""
+    win = win_boundaries(planned, alpha_win)  # harm ignored: non-binding (§2.7)
+    z_fixed = float(norm.isf(alpha_win) + norm.ppf(power))  # the fixed-design drift (R = 1)
+    # Stopping early never adds power, so theta >= z_fixed; R <= 4 (theta <= 2 * z_fixed) is far
+    # beyond any sane schedule and keeps the root bracketed (f(0) = alpha - power < 0).
+    theta = brentq(lambda th: crossing_probability(win, planned, th) - power, 0.0, 2 * z_fixed)
+    return (theta / z_fixed) ** 2
+
+
 def inflation_factor(cfg: ExperimentConfig) -> float:
-    # Phase 3 replaces this body with R computed from the alpha-spending boundaries (§2.7).
-    return 1.0
+    """Group-sequential inflation R at the planned look schedule (`planned_info_fractions`)."""
+    return _inflation(cfg.alpha_win, cfg.power, planned_info_fractions(cfg))
 
 
 def _n_max(cfg: ExperimentConfig, mde_rel: float) -> NMax:
@@ -92,6 +114,7 @@ def main(argv: list[str] | None = None) -> None:
     vs = profile.volume_stats(df, cfg.window.days)
     pf = preflight(cfg, vs.daily_triggered_leads)
     nm, c = pf.n_max, math.ceil
+    planned = planned_info_fractions(cfg)
     p_b = _p_b(pf.baseline_p, pf.mde_rel, cfg.primary.better)
     lift = pf.min_detectable_lift_rel
     rows = [
@@ -99,7 +122,9 @@ def main(argv: list[str] | None = None) -> None:
         ("MDE (relative)", f"{pf.mde_rel:<8.1%}-> p_B {p_b:.4f}"),
         ("allocation", f"A {cfg.allocation.A:.0%} / B {pf.share_b:.0%}"),
         ("n_B fixed design", f"{c(nm.n_b_fixed):,}"),
-        ("inflation factor R", f"{nm.inflation_factor:<8.3f}(placeholder until Phase 3)"),
+        ("inflation factor R", f"{nm.inflation_factor:<8.3f}({cfg.window.looks} looks at t = "
+                               f"{planned[0]:.2f}…{planned[-1]:.2f}, win boundaries, "
+                               f"power {cfg.power:.0%})"),
         ("n_B,max", f"{c(nm.n_b_max):,}"),
         ("n_A,max / total n", f"{c(nm.n_a_max):,} / {c(nm.n_total_max):,}"),
         ("triggered leads/day", f"{pf.daily_triggered_leads:<8,.1f}"
