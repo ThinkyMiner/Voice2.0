@@ -36,7 +36,9 @@ REGISTRY = LOOP_DIR / "registry.json"       # list[PromptVersion]
 CYCLES = LOOP_DIR / "cycles.json"           # list[Cycle]
 CALLS_CSV = DATA_DIR / "calls" / "squadstack_sample250.csv"      # production sample, 2026-10-06
 AUDIT_CSV = DATA_DIR / "audit" / "audit_source_of_truth.csv"     # IndiaMART human QA audit
-RUBRICS_DIR = ROOT / "configs" / "rubrics"  # built-in rubrics (committed)
+AGREEMENT = LOOP_DIR / "agreement.json"     # latest AgreementReport (aggregates only)
+RUBRICS_DIR = Path(__file__).parent / "rubric_sets"  # built-in rubrics (committed; not under configs/,
+#                                                   whose YAML the base config test loads by folder)
 
 # --- vocabulary ------------------------------------------------------------------------
 
@@ -185,6 +187,7 @@ class GateCheck(_Frozen):
     probability: float
     blocking: bool
     threshold: float = 0.5
+    reason: str = ""                        # the gate model's one-line reason
 
 
 class GateResult(_Frozen):
@@ -223,6 +226,7 @@ class Fix(_Frozen):
     gate: GateResult | None = None
     replay: ReplayResult | None = None
     model: str
+    created_ts: str = ""
 
 
 # --- Prove and roll out ----------------------------------------------------------------
@@ -250,6 +254,7 @@ class Cycle(_Frozen):
     experiment_id: str | None = None
     outcome: str | None = None              # engine terminal state, or GATE_BLOCKED / REPLAY_NO_GAIN
     notes: tuple[str, ...] = ()
+    tried: tuple[str, ...] = ()             # root-cause ids attempted in this cycle, in order
     started_ts: str
     updated_ts: str
 

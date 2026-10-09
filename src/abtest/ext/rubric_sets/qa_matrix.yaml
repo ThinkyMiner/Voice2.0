@@ -1,0 +1,458 @@
+# IndiaMART's Vani QA checklist: one rubric per graded column of the human audit sheet
+# (models.AUDIT_CSV), so the judge's grades line up with the auditors' for agreement.
+# The guidance summarises how the auditors use each column (from their remark patterns:
+# when they write Fatal, Non-Fatal, Pass or NA) and the production prompt rule it enforces.
+# The judge reads a transcript only: no audio, no lead record, no catalogue. Several columns
+# are filled by the auditors only when something notable happened; their guidance says
+# "na" for the ordinary case so the judge matches that habit.
+# Fields are models.Rubric; builtin and author take the model defaults.
+
+- id: outcome_accuracy_intent
+  name: Outcome Accuracy (Intent)
+  category: Outcome
+  qa_column: Outcome Accuracy (Intent)
+  root_type: prompt
+  weight: 5
+  question: >-
+    Did the bot treat the call as a buy requirement only after the buyer genuinely confirmed
+    one, and handle a call without a requirement as no lead?
+  applies_when: Every call.
+  guidance: >-
+    Auditors check whether the buy lead should exist at all. A requirement is confirmed only
+    when the buyer clearly says they need the product, or starts describing it, in reply to the
+    bot's requirement question. A bare "haan" or "ji" that answers a different question (a
+    greeting, "can you hear me", "are you on the call") is not a confirmation, and repeated
+    hellos are not intent. Signs that the bot treated the call as a lead: it says the seller is
+    busy and it will transfer the call, asks quantity, specifications, name or city, or closes
+    with "requirement noted". Buyers who want only the original seller, a job, to sell on
+    IndiaMART, to complain or to chase an order have no requirement; the right outcome is no
+    lead. Grade pass when the buyer confirmed and the bot proceeded, or when there was no
+    requirement and the bot did not proceed. If the call ended before any confirmation and the
+    bot never proceeded, grade pass with confidence of 0.6 or less, because the lead record is
+    not visible.
+  fatal_when: >-
+    The bot proceeded as if a requirement was confirmed (collection questions, a transfer
+    pitch, a "requirement noted" close) although the buyer never confirmed one: only greetings
+    or hellos, an affirmation to an unrelated question, an explicit "no requirement", wanting
+    only the original seller, a job or selling enquiry, or a speaker who is clearly not a buyer.
+  non_fatal_when: >-
+    Mixed intent the bot partly mishandled, for example the buyer mentions a product but the
+    real purpose was a job, a complaint or reaching the original seller.
+
+- id: quantity_accuracy_numeric
+  name: Quantity Accuracy (Numeric)
+  category: Quantity
+  qa_column: Quantity Accuracy (Numeric)
+  root_type: prompt
+  weight: 4
+  question: Is the quantity number the bot captured the number the buyer actually said?
+  applies_when: >-
+    The buyer stated a quantity, or the bot stated, confirmed or recorded one. Otherwise na
+    (quantity never came up, the buyer gave none, or the product has no quantity).
+  guidance: >-
+    The lead record is not visible, so take the bot's read-backs, confirmations and closing
+    recap as what it captured. When the bot simply acknowledges ("ji") a clear number and never
+    contradicts it, grade pass. Buyers often say numbers as Hindi or English words (bees,
+    pachaas, do sau, dhai sau, ek hazaar); compare the bot's figure with them. A range is stored
+    as its maximum. A budget, a price, a size, a capacity, a wattage or a weight per item is not
+    the quantity.
+  fatal_when: >-
+    The bot confirms or records a different number than the buyer said (forty heard as
+    fourteen, two hundred as twelve hundred), takes a size, capacity, wattage or budget as the
+    quantity, or states a quantity the buyer never gave.
+  non_fatal_when: >-
+    The buyer's figure was unclear and the bot settled on a number without checking; for a
+    range the bot kept the lower end instead of the maximum; with several quantities for
+    different items the bot kept only one.
+
+- id: quantity_unit_accuracy
+  name: Quantity Unit Accuracy
+  category: Quantity
+  qa_column: Quantity Unit Accuracy
+  root_type: prompt
+  weight: 3
+  question: >-
+    Is the unit attached to the quantity (piece, kg, tonne, box, roll, litre, metre, bag) the
+    one the buyer meant?
+  applies_when: A quantity was given or recorded. Otherwise na.
+  guidance: >-
+    Compare the unit in the bot's read-back with the buyer's words. A faithful equivalent (kilo
+    for kg, nag for piece) is a pass. Local trade units (thaan, petti, gaddi, bundle, truck
+    load) must be kept or mapped faithfully. The pack size or capacity of one item (a 5 kg bag,
+    a 250 ml bottle) is a specification, not the unit of the count. Vani asks with a unit from
+    the category's unit list; when the buyer answers with a bare number it should confirm the
+    unit.
+  fatal_when: >-
+    The unit is one the buyer never said and it changes the order (grams captured as
+    kilograms, pieces as kilograms, cubic feet as tonnes), or the buyer rejected the unit and
+    the bot kept it.
+  non_fatal_when: >-
+    The buyer gave only a bare number and the bot chose a unit without confirming; a custom
+    unit was normalised to a near but different unit (carton as pack, box as bottle); the
+    per-item size was used as the unit.
+
+- id: quantity_probing_error
+  name: Quantity Probing Error
+  category: Quantity
+  qa_column: Quantity Probing Error
+  root_type: prompt
+  weight: 2
+  question: Did the bot ask for the quantity when it should, only when it should, and in the right way?
+  applies_when: The call reached requirement collection (the product was confirmed). Otherwise na.
+  guidance: >-
+    Vani asks the quantity directly with a relevant unit, follows up at most twice, and does
+    not ask a count for things that have none. Auditors fill this column only for probing
+    problems or notable edge cases, so an ordinary call where the bot asked the quantity
+    properly is na, not pass. Use pass only for an edge case handled correctly: the bot rightly
+    skipped quantity (no-product or product-change case, the buyer had already given it, a
+    service where a count makes no sense) or asked and moved on when the buyer had no answer.
+    Assume the category defines a quantity unless the requirement is a service, rental or job.
+    Re-asking after a clear answer is Looping Behavior (or WER/STT when misheard), not a probing
+    error: grade na here for that.
+  fatal_when: >-
+    The product was confirmed and collection went on (specifications, name, city or a transfer
+    pitch) but the bot never asked the quantity, or it assumed a quantity without asking.
+  non_fatal_when: >-
+    The bot asked a count where none applies (a service, rental or repair), offered two units
+    in one question ("litre or kilogram"), or asked without any unit.
+
+- id: quantity_missed_opportunity_capture
+  name: Quantity Missed Opportunity (Capture)
+  category: Quantity
+  qa_column: Quantity Missed Opportunity (Capture)
+  root_type: prompt
+  weight: 4
+  question: When the buyer clearly gave a quantity, did the bot capture it rather than let it slip?
+  applies_when: >-
+    The buyer stated a quantity (prompted or unprompted), or the product was confirmed and
+    collection went on without the bot ever asking for one. Otherwise na.
+  guidance: >-
+    Auditors use this column for misses; an ordinary correct capture is na. Signs of a miss:
+    the bot ignores the number, asks the quantity again after a clear answer, cuts the buyer
+    off while they state it, says "got it" but its recap has no quantity, or moves to
+    specifications as if nothing was said. Grade pass only for a tricky statement (several
+    quantities, a quantity buried in a long sentence, a quantity given before the bot asked)
+    that the bot did acknowledge correctly. If the bot captures the quantity in the end (a later
+    read-back or confirmation), it is not a miss: grade na; the repeated asking is graded under
+    Looping Behavior.
+  fatal_when: >-
+    The buyer clearly stated a quantity (with or without a unit) and the bot never captured or
+    acknowledged it; or quantity applied but the bot neither asked nor captured one.
+  non_fatal_when: >-
+    The buyer's figure was unclear, or only part of a multi-item quantity was kept.
+
+- id: spec1_accuracy
+  name: Spec1 Accuracy
+  category: Specs
+  qa_column: Spec1 Accuracy
+  root_type: prompt
+  weight: 3
+  question: Is the value captured for the first specification the bot asked about the one the buyer gave?
+  applies_when: >-
+    The bot asked the first specification of the product and the buyer answered, the buyer
+    volunteered it, or the bot stated or recorded a value for it. na when none of these
+    happened (no specification asked, no answer, or the call ended first).
+  guidance: >-
+    The first specification is the first product attribute the bot asks about (brand, model,
+    size, material, grade, type, capacity, application). Judge the bot's acknowledgement or
+    read-back against the buyer's answer. Vani offers at most two options plus "or something
+    else"; any meaningful custom answer is valid and must be kept as said, and "any" or "koi
+    bhi" is a valid no-preference answer (pass). A value the bot inferred from the product name
+    must be confirmed with the buyer. A plain acknowledgement of a clear answer is a pass.
+  fatal_when: >-
+    The bot captured or confirmed a value that contradicts a clear answer, or one the buyer
+    never gave any basis for (a brand or model out of nothing); mapped the answer to the wrong
+    attribute; or used a number meant for another field.
+  non_fatal_when: >-
+    The buyer's answer was vague ("normal", "whatever is good") and the bot turned it into a
+    specific option without checking; or the value is partly right (unit dropped, only one of
+    several values kept, a near spelling of a brand).
+
+- id: spec2_accuracy
+  name: Spec2 Accuracy
+  category: Specs
+  qa_column: Spec2 Accuracy
+  root_type: prompt
+  weight: 3
+  question: Is the value captured for the second specification the bot asked about the one the buyer gave?
+  applies_when: >-
+    The bot asked a second specification and the buyer answered, the buyer volunteered it, or
+    the bot stated or recorded a value for it. na when none of these happened.
+  guidance: >-
+    Same standard as the first specification, for the second attribute the bot asks about.
+    Custom values are valid and must be kept as said; "any" or "koi bhi" is a valid
+    no-preference answer (pass); a plain acknowledgement of a clear answer is a pass.
+  fatal_when: >-
+    The bot captured or confirmed a value that contradicts a clear answer, or one the buyer
+    never gave any basis for; or mapped the answer to the wrong attribute.
+  non_fatal_when: >-
+    A vague answer was turned into a specific option without checking, or the value is partly
+    right (unit dropped, only one of several values kept, a near spelling).
+
+- id: spec_missed_opportunity
+  name: Spec Missed Opportunity
+  category: Specs
+  qa_column: Spec Missed Opportunity
+  root_type: prompt
+  weight: 3
+  question: >-
+    Did the bot capture every specification the buyer offered and ask the remaining
+    specifications it should have?
+  applies_when: >-
+    The product was confirmed and the call reached requirement collection, or the buyer
+    volunteered specification details. Otherwise na.
+  guidance: >-
+    Spec1 and Spec2 Accuracy cover the first two specifications; this column covers what was
+    left out: specifications beyond the second, values the buyer stated that the bot ignored,
+    and specifications never asked. Vani asks one specification per turn in the defined order,
+    each at most twice. Grade na for an ordinary call where the bot asked one or two
+    specifications and nothing the buyer said was dropped. Grade pass when the bot also covered
+    a third specification or kept every value the buyer offered. Not asking specifications is
+    fine when the buyer asked to be connected and the bot moved on to the transfer. The
+    transcript does not show how many specifications the category defines, so do not assume
+    more were due: grade a missing specification only when the buyer offered a value that was
+    dropped, or the bot asked none at all.
+  fatal_when: >-
+    The buyer clearly stated a specification value (material, size, thickness, brand, type)
+    and the bot ignored it; or the product clearly has specifications and the bot asked none
+    before closing.
+  non_fatal_when: >-
+    A third or later specification was not asked; the bot read all options in one go; the
+    defined order was not followed; only some of several values the buyer gave were kept.
+
+- id: additional_details_accuracy
+  name: Additional Details Accuracy
+  category: Details
+  qa_column: Additional Details Accuracy
+  root_type: prompt
+  weight: 2
+  question: >-
+    Are the extra details the bot noted (use case, sample or trial order, delivery location,
+    future or repeat need, target price, preferred brand or seller location) faithful to what
+    the buyer said?
+  applies_when: >-
+    The buyer shared details beyond product, quantity and specifications, or the bot restated
+    such details. Otherwise na.
+  guidance: >-
+    These go into the lead's free-text details, which the transcript does not show; judge the
+    bot's acknowledgements and closing recap. The meaning must not change and nothing may be
+    added that the buyer did not say. Notes such as "price asked", "wants to talk to the
+    seller" or "audio issue" are valid details. Grade pass when the buyer gave such details and
+    the bot's acknowledgement reflects them faithfully. If the bot never restated or
+    specifically acknowledged a detail, grade na here (a dropped detail belongs to Additional
+    Details Missed Opportunity). Promises the bot makes, such as a delivery date, belong to No
+    forbidden commitments, not here.
+  fatal_when: >-
+    The noted detail changes the meaning (the buyer wants only a sample and the bot notes the
+    opposite; a misheard word becomes a requirement), adds something the buyer never said, or
+    records noise or filler as a detail.
+  non_fatal_when: Duplicate or slightly off wording, a minor detail misheard, or a vague note that adds nothing.
+
+- id: additional_details_missed_opportunity
+  name: Additional Details Missed Opportunity
+  category: Details
+  qa_column: Additional Details Missed Opportunity
+  root_type: prompt
+  weight: 2
+  question: Did the bot keep the useful extra details the buyer volunteered instead of letting them drop?
+  applies_when: The buyer volunteered details beyond product, quantity and specifications. Otherwise na.
+  guidance: >-
+    Useful details include the vehicle or machine a part is for, its model or year, the use
+    case or industry, sizes for several items, a brand preference, a sample request, a delivery
+    or loading location, timing or a repeat need. Signs of a miss: the bot does not acknowledge
+    the detail, asks for it again, or its recap leaves it out. Auditors mark most misses
+    non-fatal. Grade na when nothing useful was dropped; pass only when the buyer volunteered
+    several such details and the bot kept them all.
+  fatal_when: >-
+    A detail that changes what sellers should quote (the exact part, model or form of the
+    product) was clearly stated, or repeated by the buyer, and dropped.
+  non_fatal_when: >-
+    A useful but secondary detail (use case, an extra size, a brand preference, a delivery
+    location) was stated and dropped.
+
+- id: looping_behavior
+  name: Looping Behavior
+  category: Conversation
+  qa_column: Looping Behavior
+  root_type: prompt
+  weight: 4
+  question: >-
+    Did the bot avoid repeating itself (the same question, statement or flow) beyond what the
+    conversation needed?
+  applies_when: The bot spoke more than once after the opening. na only for calls too short to show any pattern.
+  guidance: >-
+    Vani's ask limits: product confirmation up to four asks, quantity up to three, each
+    specification two, transfer consent two; after a valid answer a field is closed and never
+    asked again. Count repeats of the same request even when reworded. Also watch for the same
+    sentence spoken twice within one turn, the transfer line repeated while no transfer
+    happens, and the call flow restarting (intro or requirement confirmation again) after the
+    details were collected. Grade pass when there is no looping.
+  fatal_when: >-
+    The bot asked for the same thing three or more times, or kept asking after the buyer had
+    clearly answered, or repeated a statement such as the transfer line again and again, or
+    restarted the flow, and the buyer got frustrated or disconnected.
+  non_fatal_when: >-
+    One extra repeat: a sentence said twice in the same turn, a field asked twice with a
+    reconfirmation, the intro or seller-busy line repeated once, or one restart of the flow
+    without losing the buyer.
+
+- id: wer_stt
+  name: WER/STT
+  category: Speech
+  qa_column: WER/STT
+  root_type: asr
+  weight: 4
+  question: Did the bot hear the buyer correctly, judging by how it read back or acted on the buyer's words?
+  applies_when: The buyer said something the bot acknowledged, confirmed or acted on. na when the buyer barely spoke.
+  guidance: >-
+    The transcript shows what the buyer said; the bot's replies show what the bot's speech
+    recognition heard. Compare them for product and brand names, numbers and units,
+    specification values and yes or no answers. Hindi number words are a frequent trap (saath
+    and sattar, do and do sau). A buyer correcting the bot ("nahi, ...") is a strong cue. A
+    mishearing sounds like the buyer's words; a value the bot simply assumed (a vague answer
+    turned into a specific option) is a capture error for the matching accuracy rubric, not
+    WER/STT. Grade pass when the bot's replies consistently match what the buyer said.
+  fatal_when: >-
+    The bot misheard a key value (product, brand, quantity, unit, specification) and confirmed
+    or captured the wrong one, or a mishearing made it take a wrong action (ended the call,
+    promised a callback, changed the product) so the buyer was lost or the lead is wrong.
+  non_fatal_when: >-
+    A mishearing with limited impact: a slightly wrong echo of a name or brand, one misheard
+    answer the buyer corrected, or an answer taken once as a different intent.
+
+- id: dead_air
+  name: Dead air
+  category: Speech
+  qa_column: Dead air
+  root_type: platform
+  needs_audio: true
+  weight: 2
+  question: Were there long silences from the bot, with no reply after the buyer finished?
+  applies_when: Needs the audio; from a transcript only clear cues count.
+  guidance: >-
+    Without the audio this is usually na. Use only transcript cues: a "(bot silent N s)" note
+    of five seconds or more before a bot turn, the buyer saying "hello? hello?" or "are you
+    there" because the bot went quiet, or the bot saying it is checking and then nothing. With
+    no such cue, grade na, not pass.
+  fatal_when: A long bot silence after which the buyer gave up or disconnected.
+  non_fatal_when: >-
+    A noticeable bot silence (about five seconds or more) that the buyer had to fill with a
+    hello, including silence while a transfer was being set up.
+
+- id: pronunciation
+  name: Pronunciation
+  category: Speech
+  qa_column: Pronunciation
+  root_type: platform
+  needs_audio: true
+  weight: 2
+  question: Did the bot pronounce words, names, numbers and units correctly, in the buyer's language?
+  applies_when: Needs the audio; from a transcript only clear cues count.
+  guidance: >-
+    Without the audio this is usually na. Transcript cues: a bot turn shows a unit or
+    abbreviation that would be read out literally (a slash or dot read aloud, 4G read as four
+    gram, letters spelled oddly), a garbled or nonsense word in a bot turn, or the buyer asking
+    what the bot meant right after a technical word. Auditors also mark here a bot speaking a
+    language the buyer does not use. With no such cue, grade na, not pass.
+  fatal_when: >-
+    The bot spoke a language the buyer could not follow, or garbled a key word (product or
+    specification) so badly that the buyer could not understand and left.
+  non_fatal_when: A mispronounced word, name, unit or letter that did not derail the call.
+
+- id: product_change_no_product_accuracy
+  name: Product Change/ No Product Accuracy
+  category: Outcome
+  qa_column: Product Change/ No Product Accuracy
+  root_type: flow
+  weight: 5
+  question: >-
+    When the buyer wanted a different product than the one the bot opened with, or the bot had
+    no product, did the bot identify the right product and switch to it properly?
+  applies_when: >-
+    A product change (the buyer wants a materially different product or service) or a
+    no-product call (the bot has to ask what the buyer needs). Otherwise na.
+  guidance: >-
+    Auditors also record the case type (Product Change Case or No Product Case); grade only the
+    outcome. Vani confirms a new product in one sentence that names it and its general use,
+    and switches only after the buyer agrees. A synonym, brand, variant or extra detail of the
+    same product is not a change. A spare part or accessory, a repair or rental service, and
+    the complete machine are different products. In an enrichment call (the buyer already has
+    a lead) Vani does not collect for a new product; it closes politely and suggests calling
+    the seller back. Grade pass when the right product was identified or switched to.
+  fatal_when: >-
+    The buyer clearly wanted a different product and the bot kept the old one; the bot
+    switched to a wrong or misheard product (a part captured as the whole machine, a service as
+    the product); or it changed the product without the buyer confirming.
+  non_fatal_when: >-
+    The right product family but too generic or slightly off, or the bot asked about the
+    product again after it should have moved on.
+
+- id: mcat_search_errors
+  name: MCAT/ Search errors
+  category: Catalog
+  qa_column: MCAT/ Search errors
+  root_type: knowledge
+  weight: 3
+  question: >-
+    Was the buyer's product mapped to the right catalogue category (MCAT), judging by how the
+    bot named it and which specifications it asked next?
+  applies_when: The product was searched or changed on the call (a no-product or product-change case). Otherwise na.
+  guidance: >-
+    The category is not in the transcript; infer it from the product name the bot confirms
+    after its search and from the specification questions that follow. Questions that do not
+    fit the buyer's product (tyre sizes for a car-wash service, sheet thickness for a food item)
+    show a wrong category; a generic category when the buyer named a specific item is a smaller
+    error. Grade pass when the product was searched and the follow-up questions fit it.
+  fatal_when: >-
+    The bot's confirmed product or its follow-up specification questions belong to a clearly
+    different category than what the buyer wants.
+  non_fatal_when: >-
+    A related but too generic or neighbouring category (the whole product instead of its part,
+    a parent category) when a closer one should exist.
+
+- id: category_isqs_error
+  name: Category ISQ's Error
+  category: Catalog
+  qa_column: Category ISQ's Error
+  root_type: knowledge
+  weight: 1
+  question: >-
+    Were the category's specification questions (ISQs) themselves sound: no duplicates,
+    confusing names, contradictory options or single-option questions?
+  applies_when: The bot asked specification questions. Otherwise na.
+  guidance: >-
+    This judges the catalogue's question set, not the bot's behaviour. Auditors mark it only
+    when they notice a defect, so a call with sensible specification questions is na. Cues: two
+    specification questions asking the same thing under different names, options that
+    contradict each other, a question offering a single option, or options that do not fit the
+    product.
+  fatal_when: A duplicated or contradictory specification makes the lead's specifications conflict.
+  non_fatal_when: >-
+    A confusing or near-duplicate specification (inner and outer pack size), odd or
+    single-option choices, or options that do not fit the product.
+
+- id: oncall_astbuy_error_transferred
+  name: OnCall AstBuy Error (Transferred)
+  category: Conversation
+  qa_column: OnCall AstBuy Error (Transferred)
+  root_type: flow
+  weight: 3
+  question: When a live seller was available, did the bot offer the connection and transfer the call on the buyer's consent?
+  applies_when: >-
+    At finalisation the bot pitched a seller available on the line now or said it is connecting
+    the call, or the buyer asked to be connected to a seller. na when the buyer left before
+    finalisation, or the bot closed with seller details on WhatsApp without such a pitch (no
+    live seller, as far as the transcript shows).
+  guidance: >-
+    Right after the requirement is confirmed Vani always says the seller is busy and that it
+    will transfer the call to a best seller; that standard line is not an offer and says nothing
+    about a live seller. At finalisation, when a live seller exists, Vani says a seller is
+    available on the line, asks once (at most twice) whether to connect, and transfers on a
+    clear yes; if the buyer declines, it closes with seller details on WhatsApp, which is also a
+    pass. A transcript that ends right after "connecting your call" is a completed transfer.
+    Auditors never grade this column fatal.
+  fatal_when: Not used for this column; grade transfer failures non_fatal.
+  non_fatal_when: >-
+    The buyer agreed but the bot ended the call or went back to questions instead of
+    transferring; the transfer line repeated with no transfer; a live seller was mentioned but
+    never offered; the bot transferred without a clear yes.
