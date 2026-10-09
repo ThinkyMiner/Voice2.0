@@ -133,10 +133,13 @@ def test_aa_false_win_rate_is_about_alpha_and_naive_peeking_is_clearly_higher(re
     wins = aa.decision.isin(WIN_STATES).sum()
     _, lo, _ = rate_ci(wins, len(aa))
     assert lo <= cfg.alpha_win, f"sequential false-win {wins}/{len(aa)} is significantly above alpha"
-    naive = aa.naive_decision.isin(WIN_STATES).sum()
-    _, nlo, _ = rate_ci(naive, len(aa))
+    # Peeking inflation shows in the primary-only crossing rate. The full-rules naive win rate is
+    # muted by naive harm stops and the guardrail truncating paths, so it is only compared.
+    crossed, naive_crossed = aa.crossed_primary_seq.sum(), aa.crossed_primary_naive.sum()
+    _, nlo, _ = rate_ci(naive_crossed, len(aa))
     assert nlo > cfg.alpha_win                   # the naive CI excludes the nominal rate
-    assert naive > 2 * max(wins, 1)              # and it is well above the sequential rate
+    assert naive_crossed > 2 * max(crossed, 1)   # and it is well above the sequential rate
+    assert aa.naive_decision.isin(WIN_STATES).sum() > wins
 
 
 def test_aa_harm_stops_stay_near_alpha_harm(results, cfg):

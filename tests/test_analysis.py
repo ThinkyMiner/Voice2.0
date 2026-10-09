@@ -13,13 +13,14 @@ import pandas as pd
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from scipy.stats import binomtest, chi2 as chi2_dist, chisquare, norm
+from scipy.stats import chi2 as chi2_dist, norm
 from statsmodels.stats.proportion import confint_proportions_2indep, proportions_ztest
 
 import abtest.analysis as analysis
 from abtest import config
 from abtest.analysis import CONFIDENCE, Z_CI, _srm_test, analyze_look
-from abtest.contracts import CONFIGS_DIR, Boundaries, LeadOutcome, LookResult, SecondaryMetric, SrmResult
+from abtest.contracts import CONFIGS_DIR, Boundaries, LeadOutcome, LookResult, SecondaryMetric
+from abtest.srm import srm_test
 from abtest.power import detectable_lift, n_max
 
 MEETING = config.load_experiment(CONFIGS_DIR / "experiments" / "vani-meeting-v1.yaml")  # continuous guardrail
@@ -243,17 +244,9 @@ def test_srm_helper_on_known_counts():
     assert (empty.p, empty.chi2, empty.ci95) == (1.0, 0.0, (0.0, 1.0)) and math.isnan(empty.observed_share_B)
 
 
-def _lane_a_srm_test(n_a: int, n_b: int, share_b: float) -> SrmResult:
-    """Lane A's srm.srm_test as handed over (scipy), the oracle for the closed-form helper."""
-    n = n_a + n_b
-    chi2, p = chisquare([n_a, n_b], f_exp=[n * (1 - share_b), n * share_b])
-    ci = binomtest(n_b, n).proportion_ci(confidence_level=CONFIDENCE, method="wilson")
-    return SrmResult(n_A=n_a, n_B=n_b, configured_share_B=share_b, observed_share_B=n_b / n,
-                     ci95=(float(ci.low), float(ci.high)), chi2=float(chi2), p=float(p))
-
-
 @pytest.mark.parametrize("share_b", [0.01, 0.1, 0.5, 0.9])
-def test_srm_helper_equals_the_scipy_version(share_b):
+def test_srm_helper_equals_lane_a_srm_test(share_b):
+    """The closed form must give srm.srm_test's values (the split report's), only faster."""
     rng = np.random.default_rng(int(share_b * 100))
     counts = [(0, 7), (7, 0), (1, 0), (0, 1), (3, 3)]
     for n in (10, 100, 5000, 200_000):
@@ -261,7 +254,7 @@ def test_srm_helper_equals_the_scipy_version(share_b):
             b = int(min(n, rng.binomial(n, min(1.0, share_b * skew))))
             counts.append((n - b, b))
     for n_a, n_b in counts:
-        mine, theirs = _srm_test(n_a, n_b, share_b), _lane_a_srm_test(n_a, n_b, share_b)
+        mine, theirs = _srm_test(n_a, n_b, share_b), srm_test(n_a, n_b, share_b)
         assert mine.chi2 == pytest.approx(theirs.chi2, rel=1e-9, abs=1e-12)
         assert mine.p == pytest.approx(theirs.p, rel=1e-9, abs=1e-300)
         assert mine.observed_share_B == theirs.observed_share_B

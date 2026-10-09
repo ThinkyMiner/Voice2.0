@@ -58,13 +58,12 @@ def _interval(center: float, se: float, c: float) -> tuple[float, float]:
     return center - c * se, center + c * se
 
 
-# TODO(phase-2 merge): replace with abtest.srm.srm_test
 def _srm_test(n_a: int, n_b: int, share_b: float) -> SrmResult:
     """Chi-square goodness of fit (1 df) against the configured share; Wilson 95% CI.
 
-    Same values as Lane A's scipy version (chisquare + binomtest(...).proportion_ci(method=
-    "wilson"), pinned in tests/test_analysis.py), written in closed form because those scipy
-    calls cost ~0.8 ms each and this runs twice per look, ~30,000 looks in the validation.
+    The same values as srm.srm_test (pinned against it in tests/test_analysis.py), in closed
+    form because its scipy calls cost ~0.8 ms each and this runs twice per look, ~30,000
+    looks in the validation.
     """
     n = n_a + n_b
     if n == 0:  # no evidence either way
