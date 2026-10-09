@@ -77,6 +77,10 @@ def db(tmp_path, monkeypatch) -> Path:
     _experiment(conn, "t-pending", "approval", [(1.0, 0.02, "CONTINUE"), (3.5, 0.05, State.PENDING_APPROVAL)])
     _experiment(conn, "t-harm", "harm", [(-3.0, -0.05, State.STOPPED_HARM)])
     _experiment(conn, "t-running", "win", [])
+    draft = BASE.model_copy(update={"id": "t-draft"})  # created, never started: no n_B,max yet
+    store.create_experiment(conn, FrozenConfig(config=draft, canonical_json=draft.model_dump_json(),
+                                               config_hash="hash-t-draft", prompt_hash={"A": "pa", "B": "pb"}),
+                            "win", 7)
     truth = SimTruth(experiment_id="t-harm", scenario="harm", seed=7, injected_primary_rel_lift=-0.3,
                      injected_secondary_change=0.0, secondary_change_type="relative", pool_leads=10,
                      pool_p=0.18, leads={"A": 270, "B": 30}, triggered={"A": 270, "B": 30}, exposures_dropped=0,
@@ -104,7 +108,7 @@ def _charts(at: AppTest) -> list[dict]:
     return [json.loads(c.proto.spec) for c in at.get("plotly_chart")]
 
 
-@pytest.mark.parametrize("exp", ["t-pending", "t-harm", "t-running"])
+@pytest.mark.parametrize("exp", ["t-pending", "t-harm", "t-running", "t-draft"])
 def test_every_experiment_renders(db, exp):
     at = _run(exp)
     assert not at.exception and not at.error

@@ -42,7 +42,7 @@ def experiments_table(exps: list[c.Exp], selected: str) -> None:
         reason = e.decisions[-1].reason if e.decisions else ""
         rows.append(("ab-sel" if e.id == selected else "", [
             f'<a href="?exp={c.esc(e.id)}" target="_self">{c.esc(e.id)}</a><br>'
-            f'<span class="ab-sub">{c.esc(e.scenario or "")} · {e.cfg.dataset} · seed {e.seed}</span>',
+            f'<span class="ab-sub">{c.esc(e.scenario or "")} · {e.cfg.dataset} · seed {e.seed if e.seed is not None else '–'}</span>',
             c.badge(e.state.state),
             f'<b style="color:{c.NAVY if e.state.state == State.PENDING_APPROVAL else c.BADGE[e.state.state][0]}">'
             f'{c.esc(value)}</b><br>'
@@ -132,7 +132,7 @@ def z_path_chart(e: c.Exp) -> go.Figure:
     if (hit := crossing(e)) is not None:
         d, text = hit
         side = "right" if d.info_fraction > 0.65 else "left" if d.info_fraction < 0.35 else "center"
-        fig.add_annotation(x=d.info_fraction, y=d.primary.z, text=text, showarrow=True, arrowhead=2,
+        fig.add_annotation(x=d.info_fraction, y=d.primary.z, text=text, showarrow=True, arrowhead=2, standoff=8,
                            arrowcolor=c.INK, ax={"right": -30, "left": 30, "center": 0}[side],
                            ay=130 if d.primary.z > (top + bottom) / 2 else -130, xanchor=side,
                            bgcolor="white", bordercolor=c.BADGE[e.state.state][0], borderwidth=2, borderpad=6,
@@ -269,7 +269,7 @@ def sample_progress(e: c.Exp) -> None:
     n_b = d.n_B if d else 0
     day = (s.updated_ts_sim - s.started_ts_sim) / c.DAY if s.started_ts_sim else 0
     frac = n_b / s.n_b_max if s.n_b_max else 0
-    st.progress(min(frac, 1.0), text=f"Sample: {n_b:,} of n_B,max = {s.n_b_max:,.0f} matured triggered B leads "
+    st.progress(min(frac, 1.0), text=f"Sample: {n_b:,} of n_B,max = {math.ceil(s.n_b_max):,} matured triggered B leads "
                                      f"({frac:.0%}, {f'look {d.look}' if d else 'no look yet'}) · simulated day "
                                      f"{day:.0f} of {cfg.window.days}")
 
@@ -317,8 +317,9 @@ def config_panel(e: c.Exp) -> None:
                       + (f", worse if {sec.worse_if}, margin {c.delta(sec.margin, cfg)})" if sec.margin else ")")),
         ("α win · α harm · power", f"{cfg.alpha_win:g} (OBF-type) · {cfg.alpha_harm:g} (Pocock-type) · {cfg.power:.0%}"),
         ("First look · SRM threshold", f"t ≥ {cfg.min_info_first_look:g} · p < {cfg.srm_p_threshold:g}"),
-        ("n_B,max · promotion · salt", f"{s.n_b_max:,.0f} · {cfg.promotion} · {c.esc(cfg.salt)}"),
-        ("Scenario · seed", f"{c.esc(e.scenario or '–')} · {e.seed}"),
+        ("n_B,max · promotion · salt", (f"{math.ceil(s.n_b_max):,}" if s.n_b_max is not None else "set at start")
+         + f" · {cfg.promotion} · {c.esc(cfg.salt)}"),  # DRAFT has no n_B,max yet
+        ("Scenario · seed", f"{c.esc(e.scenario or '–')} · {e.seed if e.seed is not None else '–'}"),
     ]
     hashes = [("config_hash", s.config_hash), ("prompt_hash A", s.prompt_hash["A"]), ("prompt_hash B", s.prompt_hash["B"])]
     left, right = st.columns([3, 2])
@@ -371,7 +372,7 @@ def approval_box(e: c.Exp) -> None:
     if approve or reject:
         try:
             with closing(store.connect(contracts.DB_PATH)) as conn:  # the dashboard's only write
-                out = decision.approve(conn, e.id, actor, approved=approve)
+                out = decision.approve(conn, e.id, actor.strip(), approved=approve)
         except (KeyError, ValueError) as err:
             st.error(str(err))
             return

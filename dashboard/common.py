@@ -235,7 +235,7 @@ def impact(e: Exp) -> tuple[tuple[str, str], str]:
         if s.state == State.RUNNING:
             return (("–", "first look pending"),
                     f"Running: collecting data. The first look comes once {cfg.min_info_first_look:.0%} "
-                    f"of n_B,max ({s.n_b_max:,.0f} matured B leads) is in.")
+                    f"of n_B,max ({math.ceil(s.n_b_max):,} matured B leads) is in.")
         return ("–", "not started"), "Not started yet."
     days = (d.ts_sim - s.started_ts_sim) / DAY
     n = d.n_A + d.n_B
