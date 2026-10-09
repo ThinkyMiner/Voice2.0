@@ -59,5 +59,8 @@ boundaries:  ## make boundaries EXP=...  (5- and 7-look boundaries, reference + 
 validate:  ## make validate EXP=...  (A/A, power and naive-peeking runs -> reports/validation.md)
 	$(RUN) python -m abtest.validation $(EXP)
 
-dashboard slide:
-	@echo "not built yet (Phase 5)"; exit 1
+dashboard:  ## http://localhost:8501 (reads the store; auto-refreshes while make live runs)
+	$(RUN) streamlit run dashboard/app.py --server.port 8501 --server.headless true
+
+slide:  ## slide/one_slide.pptx, plus its chart PNG in reports/
+	$(RUN) python slide/build_slide.py
