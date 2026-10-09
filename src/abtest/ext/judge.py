@@ -349,7 +349,7 @@ def audit_many(transcripts, rubrics=None, model=None, workers: int = 4) -> list[
     return [done[i] for i in sorted(done)]
 
 
-CALIBRATION = models.LOOP_DIR / "calibration.json"   # {rubric_id: grade}: what auditors call a minor flag
+CALIBRATION = models.LOOP_DIR / "calibration.json"   # {model, soft: {rubric_id: grade}, rubrics: {rubric_id: text hash}}
 TUNING_CALLS = 40                                      # the first audited calls, in sheet order
 
 
@@ -379,11 +379,25 @@ def apply_calibration(a: CallAudit, soft: dict[str, str]) -> CallAudit:
     return a.model_copy(update={"verdicts": vs, "overall": models.worst(v.grade for v in vs)})
 
 
+def _calibration() -> tuple[str | None, dict[str, str]]:
+    """(the judge model it was learned for, its remaps), keeping only the rubrics whose text is
+    unchanged since `make agreement` learned them."""
+    cal = models.load(CALIBRATION, default={})
+    now = {r.id: rubric_lib.set_hash([r]) for r in rubric_lib.all_rubrics(include_archived=True)}
+    return cal.get("model"), {rid: g for rid, g in cal.get("soft", {}).items()
+                              if rid in now and now[rid] == cal.get("rubrics", {}).get(rid)}
+
+
+def with_calibration(audits: list[CallAudit]) -> list[CallAudit]:
+    """Audits as the platform shows them: with the calibration, for audits of the model it was learned on."""
+    model, soft = _calibration()
+    return [apply_calibration(a, soft) if soft and a.model == model else a for a in audits]
+
+
 def load_audits(version: str = "v1", calibrated: bool = True) -> list[CallAudit]:
     """The saved audits of a version; calibrated (see calibrate) once `make agreement` has learned it."""
     audits = [models.load(p, CallAudit) for p in sorted((models.AUDITS_DIR / _safe(version)).glob("*.json"))]
-    soft = models.load(CALIBRATION, default={}) if calibrated else {}
-    return [apply_calibration(a, soft) for a in audits] if soft else audits
+    return with_calibration(audits) if calibrated else audits
 
 
 def test_rubric(rubric: Rubric | dict, t: Transcript, model=None) -> RubricVerdict:
@@ -432,7 +446,8 @@ def agreement(audits: list[CallAudit], human: dict[str, dict], rubrics: list[Rub
         grades = human[a.call_id].get("grades", {})
         if human[a.call_id].get("overall") not in models.SEVERITY:  # a blank Overall Quality is no label
             continue
-        h = models.worst(grades.get(col, "na") for col in shared.values())
+        graded = {v.rubric_id for v in a.verdicts}  # an archived rubric's column counts on neither side
+        h = models.worst(grades.get(col, "na") for rid, col in shared.items() if rid in graded)
         j = models.worst(v.grade for v in a.verdicts if v.rubric_id in shared)
         pairs.append((h, j))
     if not pairs:
@@ -568,14 +583,15 @@ def main(argv: list[str] | None = None) -> int:
     graded = [c for c in order if c in have and c in human]
     tune = set(graded[:min(TUNING_CALLS, len(graded) // 4)])  # at most a quarter: most calls stay held out
     soft = calibrate([a for a in audits if a.call_id in tune], human, rubs)
-    models.save(CALIBRATION, soft)
     held = [a for a in audits if a.call_id not in tune]
     try:
         raw = agreement(held, human, rubs, held_out=not args.tuned)
         report = agreement([apply_calibration(a, soft) for a in held], human, rubs, held_out=not args.tuned)
-    except ValueError as e:
+    except ValueError as e:  # nothing saved: the last good calibration and report stay in force
         print(f"no agreement for {model} on {args.version}: {e} (audit the audited set first)", file=sys.stderr)
         return 1
+    models.save(CALIBRATION, {"model": model, "soft": soft,
+                              "rubrics": {r.id: rubric_lib.set_hash([r]) for r in rubs if r.id in soft}})
     report = report.model_copy(update={"calibrated": True, "n_tuning": len(tune)})
     models.save(AGREEMENT_JSON, report)
     md = write_agreement_report(report, REPORTS_DIR / "judge_agreement.md", raw=raw, soft=soft)

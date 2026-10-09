@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 from test_loop import audit, cause, transcript, world  # noqa: F401 - world is a fixture
 
 from abtest.contracts import BASE_PROMPT, State
-from abtest.ext import improve, listen, llm, loop, models, service
-from abtest.ext.models import Fix, save
+from abtest.ext import improve, judge, listen, llm, loop, models, rubrics, service
+from abtest.ext.models import CallAudit, Fix, RubricVerdict, save
 
 SEND = httpx.Client.send  # before conftest's no-network patch: TestClient's transport is in-process
 
@@ -73,6 +73,18 @@ def test_calls_list_filters_and_detail(client):
     assert client.get("/api/calls/real-1").json()["audit"]["overall"] == "fatal"
     assert client.get("/api/calls/nope").status_code == 404
     assert client.get("/api/calls/..%2F..%2Fregistry").status_code == 404
+
+
+def test_call_detail_shows_the_calibrated_grade_like_the_list(client):
+    t = transcript("real-2", source="production")
+    save(models.TRANSCRIPTS_DIR / "real-2.json", t)
+    v = RubricVerdict(rubric_id="looping_behavior", rubric_version=1, grade="non_fatal", confidence=0.9, reason="r")
+    save(models.AUDITS_DIR / "v1" / "real-2.json", CallAudit(call_id="real-2", prompt_version="v1", overall="non_fatal",
+                                                             verdicts=(v,), model="m", rubric_set_hash="h"))
+    save(judge.CALIBRATION, {"model": "m", "soft": {"looping_behavior": "pass"},
+                             "rubrics": {"looping_behavior": rubrics.set_hash([rubrics.get("looping_behavior")])}})
+    listed = next(i for i in client.get("/api/calls").json()["items"] if i["call_id"] == "real-2")
+    assert listed["overall"] == client.get("/api/calls/real-2").json()["audit"]["overall"] == "pass"
 
 
 def test_recordings_are_local_only(client):

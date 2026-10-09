@@ -304,6 +304,9 @@ def test_cli_audit_then_agreement(tmp_path, monkeypatch):
     assert (rep.n_calls, rep.overall_accuracy, rep.held_out) == (1, 0.0, True)   # judge pass vs human non_fatal
     assert (tmp_path / "judge_agreement.md").exists()
     assert json.loads(judge.AGREEMENT_JSON.read_text())["model"] == "m"
+    before = judge.CALIBRATION.read_text(), judge.AGREEMENT_JSON.read_text()
+    assert judge.main(["agreement", "--model", "nobody"]) == 1                  # a failed run saves nothing
+    assert (judge.CALIBRATION.read_text(), judge.AGREEMENT_JSON.read_text()) == before
 
 
 def test_calibration_remaps_only_minor_flags_and_never_fatal():
@@ -321,3 +324,17 @@ def test_calibration_remaps_only_minor_flags_and_never_fatal():
     assert judge.apply_calibration(a("y", "fatal"), soft).overall == "fatal"      # fatal is never softened
     # A tie keeps the judge's grade.
     assert judge.calibrate([a("t1", "non_fatal"), a("t3", "non_fatal")], human, R) == {}
+
+
+def test_calibration_holds_only_for_its_model_and_unchanged_rubric_texts():
+    def a(model):
+        return CallAudit(call_id="c", prompt_version="v1", overall="non_fatal", model=model, rubric_set_hash="h",
+                         verdicts=(RubricVerdict(rubric_id="looping_behavior", rubric_version=1, grade="non_fatal",
+                                                 confidence=0.9, reason="r"),))
+    learned = rubrics.set_hash([rubrics.get("looping_behavior")])
+    models.save(judge.CALIBRATION, {"model": "m", "soft": {"looping_behavior": "pass"},
+                                    "rubrics": {"looping_behavior": learned}})
+    assert [x.overall for x in judge.with_calibration([a("m"), a("another judge")])] == ["pass", "non_fatal"]
+    models.save(judge.CALIBRATION, {"model": "m", "soft": {"looping_behavior": "pass"},
+                                    "rubrics": {"looping_behavior": "the rubric text has changed since"}})
+    assert judge.with_calibration([a("m")])[0].overall == "non_fatal"

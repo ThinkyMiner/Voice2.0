@@ -137,7 +137,8 @@ def _find_call(call_id: str) -> tuple[Transcript, CallAudit | None]:
     in TRANSCRIPTS_DIR too."""
     t = load(models.TRANSCRIPTS_DIR / f"{_safe(call_id, 'call')}.json", Transcript)
     if t is not None and t.source != "replay":
-        return t, load(models.AUDITS_DIR / _safe(t.prompt_version, "version") / f"{call_id}.json", CallAudit)
+        a = load(models.AUDITS_DIR / _safe(t.prompt_version, "version") / f"{call_id}.json", CallAudit)
+        return t, None if a is None else _mod("judge").with_calibration([a])[0]  # as the calls list shows it
     replay_dir = _maybe(lambda: _mod("improve").REPLAY_DIR)
     hit = next(iter(sorted(replay_dir.glob(f"*/{call_id}.json"))), None) if replay_dir else None
     if t is None and hit is None:

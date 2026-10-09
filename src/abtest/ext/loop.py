@@ -60,6 +60,11 @@ FAILED_TRY = re.compile(r"^try \d+: (\S+) -> ")  # the note a failed try leaves;
 LOG: deque[str] = deque(maxlen=200)  # recent progress lines, for GET /api/loop
 
 
+def corpus() -> str:
+    """The real calls a cycle on v1 judges (env LOOP_CORPUS): the buyer-side audited calls by default."""
+    return os.environ.get("LOOP_CORPUS", "audited")
+
+
 class Busy(RuntimeError):
     pass
 
@@ -190,8 +195,7 @@ def calls(name: str) -> list[Transcript]:
     v = version(name)
     if v.fix_id is None:
         from abtest.ext import listen
-        corpus = os.environ.get("LOOP_CORPUS", "audited")
-        return [t for t in listen.load_transcripts(corpus) if t.prompt_version == name]
+        return [t for t in listen.load_transcripts(corpus()) if t.prompt_version == name]
     from abtest.ext import improve
     return [load(p, Transcript).model_copy(update={"prompt_version": name})
             for p in sorted((improve.REPLAY_DIR / v.fix_id).glob("*-B.json"))]
@@ -364,7 +368,7 @@ def _listen(c: Cycle, allow_real: bool) -> Cycle | None:
     v = version(c.production_version)
     found = calls(v.version)
     if not found:
-        how = ("transcribe the production calls: make listen SOURCE=production ARGS=--yes-send-real-audio "
+        how = (f"transcribe the {corpus()} calls: make listen SOURCE={corpus()} ARGS=--yes-send-real-audio "
                "(sends real recordings to the model provider: the user's decision)" if v.fix_id is None
                else f"no replay transcripts of {v.fix_id} found")
         return _wait(c, f"waiting for transcripts of {v.version}: {how}")
