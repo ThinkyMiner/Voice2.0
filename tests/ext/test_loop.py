@@ -1,4 +1,4 @@
-"""The Vani Loop driver (ext/loop.py): registry, cycle stages, retries, the go-ahead stop, the CLI.
+"""The loop driver (ext/loop.py): registry, cycle stages, retries, the go-ahead stop, the CLI.
 
 Listen, judge and improve are replaced at loop's module-level seams with invented calls, audits and
 fixes. The prove stage runs the REAL base engine (runner, simulator, metrics ... decision) into a temp

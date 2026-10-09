@@ -1,9 +1,11 @@
-# skills.md: how we built Vani Loop
+# skills.md: how we built Slow & Steady
+
+**Team:** Hare & Tortoise.
 
 **Problem statement:** PS05, Agent A/B Testing & Auto-Rollout. We extended it with the audit-and-fix
 loop of PS01, so that the A/B engine tests prompt changes that come from the calls themselves.
 
-**One line:** Vani Loop listens to every Vani call, grades it against IndiaMART's own QA checklist,
+**One line:** Slow & Steady listens to every Vani call, grades it against IndiaMART's own QA checklist,
 finds the costliest failure, writes the prompt fix, proves it on 10% of traffic with a sequential A/B
 test, and rolls the winner out. Then it starts again on the new prompt.
 

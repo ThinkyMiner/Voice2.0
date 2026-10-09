@@ -1,9 +1,11 @@
-# Vani Loop: approach note
+# Slow & Steady: approach note
+
+**Team Hare & Tortoise.** The hare ships a prompt change on a hunch; the tortoise ships it on evidence.
 
 **Problem statements.** PS05, Agent A/B Testing & Auto-Rollout, extended with PS01's
 audit-and-fix loop, so that the A/B engine tests prompt changes that come from the calls themselves.
 
-**In one line.** Vani Loop listens to Vani's calls, grades each one on IndiaMART's own QA checklist,
+**In one line.** Slow & Steady listens to Vani's calls, grades each one on IndiaMART's own QA checklist,
 finds the costliest prompt failure, writes the fix (Prompt B), proves it on 10% of leads with a
 sequential A/B test, and rolls the winner out after a named person approves. Then it audits the new
 prompt and starts again.
@@ -85,7 +87,7 @@ used to fix the buyer prompt.
 
 ```bash
 make setup && make demo          # the A/B engine: win, harm, inconclusive, approval
-make platform                    # the Vani Loop platform on http://127.0.0.1:8600
+make platform                    # the platform on http://127.0.0.1:8600
 make loop-status                 # the prompt registry, the cycles and the next action
 ```
 

@@ -1,4 +1,8 @@
-# VANI prompt A/B testing and auto-rollout
+# Slow & Steady
+
+**VANI prompt A/B testing, auto-rollout and the audit-and-fix loop.** By Team Hare & Tortoise.
+
+The hare ships a prompt change on a hunch and finds out later. The tortoise ships it on evidence.
 
 Today a change to the VANI voice-bot prompt goes live to every caller on judgement alone. If the
 change is bad, it costs meetings until someone notices. If it is good, nobody can prove it.
@@ -31,11 +35,11 @@ Contents: [Quick start](#quick-start) · [Setup](#setup) · [Make targets](#make
 [Why this method](#why-this-method) · [Decision rules](#decision-rules-and-state-machine) ·
 [Decision log](#decision-log) · [Simulation](#how-outcomes-are-simulated) ·
 [Scenarios](#scenarios) · [Validation](#validation) · [Dashboard and slide](#dashboard-and-slide) ·
-[Limitations](#limitations) · [Vani Loop: where prompt B comes from](#vani-loop-where-prompt-b-comes-from)
+[Limitations](#limitations) · [The loop: where prompt B comes from](#the-loop-where-prompt-b-comes-from)
 
-## Vani Loop: where prompt B comes from
+## The loop: where prompt B comes from
 
-The A/B engine above decides whether a new prompt is better. The Vani Loop (`src/abtest/ext/`)
+The A/B engine above decides whether a new prompt is better. The loop (`src/abtest/ext/`)
 writes that new prompt from the calls themselves, then feeds it to the engine, and repeats:
 
 1. **Listen.** Call recordings become bot / buyer transcripts (Gemini 3 Flash through OpenRouter).
