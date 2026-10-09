@@ -3,8 +3,8 @@
 The three required scenarios (B is worse and stopped early, B wins and is promoted, inconclusive),
 then the approval gate and the split evidence. The spoken lines (in quotes) are about 440 words.
 
-The figures quoted are from the pinned demo seeds in `configs/scenarios/` (harm 1103, win 1101,
-inconclusive 1104, and approval 1101 once it is re-pinned, see below). If a seed is re-pinned, read
+The figures quoted are from the pinned demo seeds in `configs/scenarios/`: harm 1103, win 1101,
+inconclusive 1104, and approval 1101, which is the win run's traffic. If a seed is re-pinned, read
 the numbers off the screen instead; the sentence stays the same.
 
 `ACTOR` is one word, no spaces (`ACTOR=kartik`, not `ACTOR="Kartik Sehgal"`).
@@ -12,14 +12,6 @@ the numbers off the screen instead; the sentence stays the same.
 ## Before the clock starts (about 2 minutes, off stage)
 
 The `data/` folder must hold the provided files (see the README's Setup section).
-
-**Approval seed.** Today `configs/scenarios/approval.yaml` pins the placeholder `seed: 1102`, which
-ends BLOCKED_GUARDRAIL, so the approval segment cannot be shown. Change that line to `seed: 1101`
-first (verified: PENDING_APPROVAL at look 4, day 15). Skip this once the repo has the re-pin.
-
-```bash
-grep seed: configs/scenarios/approval.yaml    # must say: seed: 1101
-```
 
 Terminal 1: build the store with the batch scenarios, then serve the dashboard and leave it
 running.
@@ -34,13 +26,11 @@ make dashboard
 ```
 
 Check the end of the `make simulate SCENARIO=approval` output: it must say
-`final state PENDING_APPROVAL`. If it says anything else (BLOCKED_GUARDRAIL means the seed is still
-1102), re-pin as above and rerun `make simulate SCENARIO=approval`, or skip the approval segment and
-give its 25 seconds to the split evidence.
+`final state PENDING_APPROVAL`. If it says anything else, skip the approval segment and give its 25
+seconds to the split evidence.
 
-Optional, only if you may open the **Validation** page: `make validate` (under a minute). It writes
-`reports/validation.md` and then ends with `make: *** [validate] Error 1`, because the power check
-currently misses its target (see the README's Validation section). The page is fine either way.
+Optional, only if you may open the **Validation** page: `make validate` (under a minute). It
+rewrites `reports/validation.md` and the two charts, and all four checks should print PASS.
 
 Open http://localhost:8501. The sidebar has the **Experiment** picker and the auto-refresh toggle
 (leave it on); the page shows the experiments table, with its **Business impact** column, then the
@@ -159,9 +149,7 @@ make demo ACTOR=kartik
 ```
 
 `make demo` runs win, harm and inconclusive with a split report each, then the approval scenario,
-and approves it as ACTOR (under a minute). Until the approval seed is re-pinned to 1101 it stops at
-that last step with "only PENDING_APPROVAL can be approved or rejected" and exits 2; the first three
-scenarios and their reports are still built. Use it to rebuild the store, or as the fallback if the
+and approves it as ACTOR (under a minute). Use it to rebuild the store, or as the fallback if the
 dashboard is down: every look prints its z, boundaries and decision in the terminal, and the split
 and truth reports land in `reports/`. Because `make demo` approves the approval run, run
 `make simulate SCENARIO=approval` again afterwards if you want to click Approve live.
