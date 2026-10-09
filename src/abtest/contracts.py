@@ -490,7 +490,7 @@ class SimTruth(_Frozen):
     scenario: str
     seed: int
     injected_primary_rel_lift: float
-    injected_secondary_change: float
+    injected_secondary_change: float          # the TOTAL true change in B's secondary metric
     secondary_change_type: Literal["relative", "absolute"]
     pool_leads: int
     pool_p: float
@@ -505,6 +505,10 @@ class SimTruth(_Frozen):
     secondary_B_counterfactual: float
     secondary_B: float
     realised_secondary_change: float          # relative or absolute, per secondary_change_type
+    # Expected part of the secondary change caused by the primary injection alone (extra
+    # meetings are longer calls); the direct injection nets it out so the total = injected.
+    secondary_from_primary: float
+    window_days: int
 
 
 class DaySplit(_Frozen):

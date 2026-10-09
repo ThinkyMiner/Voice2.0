@@ -65,3 +65,11 @@ def test_insert_df_types(conn):
     back = store.read_df(conn, "SELECT * FROM calls", parse_dates=["ts"])
     assert back.loc[0, "answered"] == 1 and pd.isna(back.loc[0, "duration_s"])
     assert back.loc[0, "ts"] == pd.Timestamp("2026-10-01 10:00")
+
+
+def test_timestamps_round_trip_with_and_without_microseconds(conn):
+    ts = pd.to_datetime(["2026-10-01 10:00:00", "2026-10-01 10:00:00.5"], format="ISO8601")
+    df = pd.DataFrame({"experiment_id": "t", "lead_id": ["1", "2"], "variant": "A", "bucket": 1, "ts": ts})
+    store.insert_df(conn, "exposures", df)
+    back = store.read_df(conn, "SELECT ts FROM exposures ORDER BY lead_id", parse_dates=["ts"])
+    assert list(back.ts) == list(ts)
