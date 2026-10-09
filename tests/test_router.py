@@ -41,7 +41,7 @@ def _running_store(path) -> tuple:
     cfg = config.load_experiment(CFG_PATH)
     conn = store.connect(path)
     s = store.create_experiment(conn, config.freeze(cfg))
-    store.put_state(conn, s.model_copy(update={"state": State.RUNNING}))
+    store.put_state(conn, s.model_copy(update={"state": State.RUNNING, "allocation": cfg.allocation}))
     return conn, cfg.id
 
 

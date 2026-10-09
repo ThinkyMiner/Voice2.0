@@ -15,16 +15,16 @@ sized to make the total land on the injected value.
 
 | arm | leads | triggered leads | primary rate | secondary |
 |---|---|---|---|---|
-| A | 26,416 | 22,178 | 0.1752 | 40.29 |
-| B, counterfactual (before injection) | 2,841 | 2,412 | 0.1737 | 39.52 |
-| B, realised | 2,841 | 2,412 | 0.1737 | 39.52 |
+| A | 7,530 | 6,331 | 0.1761 | 40.20 |
+| B, counterfactual (before injection) | 829 | 705 | 0.1887 | 42.49 |
+| B, realised | 829 | 705 | 0.1887 | 42.49 |
 
 ## Business impact of the true effect (if B served 100% of traffic)
 
-- Primary: 174 → 174 successes per 1,000 answered leads (+0); about **+0 per week** at 6,148 answered leads a week.
-- Talk time per answered lead: 39.5 s → 39.5 s (+0.0 s, +0.0%).
+- Primary: 189 → 189 successes per 1,000 answered leads (+0); about **+0 per week** at 1,759 answered leads a week.
+- Talk time per answered lead: 42.5 s → 42.5 s (+0.0 s, +0.0%).
 
-Exposures dropped (fault injection): 430 B leads have calls but no logged exposure.
+Exposures dropped (fault injection): 145 B leads have calls but no logged exposure.
 
 Bootstrap pool: 175,543 lead-windows; pool p = 0.1795.
 

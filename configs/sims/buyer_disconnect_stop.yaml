@@ -1,0 +1,9 @@
+# Simulator ground truth: the engine must never read this file.
+# buyer_disconnect_stop: BL success +10% (the MDE), abrupt disconnects +9 pp.
+# Expect STOPPED_HARM via the binary guardrail. PLAN.md says +5 pp, but n_B,max is sized for the
+# primary, so +5 pp stops only 5/20 seeds (reports/scenario_calibration.md); +9 pp is the smallest
+# 1 pp step reaching 90% (19/20). Phase 4 decision.
+true_effect: {primary_rel_lift: 0.10, secondary_change: 0.09}   # relative for continuous, absolute for binary
+reference: {from: null, to: null, bot_version: null}   # the whole buyer file (5-9 Oct 2026); no bot_version column
+volume: {daily_leads: 164.8, scale: 4.0}   # data_profile_buyer_logs VolumeStats; Checkpoint 1: x4, 1,000 rows is too small for a 10% split
+fault: {drop_b_exposure_rate: 0.0}

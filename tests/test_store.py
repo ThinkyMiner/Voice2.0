@@ -1,3 +1,4 @@
+import math
 import sqlite3
 from datetime import datetime
 
@@ -5,7 +6,7 @@ import pandas as pd
 import pytest
 
 from abtest import store
-from abtest.contracts import Allocation, ExperimentConfig, FrozenConfig, State
+from abtest.contracts import ALL_A, Allocation, Decision, ExperimentConfig, FrozenConfig, SrmLog, State
 
 CFG = ExperimentConfig.model_validate({
     "id": "t", "dataset": "bttc", "unit": "lead_id", "trigger": "first_answered_call",
@@ -50,6 +51,34 @@ def test_decisions_append_only_and_config_frozen(conn):
         conn.execute("UPDATE experiments SET seed = 2")
     store.reset_experiment(conn, "t")
     assert store.get_state(conn, "t") is None
+
+
+def _row(decision: str) -> Decision:
+    return Decision(ts_wall=datetime(2026, 10, 9), ts_sim=datetime(2026, 10, 1), experiment_id="t",
+                    config_hash="h", prompt_hash_A="a", prompt_hash_B="b", kind="state_change",
+                    look=None, info_fraction=None, n_A=None, n_B=None, primary=None, guardrail=None,
+                    srm=None, decision=decision, reason="r", actor="engine")
+
+
+def test_draft_routes_all_to_a_and_record_is_atomic(conn):
+    s = store.create_experiment(conn, FROZEN)
+    assert s.state == State.DRAFT and s.allocation == ALL_A
+    done = s.model_copy(update={"state": State.HALTED_SRM})
+    store.record(conn, done, [_row("HALTED_SRM")])
+    assert store.read_decisions(conn, "t") == [_row("HALTED_SRM")] and store.get_state(conn, "t") == done
+    with pytest.raises(sqlite3.IntegrityError, match="terminal state is immutable"):
+        store.record(conn, done.model_copy(update={"state": State.RUNNING}), [_row("RUNNING")])
+    assert len(store.read_decisions(conn, "t")) == 1  # the failed state write rolled back its rows
+
+
+def test_nan_and_inf_in_a_log_row_round_trip(conn):
+    s = store.create_experiment(conn, FROZEN)
+    srm = SrmLog(configured_share_B=0.1, observed_share_B=math.nan, p=math.nan,
+                 observed_share_B_triggered=math.inf, p_triggered=1.0)  # an arm with no leads yet
+    store.record(conn, s, [_row("RUNNING").model_copy(update={"srm": srm})])
+    (back,) = store.read_decisions(conn, "t")
+    assert math.isnan(back.srm.p) and back.srm.observed_share_B_triggered == math.inf
+    assert '"NaN"' in conn.execute("SELECT payload FROM decisions").fetchone()[0]  # strict JSON
 
 
 def test_insert_df_types(conn):

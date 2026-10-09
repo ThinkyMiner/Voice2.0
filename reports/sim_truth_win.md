@@ -6,8 +6,8 @@ Experiment `vani-meeting-v1-win`, seed 1101.
 
 | effect | Injected (sim config) | Realised (this run) |
 |---|---|---|
-| primary relative lift | +25.00% | +24.94% |
-| secondary change (relative) | +3.00% | +1.45% |
+| primary relative lift | +25.00% | +24.24% |
+| secondary change (relative) | +3.00% | +1.74% |
 
 The injected secondary change is the **total** true change in B. The extra meetings alone would
 move it by +4.68% (meeting calls run longer), so the direct effect is
@@ -15,14 +15,14 @@ sized to make the total land on the injected value.
 
 | arm | leads | triggered leads | primary rate | secondary |
 |---|---|---|---|---|
-| A | 26,363 | 22,146 | 0.1713 | 39.76 |
-| B, counterfactual (before injection) | 2,894 | 2,458 | 0.1745 | 40.96 |
-| B, realised | 2,894 | 2,458 | 0.2181 | 41.56 |
+| A | 15,062 | 12,715 | 0.1740 | 39.38 |
+| B, counterfactual (before injection) | 1,656 | 1,414 | 0.1867 | 40.87 |
+| B, realised | 1,656 | 1,414 | 0.2320 | 41.58 |
 
 ## Business impact of the true effect (if B served 100% of traffic)
 
-- Primary: 175 → 218 successes per 1,000 answered leads (+44); about **+268 per week** at 6,151 answered leads a week.
-- Talk time per answered lead: 41.0 s → 41.6 s (+0.6 s, +1.5%).
+- Primary: 187 → 232 successes per 1,000 answered leads (+45); about **+160 per week** at 3,532 answered leads a week.
+- Talk time per answered lead: 40.9 s → 41.6 s (+0.7 s, +1.7%).
 
 Exposures dropped (fault injection): 0 B leads have calls but no logged exposure.
 

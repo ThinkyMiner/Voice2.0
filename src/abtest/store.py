@@ -8,12 +8,14 @@ logs/decisions.jsonl keeps the full history.
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
-from abtest.contracts import DB_PATH, TERMINAL, ExperimentConfig, ExperimentState, FrozenConfig, State
+from abtest.contracts import (DB_PATH, LIVE_ALLOCATION, TERMINAL, Decision, ExperimentConfig,
+                               ExperimentState, FrozenConfig, State)
 
 _TERMINAL_SQL = ", ".join(f"'{s}'" for s in sorted(TERMINAL))
 
@@ -125,9 +127,9 @@ def reset_experiment(conn: sqlite3.Connection, experiment_id: str) -> None:
 
 def create_experiment(conn: sqlite3.Connection, frozen: FrozenConfig,
                       scenario: str | None = None, seed: int | None = None) -> ExperimentState:
-    """Insert the frozen config and a DRAFT state with the configured allocation."""
+    """Insert the frozen config and a DRAFT state (live allocation all A until started)."""
     cfg = frozen.config
-    state = ExperimentState(experiment_id=cfg.id, state=State.DRAFT, allocation=cfg.allocation,
+    state = ExperimentState(experiment_id=cfg.id, state=State.DRAFT, allocation=LIVE_ALLOCATION[State.DRAFT],
                             salt=cfg.salt, config_hash=frozen.config_hash, prompt_hash=frozen.prompt_hash)
     with conn:
         conn.execute(
@@ -135,23 +137,27 @@ def create_experiment(conn: sqlite3.Connection, frozen: FrozenConfig,
             (cfg.id, frozen.canonical_json, frozen.config_hash, frozen.prompt_hash["A"],
              frozen.prompt_hash["B"], scenario, seed, _now()),
         )
-        put_state(conn, state)
+        _upsert_state(conn, state)
     return state
 
 
 def put_state(conn: sqlite3.Connection, s: ExperimentState) -> None:
     with conn:
-        conn.execute(
-            """INSERT INTO experiment_state VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(experiment_id) DO UPDATE SET state=excluded.state, alloc_A=excluded.alloc_A,
-                 alloc_B=excluded.alloc_B, looks_done=excluded.looks_done,
-                 info_fractions=excluded.info_fractions, n_b_max=excluded.n_b_max,
-                 started_ts_sim=excluded.started_ts_sim, updated_ts_sim=excluded.updated_ts_sim,
-                 updated_ts_wall=excluded.updated_ts_wall""",
-            (s.experiment_id, s.state.value, s.allocation.A, s.allocation.B, s.looks_done,
-             json.dumps(list(s.info_fractions)), s.n_b_max, _iso(s.started_ts_sim),
-             _iso(s.updated_ts_sim), _now()),
-        )
+        _upsert_state(conn, s)
+
+
+def _upsert_state(conn: sqlite3.Connection, s: ExperimentState) -> None:
+    conn.execute(
+        """INSERT INTO experiment_state VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(experiment_id) DO UPDATE SET state=excluded.state, alloc_A=excluded.alloc_A,
+             alloc_B=excluded.alloc_B, looks_done=excluded.looks_done,
+             info_fractions=excluded.info_fractions, n_b_max=excluded.n_b_max,
+             started_ts_sim=excluded.started_ts_sim, updated_ts_sim=excluded.updated_ts_sim,
+             updated_ts_wall=excluded.updated_ts_wall""",
+        (s.experiment_id, s.state.value, s.allocation.A, s.allocation.B, s.looks_done,
+         json.dumps(list(s.info_fractions)), s.n_b_max, _iso(s.started_ts_sim),
+         _iso(s.updated_ts_sim), _now()),
+    )
 
 
 def get_state(conn: sqlite3.Connection, experiment_id: str) -> ExperimentState | None:
@@ -171,6 +177,25 @@ def get_state(conn: sqlite3.Connection, experiment_id: str) -> ExperimentState |
         looks_done=row["looks_done"], info_fractions=tuple(json.loads(row["info_fractions"])),
         n_b_max=row["n_b_max"], started_ts_sim=row["started_ts_sim"], updated_ts_sim=row["updated_ts_sim"],
     )
+
+
+def record(conn: sqlite3.Connection, state: ExperimentState, decisions: Sequence[Decision]) -> None:
+    """Append decision rows and upsert the state in one transaction (decision.py's only write)."""
+    with conn:
+        conn.executemany(
+            "INSERT INTO decisions (experiment_id, ts_wall, ts_sim, kind, look, info_fraction, decision, "
+            "reason, actor, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(d.experiment_id, _iso(d.ts_wall), _iso(d.ts_sim), d.kind, d.look, d.info_fraction,
+              d.decision, d.reason, d.actor, d.model_dump_json()) for d in decisions],
+        )
+        _upsert_state(conn, state)
+
+
+def read_decisions(conn: sqlite3.Connection, experiment_id: str) -> list[Decision]:
+    """The experiment's decision log, oldest first."""
+    rows = conn.execute("SELECT payload FROM decisions WHERE experiment_id = ? ORDER BY id",
+                        (experiment_id,)).fetchall()
+    return [Decision.model_validate_json(r["payload"]) for r in rows]
 
 
 def get_config(conn: sqlite3.Connection, experiment_id: str) -> ExperimentConfig:

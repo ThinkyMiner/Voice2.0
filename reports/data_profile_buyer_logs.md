@@ -32,9 +32,9 @@ Inferred values:
 
 Excluded leads:
 
-| lead_id | calls |
+| lead | calls |
 |---|---|
-| 0 | 28 |
+| #1 | 28 |
 
 - Inferred counts are over all 1,000 source rows, before any row is dropped.
 - duration_s, attempt_no and bot_version have no source column (PLAN.md §2.0).
@@ -90,15 +90,15 @@ Over all 825 leads after the adapter's row drops, including leads then excluded 
 
 Top 5 leads by calls:
 
-| lead_id | calls | excluded |
+| rank | calls | excluded |
 |---|---|---|
-| 0 | 28 | True |
-| 275940968 | 6 | False |
-| 62541303 | 5 | False |
-| 121726955 | 4 | False |
-| 275713959 | 4 | False |
+| 1 | 28 | True |
+| 2 | 6 | False |
+| 3 | 5 | False |
+| 4 | 4 | False |
+| 5 | 4 | False |
 
-Outliers excluded by `exclude_leads_with_calls_gt = 10`: lead 0 (28 calls). They are absent from every other section.
+Outliers excluded by `exclude_leads_with_calls_gt = 10`: 28 calls. They are absent from every other section.
 
 ## 5. Daily answer rate and triggered leads
 

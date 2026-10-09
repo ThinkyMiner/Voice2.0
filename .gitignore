@@ -9,3 +9,4 @@ __pycache__/
 .hypothesis/
 .env
 reports/qa_audit_sample.csv
+logs/

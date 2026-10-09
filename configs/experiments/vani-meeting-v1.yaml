@@ -10,7 +10,7 @@ allocation: {A: 0.90, B: 0.10}
 variants:
   A: {base: prompts/base_buyer_vani.txt}
   B: {base: prompts/base_buyer_vani.txt, patch: {mode: append, text: "Offer two concrete meeting slots before asking open availability."}}
-window: {days: 28, looks: 7}   # Checkpoint 1: 15% MDE needs ~20.6 d at real volume; looks follow information fraction, 28 d is the cap
+window: {days: 28, looks: 7}   # Checkpoint 1: the 15% MDE needs 23.5 d at real volume (n_B,max 1,900, R = 1.033); looks follow information fraction, 28 d is the cap
 maturation_days: 2             # data_profile_bttc §8(c): 94.9% of 14-day successes by day 2 (88% on the trigger call)
 baseline_p: 0.1795             # data_profile_bttc §6 lead-window baseline (148,762 triggered lead-windows; the unit the experiment samples)
 primary:   {name: meeting_fixed, type: binary, dispositions: ["Meeting Fixed"], better: increase, mde_rel: 0.15}
