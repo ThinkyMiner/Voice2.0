@@ -53,8 +53,11 @@ split-report:  ## make split-report SCENARIO=win
 api:  ## GET http://localhost:$(PORT)/assign?experiment_id=&lead_id=
 	$(RUN) uvicorn abtest.api:app --port $(PORT)
 
-boundaries validate:
-	@echo "not built yet (Phase 3)"; exit 1
+boundaries:  ## make boundaries EXP=...  (5- and 7-look boundaries, reference + Monte Carlo checks)
+	$(RUN) python -m abtest.boundaries $(EXP)
+
+validate:  ## make validate EXP=...  (A/A, power and naive-peeking runs -> reports/validation.md)
+	$(RUN) python -m abtest.validation $(EXP)
 
 dashboard slide:
 	@echo "not built yet (Phase 5)"; exit 1
