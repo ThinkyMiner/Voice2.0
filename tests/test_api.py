@@ -14,7 +14,7 @@ def test_assign_endpoint(tmp_path, monkeypatch):
     cfg = config.load_experiment(CFG_PATH)
     conn = store.connect(db)
     s = store.create_experiment(conn, config.freeze(cfg))
-    store.put_state(conn, s.model_copy(update={"state": State.RUNNING}))
+    store.put_state(conn, s.model_copy(update={"state": State.RUNNING, "allocation": cfg.allocation}))
     client = TestClient(api.app)
 
     got = [client.get("/assign", params={"experiment_id": cfg.id, "lead_id": "lead-7"}) for _ in range(2)]

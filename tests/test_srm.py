@@ -27,7 +27,7 @@ def _exposures(leads: list[str], ts: datetime = T0, allocation: Allocation = CFG
 def _store(exposures: pd.DataFrame, answered_leads: list[str] = ()):
     conn = store.connect(":memory:")
     s = store.create_experiment(conn, FROZEN, scenario="unit", seed=0)
-    store.put_state(conn, s.model_copy(update={"state": State.RUNNING}))
+    store.put_state(conn, s.model_copy(update={"state": State.RUNNING, "allocation": CFG.allocation}))
     store.insert_df(conn, "exposures", exposures)
     calls = pd.DataFrame({"experiment_id": CFG.id, "lead_id": exposures.lead_id.unique()})
     calls["call_id"] = "c-" + calls.lead_id

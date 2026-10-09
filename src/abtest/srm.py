@@ -47,10 +47,14 @@ def split_summary(conn: sqlite3.Connection, experiment_id: str) -> SplitSummary:
                         (experiment_id,))
     # Not parse_dates: isoformat() drops zero microseconds, and mixed formats parse to NaT.
     exp["ts"] = pd.to_datetime(exp.ts, format="ISO8601")
-    # RUNNING period ends at the first RUNNING -> X transition; a later allocation change is legit.
-    end = conn.execute("SELECT MIN(ts_sim) FROM decisions WHERE experiment_id = ? AND kind = "
-                       "'state_change' AND json_extract(payload, '$.from_state') = 'RUNNING'",
-                       (experiment_id,)).fetchone()[0]
+    # RUNNING period: from DRAFT -> RUNNING (DRAFT routes everyone to A) to the first RUNNING -> X
+    # transition (a later allocation change is legit).
+    start, end = conn.execute(
+        "SELECT MIN(CASE WHEN json_extract(payload, '$.to_state') = 'RUNNING' THEN ts_sim END), "
+        "MIN(CASE WHEN json_extract(payload, '$.from_state') = 'RUNNING' THEN ts_sim END) "
+        "FROM decisions WHERE experiment_id = ? AND kind = 'state_change'", (experiment_id,)).fetchone()
+    if start is not None:
+        exp = exp[exp.ts >= pd.Timestamp(start)]
     if end is not None:
         exp = exp[exp.ts < pd.Timestamp(end)]
 

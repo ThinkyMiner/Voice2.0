@@ -6,8 +6,8 @@ Part 1 is the pydantic models passed between modules. Part 2 is one stub class p
 listing the functions that module must expose with exact parameter names, order and defaults.
 `tests/test_contracts.py` checks every built module against its stub.
 
-Freeze status: the models and the Config/Data/Profile/Power stubs freeze at tag phase-1.
-Stubs for later modules are PROVISIONAL until their phase starts; each class says which phase.
+Freeze status: the models and the Config/Data/Profile/Power stubs freeze at tag phase-1;
+Router/Simulator/Srm at phase-2. Each later stub says which phase freezes it.
 """
 
 import math
@@ -355,8 +355,7 @@ class Assignment(_Frozen):
 
 
 class ExperimentState(_Frozen):
-    """Live state. `allocation` is the LIVE allocation the router reads: the configured one
-    while RUNNING, B=1 after PROMOTED, A=1 after STOPPED_HARM."""
+    """Live state. `allocation` is the LIVE allocation the router reads, set per LIVE_ALLOCATION."""
     experiment_id: str
     state: State
     allocation: Allocation
@@ -368,6 +367,21 @@ class ExperimentState(_Frozen):
     n_b_max: float | None = None
     started_ts_sim: datetime | None = None
     updated_ts_sim: datetime | None = None
+
+
+ALL_A = Allocation(A=1.0, B=0.0)
+ALL_B = Allocation(A=0.0, B=1.0)
+
+# Live allocation per state (§2.4, §2.8; Phase 4 decisions). None = the configured split.
+# DRAFT: not started, so nobody hears B. PENDING_APPROVAL: B keeps its tested share until a
+# human decides. Every outcome other than PROMOTED returns all traffic to A ("A stays").
+LIVE_ALLOCATION: dict[State, Allocation | None] = {
+    State.DRAFT: ALL_A,
+    State.RUNNING: None,
+    State.PENDING_APPROVAL: None,
+    State.PROMOTED: ALL_B,
+    **{s: ALL_A for s in TERMINAL - {State.PROMOTED}},
+}
 
 
 # --- analysis (§2.6-2.8) ----------------------------------------------------------------
@@ -534,6 +548,7 @@ class SplitSummary(_Frozen):
 # --- decision log (§2.9) ------------------------------------------------------------------
 
 class PrimaryLog(_Frozen):
+    """Boundaries on the z scale as plotted: win = +w_k, harm = -h_k (negative)."""
     rate_A: float
     rate_B: float
     lift_abs: float
@@ -584,6 +599,27 @@ class Decision(_Frozen):
     actor: str               # "engine" or the approver's name
     from_state: State | None = None
     to_state: State | None = None
+
+
+# --- scenarios (Phase 4) -----------------------------------------------------------------
+
+class ScenarioRun(_Frozen):
+    """One scenario run, as `make scenarios` tabulates it. Statistic fields come from the look
+    that decided (the last look); they are None if no look was taken."""
+    scenario: str
+    seed: int
+    experiment_id: str
+    state: State                  # where the run stopped: a terminal state or PENDING_APPROVAL
+    expected: State
+    hit: bool                     # state == expected, and stop_look <= the expected bound if any
+    stop_look: int | None
+    sim_days: int                 # simulated days until the run stopped
+    info_fraction: float | None
+    lift_rel: float | None
+    lift_rel_ci95: tuple[float, float] | None   # PrimaryStats.ci95 / rate_A
+    guardrail_delta: float | None
+    guardrail_rci: tuple[float, float] | None
+    weekly_impact: float | None   # decision.weekly_impact at the deciding look
 
 
 # ---------------------------------------------------------------------------------------
@@ -754,23 +790,55 @@ class Rules:  # src/abtest/rules.py — PROVISIONAL until Phase 3
     def evaluate_look(look: LookResult, bounds: Boundaries, cfg: ExperimentConfig) -> Verdict: ...
 
 
-class DecisionModule:  # src/abtest/decision.py — PROVISIONAL until Phase 4
+class DecisionModule:  # src/abtest/decision.py — freezes at phase-4. CLI: python -m abtest.decision
     @staticmethod
-    def start(conn: sqlite3.Connection, frozen: FrozenConfig, ts_sim: datetime) -> ExperimentState: ...
+    def start(conn: sqlite3.Connection, frozen: FrozenConfig, ts_sim: datetime) -> ExperimentState:
+        """DRAFT -> RUNNING for an experiment already created by store.create_experiment.
+        Requires the stored config_hash to equal frozen.config_hash. Sets the configured
+        allocation, n_b_max = power.n_max(cfg).n_b_max, started_ts_sim = updated_ts_sim = ts_sim,
+        and logs one state_change row (actor "engine")."""
 
     @staticmethod
     def apply_verdict(conn: sqlite3.Connection, state: ExperimentState, look: LookResult,
-                      bounds: Boundaries, verdict: Verdict) -> ExperimentState: ...
+                      bounds: Boundaries, verdict: Verdict) -> ExperimentState:
+        """Requires state RUNNING and look.look == state.looks_done + 1. Logs one kind="look"
+        row; if verdict.decision is a State, also one state_change row carrying the same look
+        fields. New state: looks_done = look.look, info_fractions = bounds.info_fractions,
+        updated_ts_sim = look.ts_sim, allocation per LIVE_ALLOCATION. Rows and state commit in
+        one transaction (store.record), then go to the JSONL mirror."""
 
     @staticmethod
     def approve(conn: sqlite3.Connection, experiment_id: str, actor: str,
-                approved: bool) -> ExperimentState: ...
+                approved: bool) -> ExperimentState:
+        """PENDING_APPROVAL -> PROMOTED (approved) or REJECTED; ValueError from any other state.
+        Logs a state_change row with the actor; look fields None, ts_sim = state.updated_ts_sim."""
+
+    @staticmethod
+    def weekly_impact(lift_abs: float, n_matured: int, elapsed_days: float,
+                      cfg: ExperimentConfig) -> float:
+        """Engine estimate of extra primary successes per week if B took 100% of traffic:
+        lift_abs * n_matured / max(elapsed_days - cfg.maturation_days, 1) * 7, where n_matured =
+        n_A + n_B at the look (both arms = all traffic) and elapsed_days = look ts_sim - started."""
 
 
-class Runner:  # src/abtest/runner.py — orchestrator stub in Phase 2, PROVISIONAL until Phase 4
+class Runner:  # src/abtest/runner.py — freezes at phase-4. CLI: python -m abtest.runner
     @staticmethod
     def run_scenario(scenario: Scenario, conn: sqlite3.Connection,
-                     speed: float | None = None) -> ExperimentState: ...
+                     speed: float | None = None) -> ExperimentState:
+        """Replace any previous run of this scenario in the store, create it (DRAFT), start it,
+        then simulate day by day. After each day, take a look when the matured information
+        fraction reaches the next scheduled fraction; stop at a terminal state or
+        PENDING_APPROVAL, or after the final look. Writes the sim_truth row and
+        reports/sim_truth_<scenario>.md. speed = wall-clock seconds per simulated day."""
+
+    @staticmethod
+    def summarize(conn: sqlite3.Connection, scenario: Scenario) -> ScenarioRun:
+        """The ScenarioRun of the run of `scenario` currently in the store."""
+
+    @staticmethod
+    def sweep(names: Sequence[str], n_seeds: int, workers: int | None = None) -> list[ScenarioRun]:
+        """Every named scenario at seeds 1..n_seeds, each run in its own ":memory:" store with
+        the JSONL mirror and the truth report off. Sorted by (scenario, seed)."""
 
 
 class Validation:  # src/abtest/validation.py — PROVISIONAL until Phase 3
