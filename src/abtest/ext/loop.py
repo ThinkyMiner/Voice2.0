@@ -1,4 +1,4 @@
-"""The Vani Loop driver: the prompt registry and one cycle per production prompt version.
+"""The loop driver: the prompt registry and one cycle per production prompt version.
 
 Each stage persists the cycle to CYCLES before the next one runs, and runs only while the cycle is
 at it, so re-running a finished stage does nothing:
@@ -58,6 +58,11 @@ GO_AHEAD = ("waiting for the go-ahead to send real transcripts: this stage sends
             "model provider; once the user approves, run: make loop ARGS=--yes-send-real-transcripts")
 FAILED_TRY = re.compile(r"^try \d+: (\S+) -> ")  # the note a failed try leaves; _tried() reads it back
 LOG: deque[str] = deque(maxlen=200)  # recent progress lines, for GET /api/loop
+
+
+def corpus() -> str:
+    """The real calls a cycle on v1 judges (env LOOP_CORPUS): the buyer-side audited calls by default."""
+    return os.environ.get("LOOP_CORPUS", "audited")
 
 
 class Busy(RuntimeError):
@@ -181,13 +186,16 @@ def reject(name: str) -> PromptVersion:
 # --- seams: the sibling modules, imported on first use (tests replace these) ------------------
 
 def calls(name: str) -> list[Transcript]:
-    """The calls a cycle on this version judges. v1: the real production calls. A later version has no
-    live calls (no bot ever spoke it), so its calls are Prompt B's replay transcripts from the test that
-    proved it, relabelled with the version; their source stays replay."""
+    """The calls a cycle on this version judges. v1: real calls, by default the buyer-side calls
+    IndiaMART's QA team audited (env LOOP_CORPUS=audited|production). They match the buyer-side prompt
+    and the QA checklist; the 2026-10-06 production sample turned out to be the seller-side bot, whose
+    prompt we do not have. A later version has no live calls (no bot ever spoke it), so its calls are
+    Prompt B's replay transcripts from the test that proved it, relabelled with the version; their
+    source stays replay."""
     v = version(name)
     if v.fix_id is None:
         from abtest.ext import listen
-        return [t for t in listen.load_transcripts("production") if t.prompt_version == name]
+        return [t for t in listen.load_transcripts(corpus()) if t.prompt_version == name]
     from abtest.ext import improve
     return [load(p, Transcript).model_copy(update={"prompt_version": name})
             for p in sorted((improve.REPLAY_DIR / v.fix_id).glob("*-B.json"))]
@@ -360,7 +368,7 @@ def _listen(c: Cycle, allow_real: bool) -> Cycle | None:
     v = version(c.production_version)
     found = calls(v.version)
     if not found:
-        how = ("transcribe the production calls: make listen SOURCE=production ARGS=--yes-send-real-audio "
+        how = (f"transcribe the {corpus()} calls: make listen SOURCE={corpus()} ARGS=--yes-send-real-audio "
                "(sends real recordings to the model provider: the user's decision)" if v.fix_id is None
                else f"no replay transcripts of {v.fix_id} found")
         return _wait(c, f"waiting for transcripts of {v.version}: {how}")
@@ -451,7 +459,7 @@ def _prove(c: Cycle, allow_real: bool) -> Cycle:
                variants={"A": {"base": base.path}, "B": {"patch": {"mode": "full", "path": cand.path}}})
     path = EXPERIMENTS_DIR / f"{eid}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"# Vani Loop cycle {c.n}: A = {base.version} (production), B = {cand.version} ({c.fix_id}).\n"
+    path.write_text(f"# Slow & Steady loop, cycle {c.n}: A = {base.version} (production), B = {cand.version} ({c.fix_id}).\n"
                     f"# Written by abtest.ext.loop from {TEMPLATE}.\n"
                     + yaml.safe_dump(raw, sort_keys=False, allow_unicode=True), encoding="utf-8")
     sim = os.environ.get("LOOP_DEMO_SIM", DEFAULT_SIM)
@@ -589,11 +597,16 @@ def main(argv: list[str] | None = None) -> int:
     ok.add_argument("--actor", required=True, help="who decides; recorded on the decision log row")
     ok.add_argument("--reject", action="store_true")
     a = ap.parse_args(argv)
+    from abtest.ext.llm import BudgetExceeded
     try:
         if a.cmd == "advance":
             advance(a.until, a.real)
         elif a.cmd == "approve":
             approve(a.experiment_id, a.actor, not a.reject)
+    except BudgetExceeded as e:  # every finished model call is cached: a rerun resumes at this stage
+        print(f"stopped: {e}\nthe cycle resumes where it stopped: raise the limit and rerun the same command",
+              file=sys.stderr)
+        return 1
     except (Busy, KeyError, ValueError) as e:
         print(f"error: {e.args[0] if e.args else e}", file=sys.stderr)
         return 1

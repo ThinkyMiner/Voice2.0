@@ -1,4 +1,4 @@
-"""The Vani Loop driver (ext/loop.py): registry, cycle stages, retries, the go-ahead stop, the CLI.
+"""The loop driver (ext/loop.py): registry, cycle stages, retries, the go-ahead stop, the CLI.
 
 Listen, judge and improve are replaced at loop's module-level seams with invented calls, audits and
 fixes. The prove stage runs the REAL base engine (runner, simulator, metrics ... decision) into a temp
@@ -14,7 +14,7 @@ import yaml
 
 from abtest import decision, simulator, store
 from abtest.contracts import BASE_PROMPT, ROOT, State
-from abtest.ext import loop, models
+from abtest.ext import llm, loop, models
 from abtest.ext.models import (CallAudit, Fix, GateCheck, GateResult, PromptVersion, ReplayResult, RootCause,
                                RubricVerdict, Transcript, Turn, load, save)
 
@@ -278,14 +278,19 @@ def test_no_transcripts_wait_at_listen(world):
 
 # --- the real listen glue (production calls; a later version's replay transcripts) ---------------
 
-def test_calls_and_audits_of_v1_are_production_and_of_v2_its_replay_b_transcripts():
+def test_calls_and_audits_of_v1_are_the_corpus_and_of_v2_its_replay_b_transcripts(monkeypatch):
     from abtest.ext import improve
     save(models.TRANSCRIPTS_DIR / "p1.json", transcript("p1", source="production"))
     save(models.TRANSCRIPTS_DIR / "a1.json", transcript("a1", source="audited"))
     for t in (transcript("p1"), transcript("a1")):
         save(models.AUDITS_DIR / "v1" / f"{t.call_id}.json", audit(t))
+    # Default corpus: the buyer-side calls the QA team audited (they match the buyer-side prompt).
+    assert [t.call_id for t in loop.calls("v1")] == ["a1"]
+    assert [a.call_id for a in loop.audits("v1")] == ["a1"]
+    monkeypatch.setenv("LOOP_CORPUS", "production")
     assert [t.call_id for t in loop.calls("v1")] == ["p1"]
-    assert [a.call_id for a in loop.audits("v1")] == ["p1"]  # the audited set is for agreement, not the cycle
+    assert [a.call_id for a in loop.audits("v1")] == ["p1"]
+    monkeypatch.delenv("LOOP_CORPUS")
 
     rep = improve.REPLAY_DIR / "fx-1"
     save(rep / "p1-A.json", transcript("p1-A", source="replay", version="v1"))
@@ -328,6 +333,14 @@ def test_cli_advance_status_and_approve(world, capsys):
     assert loop.main(["approve", "vani-loop-c1", "--actor", "kartik"]) == 1  # not PENDING_APPROVAL any more
     assert "only PENDING_APPROVAL" in capsys.readouterr().err
     assert loop.main(["status"]) == 0
+
+
+def test_cli_stops_cleanly_at_the_spend_limit(monkeypatch, capsys):
+    def broke(*a):
+        raise llm.BudgetExceeded("OpenRouter refused on the key's spend limit")
+    monkeypatch.setattr(loop, "advance", broke)
+    assert loop.main(["advance"]) == 1
+    assert "resumes where it stopped" in capsys.readouterr().err
 
 
 # --- recovery and integrity (the Codex review's findings) -------------------------------------------

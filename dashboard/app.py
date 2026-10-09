@@ -462,7 +462,7 @@ def detail(e: c.Exp) -> None:
 
 # --- page -----------------------------------------------------------------------------------
 
-st.set_page_config(page_title="Voice Bot A/B", page_icon=":material/call:", layout="wide")
+st.set_page_config(page_title="Slow & Steady", page_icon=":material/call:", layout="wide")
 c.style()
 first = c.load_experiments()
 with st.sidebar:
@@ -477,7 +477,7 @@ def page() -> None:
     if {e.id for e in exps} != {e.id for e in first}:
         st.rerun()  # experiments appeared or went: rebuild the sidebar selector
     c.banner([(e.cfg.dataset, c.scale(e.scenario)) for e in exps])
-    st.title("Voice Bot A/B experiments")
+    st.title("Slow & Steady: A/B experiments")
     if not exps:
         st.info(f"No experiments in the store yet ({contracts.DB_PATH}). Run `make demo`, "
                 "`make simulate SCENARIO=win`, or `make live SCENARIO=harm SPEED=3` to watch one run.")

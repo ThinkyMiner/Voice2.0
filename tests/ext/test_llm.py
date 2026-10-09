@@ -1,5 +1,6 @@
 import json
 
+import httpx
 import pytest
 
 from abtest.ext import llm
@@ -34,3 +35,17 @@ def test_spend_is_tracked_across_calls():
 def test_model_roles_can_be_overridden(monkeypatch):
     monkeypatch.setenv("LLM_MODEL_JUDGE", "x/y")
     assert llm.model_for("judge") == "x/y" and llm.model_for("fixer") == llm.MODELS["fixer"]
+
+
+def test_provider_spend_limit_stops_at_once(monkeypatch):
+    posts = []
+
+    def refuse(url, **k):
+        posts.append(url)
+        return httpx.Response(403, text='{"error":{"message":"Budget limit exceeded (monthly limit).","code":403}}')
+    monkeypatch.setattr(httpx, "post", refuse)
+    monkeypatch.delenv("LLM_PROVIDER")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    with pytest.raises(llm.BudgetExceeded, match="Budget limit"):
+        llm.chat("m", [{"role": "user", "content": "x"}])
+    assert len(posts) == 1                     # not retried: every later call would be refused too

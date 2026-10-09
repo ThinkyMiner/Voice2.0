@@ -110,8 +110,12 @@
     Re-asking after a clear answer is Looping Behavior (or WER/STT when misheard), not a probing
     error: grade na here for that.
   fatal_when: >-
-    The product was confirmed and collection went on (specifications, name, city or a transfer
-    pitch) but the bot never asked the quantity, or it assumed a quantity without asking.
+    Only when the bot's own quantity question put a wrong quantity into the lead: it assumed a
+    figure without asking and recorded it, or its question was so wrong (a count for a service,
+    the wrong unit) that the buyer's answer was captured wrongly. The auditors mark this column
+    fatal about once in a thousand calls. Never asking the quantity is not a probing error (the
+    buyer's enquiry form may already hold it, which the transcript cannot show): grade na here
+    and leave it to Quantity Missed Opportunity.
   non_fatal_when: >-
     The bot asked a count where none applies (a service, rental or repair), offered two units
     in one question ("litre or kilogram"), or asked without any unit.
@@ -136,8 +140,13 @@
     read-back or confirmation), it is not a miss: grade na; the repeated asking is graded under
     Looping Behavior.
   fatal_when: >-
-    The buyer clearly stated a quantity (with or without a unit) and the bot never captured or
-    acknowledged it; or quantity applied but the bot neither asked nor captured one.
+    The buyer clearly stated a quantity and the bot demonstrably lost it: its recap, closing or
+    later question gives no quantity or a different one, and the call ends that way. The
+    auditors leave this column na in about 98% of calls, so a call where the bot simply never
+    asked the quantity is na unless the buyer stayed through the whole requirement step
+    (product and specifications collected, no transfer or hang-up) and the call closed with no
+    quantity mentioned by anyone: the buyer's enquiry form may already hold it, which the
+    transcript cannot show.
   non_fatal_when: >-
     The buyer's figure was unclear, or only part of a multi-item quantity was kept.
 

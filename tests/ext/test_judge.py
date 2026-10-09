@@ -126,7 +126,8 @@ def test_a_rubric_graded_twice_differently_gets_the_retry():
 
 @pytest.mark.parametrize("grades,overall", [
     (["na", "na", "na", "na"], "pass"),
-    (["pass", "na", "non_fatal", "pass"], "non_fatal"),
+    (["pass", "non_fatal", "na", "pass"], "non_fatal"),
+    (["pass", "pass", "fatal", "pass"], "pass"),        # dead_air is audio: recorded na, never moves overall
     (["non_fatal", "fatal", "na", "pass"], "fatal"),
 ])
 def test_overall_is_the_worst_grade_and_na_is_ignored(grades, overall):
@@ -229,10 +230,13 @@ def test_agreement_matches_hand_computed_kappa():
     assert row.kappa == pytest.approx(0.6875)
     assert row.confusion["pass"] == {"pass": 1, "non_fatal": 0, "fatal": 1, "na": 0}
     assert row.confusion["fatal"]["fatal"] == 2 and row.confusion["na"]["na"] == 1
-    # Overall: 3 of 5 agree; chance = (2*2 + 1*1 + 2*2) / 25 = 0.36; kappa = (0.6 - 0.36) / 0.64 = 0.375.
-    assert (rep.n_calls, rep.overall_accuracy, rep.model, rep.held_out) == (5, 0.6, "m", True)
-    assert rep.overall_kappa == pytest.approx(0.375)
-    assert rep.fatal_vs_rest_accuracy == pytest.approx(0.6)   # fatal flags agree on calls 0, 2 and 4
+    # Overall, like for like: both sides are the worst grade over the shared text-observable QA
+    # parameters (looping and quantity here; dead_air is audio, polite_close has no QA column). Human
+    # pass, pass, fatal, fatal, pass vs judge pass, fatal, fatal, fatal, pass: 4 of 5 agree;
+    # chance = (3*2 + 2*3) / 25 = 0.48; kappa = (0.8 - 0.48) / 0.52 = 0.6154.
+    assert (rep.n_calls, rep.overall_accuracy, rep.model, rep.held_out) == (5, 0.8, "m", True)
+    assert rep.overall_kappa == pytest.approx(0.32 / 0.52)
+    assert rep.fatal_vs_rest_accuracy == pytest.approx(0.8)   # fatal flags agree on calls 0, 2, 3 and 4
 
 
 def test_kappa_is_none_when_undefined():
@@ -245,7 +249,7 @@ def test_kappa_is_none_when_undefined():
 
 def test_agreement_report_has_aggregate_numbers_only(tmp_path):
     md = judge.write_agreement_report(judge.agreement(AUDITS, HUMAN, R, held_out=True), tmp_path / "a.md").read_text()
-    assert "80.0%" in md and "0.69" in md and "0.38" in md and "Looping Behavior" in md
+    assert "80.0%" in md and "0.69" in md and "0.62" in md and "Looping Behavior" in md
     assert not any(c in md for c in ("c0", "c1", "not-in-human"))
 
 
@@ -300,3 +304,37 @@ def test_cli_audit_then_agreement(tmp_path, monkeypatch):
     assert (rep.n_calls, rep.overall_accuracy, rep.held_out) == (1, 0.0, True)   # judge pass vs human non_fatal
     assert (tmp_path / "judge_agreement.md").exists()
     assert json.loads(judge.AGREEMENT_JSON.read_text())["model"] == "m"
+    before = judge.CALIBRATION.read_text(), judge.AGREEMENT_JSON.read_text()
+    assert judge.main(["agreement", "--model", "nobody"]) == 1                  # a failed run saves nothing
+    assert (judge.CALIBRATION.read_text(), judge.AGREEMENT_JSON.read_text()) == before
+
+
+def test_calibration_remaps_only_minor_flags_and_never_fatal():
+    def a(cid, grade):
+        return CallAudit(call_id=cid, prompt_version="v1", overall=grade, model="m", rubric_set_hash="h",
+                         verdicts=(RubricVerdict(rubric_id="looping_behavior", rubric_version=1, grade=grade,
+                                                 confidence=0.9, reason="r"),))
+    # The auditors call 2 of the judge's 3 minor looping flags "pass": learn non_fatal -> pass.
+    tune = [a("t1", "non_fatal"), a("t2", "non_fatal"), a("t3", "non_fatal"), a("t4", "fatal")]
+    human = {"t1": {"grades": {"Looping Behavior": "pass"}}, "t2": {"grades": {"Looping Behavior": "pass"}},
+             "t3": {"grades": {"Looping Behavior": "non_fatal"}}, "t4": {"grades": {"Looping Behavior": "pass"}}}
+    soft = judge.calibrate(tune, human, R)
+    assert soft == {"looping_behavior": "pass"}
+    assert judge.apply_calibration(a("x", "non_fatal"), soft).overall == "pass"
+    assert judge.apply_calibration(a("y", "fatal"), soft).overall == "fatal"      # fatal is never softened
+    # A tie keeps the judge's grade.
+    assert judge.calibrate([a("t1", "non_fatal"), a("t3", "non_fatal")], human, R) == {}
+
+
+def test_calibration_holds_only_for_its_model_and_unchanged_rubric_texts():
+    def a(model):
+        return CallAudit(call_id="c", prompt_version="v1", overall="non_fatal", model=model, rubric_set_hash="h",
+                         verdicts=(RubricVerdict(rubric_id="looping_behavior", rubric_version=1, grade="non_fatal",
+                                                 confidence=0.9, reason="r"),))
+    learned = rubrics.set_hash([rubrics.get("looping_behavior")])
+    models.save(judge.CALIBRATION, {"model": "m", "soft": {"looping_behavior": "pass"},
+                                    "rubrics": {"looping_behavior": learned}})
+    assert [x.overall for x in judge.with_calibration([a("m"), a("another judge")])] == ["pass", "non_fatal"]
+    models.save(judge.CALIBRATION, {"model": "m", "soft": {"looping_behavior": "pass"},
+                                    "rubrics": {"looping_behavior": "the rubric text has changed since"}})
+    assert judge.with_calibration([a("m")])[0].overall == "non_fatal"

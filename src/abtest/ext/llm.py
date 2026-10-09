@@ -139,16 +139,24 @@ def chat(model: str, messages: list[dict], *, schema: dict | None = None, schema
         raise BudgetExceeded(f"LLM spend {spent_usd():.2f} USD reached the cap {budget:.2f} (LLM_BUDGET_USD)")
 
     headers = {"Authorization": f"Bearer {_env_key()}", "Content-Type": "application/json",
-               "X-Title": "Vani Loop"}
+               "X-Title": "Slow & Steady"}
     delay = 2.0
     for attempt in range(5):
         try:
             r = httpx.post(URL, json=body, headers=headers, timeout=timeout)
-            if r.status_code in (429, 500, 502, 503, 504) and attempt < 4:
+            if r.status_code == 402 or (r.status_code == 403 and "Budget limit" in r.text):
+                # The key's own cap (credits, or the org's monthly limit): stop the batch, not one call.
+                raise BudgetExceeded(f"OpenRouter refused on the key's spend limit: {r.text[:200]}")
+            # A 403 "not in the allowlist" is transient on a network that leaves from more than one
+            # public IP: retry it like a rate limit.
+            transient = r.status_code in (429, 500, 502, 503, 504) or (
+                r.status_code == 403 and "allowlist" in r.text)
+            if transient and attempt < 4:
                 time.sleep(delay)
                 delay *= 2
                 continue
-            r.raise_for_status()
+            if r.status_code >= 400:
+                raise RuntimeError(f"OpenRouter {r.status_code} for {model}: {r.text[:300]}")
             d = r.json()
             if "error" in d:
                 raise RuntimeError(f"OpenRouter error: {d['error']}")

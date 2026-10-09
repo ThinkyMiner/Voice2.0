@@ -1,4 +1,4 @@
-# Vani Loop platform API (contract)
+# Slow & Steady platform API (contract)
 
 Served by `src/abtest/ext/service.py` (`make platform`, port 8600): the base FastAPI app plus these
 JSON routes, plus the static site from `src/abtest/ext/web/` at `/`. Every object below is a model in
@@ -9,11 +9,11 @@ Errors: 404 for an unknown id, 422 for a bad body, 409 for an illegal state chan
 
 | Route | Returns |
 |---|---|
-| `GET /api/overview` | `{production: PromptVersion, cycle: Cycle \| null, cycles: [Cycle] (newest first), kpis: {calls_total, calls_audited, fatal_rate, non_fatal_rate, pass_rate, agreement_overall, agreement_kappa, fatal_vs_rest_accuracy, root_causes, fixes_tested, experiments, per_week_gained, per_week_protected}, simulated_traffic: true}` |
+| `GET /api/overview` | `{production: PromptVersion, cycle: Cycle \| null, cycles: [Cycle] (newest first), kpis: {calls_total, calls_audited, fatal_rate, non_fatal_rate, pass_rate, agreement_overall, agreement_kappa, fatal_vs_rest_accuracy, root_causes, fixes_tested, experiments, per_week_gained, per_week_protected} (over the calls the loop judges), corpus: "audited" \| "production" \| "replay", simulated_traffic: true}` |
 | `GET /api/calls?source=&overall=&flag=&q=&limit=200` | `{total, items: [{call_id, source, duration_s, language, prompt_version, overall, disposition, risk_flags, summary, n_fatal, n_non_fatal, human_overall}]}`; `overall`/`human_overall` are null until graded |
 | `GET /api/calls/{call_id}` | `{transcript: Transcript, audit: CallAudit \| null, human: {overall, grades: {rubric_id: Grade}, remarks: {rubric_id: str}} \| null, audio_url: str \| null, rubrics: {rubric_id: {name, category, root_type}}}` |
 | `GET /api/recordings/{call_id}` | the local mp3 (`audio/mpeg`); 404 when it is not on this machine |
-| `GET /api/audit?version=v1` | `{version, n_calls, n_audited, split: {pass, non_fatal, fatal}, human_split: {...} \| null, agreement: AgreementReport \| null, by_rubric: [{rubric_id, name, category, root_type, n_applicable, pass, non_fatal, fatal, na}], risky: [{call_id, flags, overall, summary}]}` |
+| `GET /api/audit?version=v1&source=` | source: a transcript source or `all`; default the loop's corpus on v1. `{version, source, n_calls, n_audited, split: {pass, non_fatal, fatal}, human_split: {...} \| null, agreement: AgreementReport \| null, by_rubric: [{rubric_id, name, category, root_type, n_applicable, pass, non_fatal, fatal, na}], risky: [{call_id, flags, overall, summary}]}` |
 | `GET /api/issues?version=v1` | `{version, formula: "priority = 100 × (3·fatal + non-fatal) / (3·audited)", items: [RootCause] (priority desc)}` |
 | `GET /api/fixes` | `{items: [Fix]}` (newest first) |
 | `GET /api/fixes/{id}` | `{fix: Fix, root_cause: RootCause}` |
