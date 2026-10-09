@@ -1,0 +1,7 @@
+# Buyer experiment. Expect STOPPED_HARM via the abrupt-disconnect guardrail.
+# Seed is a placeholder: Phase 4 pins the demo seed after the 20-seed hit-rate run.
+name: buyer_disconnect_stop
+experiment: configs/experiments/vani-buyer-qty-asks-v1.yaml
+sim: configs/sims/buyer_disconnect_stop.yaml
+seed: 1107
+overrides: {}
