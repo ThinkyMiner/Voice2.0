@@ -168,13 +168,13 @@ def test_a_worse_b_is_stopped_for_harm_early(cfg, pool):
 
 
 def test_a_guardrail_that_cannot_clear_blocks_wins_at_the_final_look(cfg, pool):
-    # A 0.5% margin is far inside any RCI at these sample sizes: primary wins cannot be cleared.
+    # A 0.5% margin is far inside the RCI at these sample sizes, so most primary wins cannot be
+    # cleared. The guardrail is one-sided (worse_if increase) and the power runs' true secondary
+    # change is 0, so a run whose observed B secondary comes out low can still clear it: rare.
     tight = cfg.model_copy(update={"secondary": cfg.secondary.model_copy(update={"margin_rel": 0.005})})
     df = simulate_runs(tight, pool, 40, 13, cfg.primary.mde_rel)
     blocked = df[df.decision == State.BLOCKED_GUARDRAIL]
-    # (Some runs end in STOPPED_HARM instead: B's secondary is slightly higher in this pool, and
-    # an RCI entirely above a 0.5% margin is guardrail harm, rule 2.)
-    assert not df.decision.isin(WIN_STATES).any() and len(blocked) / len(df) > 0.3
+    assert df.decision.isin(WIN_STATES).mean() < 0.15 and len(blocked) / len(df) > 0.3
     assert (blocked.stop_look == len(validation._plan(tight).planned)).all()  # only blocked at the end
     assert (blocked.rule == 4).all()
 
@@ -446,3 +446,63 @@ def test_cli_without_data_exits_2_naming_the_file(tmp_path, monkeypatch, capsys)
 def test_defaults_match_the_plan():
     assert validation.DEFAULT_RUNS == 2000
     assert validation.DEFAULT_EXP.name == "vani-meeting-v1.yaml" and validation.DEFAULT_EXP.exists()
+
+
+# --- review fixes: netting, the peeking check, approval mode, the guardrail limitation --------
+
+def _net_pool(binary: bool, m: int = 200_000, p: float = 0.3, seed: int = 3):
+    rng = np.random.default_rng(seed)
+    prim = (rng.random(m) < p).astype("int8")
+    if binary:  # successes rarely carry the secondary event, so converting leads lowers its rate
+        sec = (rng.random(m) < np.where(prim == 1, 0.05, 0.25)).astype("float64")
+    else:       # successes have longer calls (e^0.2 = 1.22x)
+        sec = rng.lognormal(np.where(prim == 1, 4.7, 4.5), 0.1)
+    return prim, sec, float(prim.mean())
+
+
+@pytest.mark.parametrize("binary", [False, True])
+def test_power_runs_inject_zero_total_secondary_change(binary):
+    pool_p, pool_s, p = _net_pool(binary)
+    change = lambda a, b: (b.mean() - a.mean()) if binary else b.mean() / a.mean() - 1  # noqa: E731
+    out = {}
+    for net in (False, True):
+        rng = np.random.default_rng(11)
+        prim, sec = pool_p.copy(), pool_s.copy()
+        flip = validation._inject(rng, prim, sec, pool_p, pool_s, p, 0.3, "increase")
+        if net:
+            validation._net_secondary(rng, sec, flip, pool_p, pool_s, p, 0.3, "increase", binary)
+        out[net] = change(pool_s, sec)
+    expected = 0.3 * 0.3 * (0.05 - 0.25) if binary else 0.0186  # p * L * (m_new - m_old) [/ m]
+    assert out[False] == pytest.approx(expected, rel=0.15)        # the side effect is real...
+    assert abs(out[True]) < abs(expected) / 8                      # ...and netting removes it
+
+
+def _with(res: ValidationResults, **frames) -> ValidationResults:
+    return ValidationResults(**{**res.__dict__, **frames})
+
+
+def test_peeking_check_uses_the_any_look_crossing_rate(cfg, pool):
+    res = _hand_results(cfg, pool, aa_wins=50, aa_harm=90, naive_wins=300, power_wins=1600)
+    muted = res.aa.assign(naive_decision=State.INCONCLUSIVE.value)  # full-rules naive wins: 0
+    assert checks(_with(res, aa=muted))[1].passed                    # crossings still show peeking
+    few = res.aa.assign(crossed_primary_naive=res.aa.index < 40)     # naive crossings below sequential
+    assert not checks(_with(res, aa=few))[1].passed
+
+
+def test_approval_mode_wins_are_pending_approval_and_count_as_wins(cfg, pool):
+    assert WIN_STATES == {State.PROMOTED, State.PENDING_APPROVAL}
+    df = simulate_runs(cfg.model_copy(update={"promotion": "approval"}), pool, 40, SEED,
+                       cfg.primary.mde_rel)
+    assert (df.decision == State.PENDING_APPROVAL.value).any()
+    assert not (df.decision == State.PROMOTED.value).any()
+    assert validation.rates(_with(_hand_results(cfg, pool, aa_wins=50, aa_harm=90, naive_wins=300,
+                                                power_wins=1600), power=df))["pw_win"][0] == \
+        int(df.decision.isin(WIN_STATES).sum())
+
+
+def test_report_flags_a_guardrail_that_blocks_true_wins(cfg, pool):
+    res = _hand_results(cfg, pool, aa_wins=50, aa_harm=90, naive_wins=300, power_wins=1000)
+    blocked = res.power.assign(decision=np.where(res.power.index < 1000, State.PROMOTED.value,
+                                                 State.BLOCKED_GUARDRAIL.value))
+    assert "LIMITATION of this config" in validation.render_report(_with(res, power=blocked), [], None)
+    assert "LIMITATION" not in validation.render_report(res, [], None)

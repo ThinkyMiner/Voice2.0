@@ -208,7 +208,7 @@ def _outcomes(plan: _Plan, look: int, prim_a, sec_a, prim_b, sec_b) -> pd.DataFr
 
 
 def _inject(rng: np.random.Generator, prim: np.ndarray, sec: np.ndarray, pool_p: np.ndarray,
-            pool_s: np.ndarray, p: float, rel_lift: float, better: str) -> None:
+            pool_s: np.ndarray, p: float, rel_lift: float, better: str) -> np.ndarray:
     """Lead-level effect injection into the B arm, in place (PLAN §2.5).
 
     The B primary rate moves by `rel_lift` in the direction that is better for `better` (a
@@ -233,6 +233,31 @@ def _inject(rng: np.random.Generator, prim: np.ndarray, sec: np.ndarray, pool_p:
         raise ValueError(f"the pool has no lead with primary = {new} to resample a secondary from")
     prim[flip] = new
     sec[flip] = pool_s[donors[rng.integers(0, len(donors), size=int(flip.sum()))]]
+    return flip
+
+
+def _net_secondary(rng: np.random.Generator, sec: np.ndarray, flip: np.ndarray, pool_p: np.ndarray,
+                   pool_s: np.ndarray, p: float, rel_lift: float, better: str, binary: bool) -> None:
+    """Cancel, in expectation, what the primary injection did to B's secondary, in place.
+
+    A flipped lead takes a donor's secondary, and meeting calls are longer, so a pure primary
+    lift would also raise B's talk time. The simulator treats `secondary_change` as the TOTAL
+    true change (simulator._from_primary), and a power run's is 0. Continuous: scale every B
+    value by 1/(1+fp). Binary: add or remove events on the leads the injection left alone.
+    """
+    rate_up = (rel_lift > 0) == (better == "increase")
+    new, old = (1, 0) if rate_up else (0, 1)
+    # p*|L| of B leads flip either way (q*(1-p) = p*L going up), each moving by m_new - m_old.
+    fp = p * abs(rel_lift) * (np.nanmean(pool_s[pool_p == new]) - np.nanmean(pool_s[pool_p == old]))
+    if not binary:
+        sec /= 1 + fp / np.nanmean(pool_s)
+        return
+    target = 0 if fp > 0 else 1
+    eligible = ~flip & (sec == 1 - target)
+    r = abs(fp) * len(sec) / max(int(eligible.sum()), 1)
+    if r > 1:
+        raise ValueError(f"cannot net out a {fp:+.3f} secondary change: too few eligible B leads")
+    sec[eligible & (rng.random(len(sec)) < r)] = target
 
 
 def _one_run(plan: _Plan, cfg: ExperimentConfig, pool_p: np.ndarray, pool_s: np.ndarray,
@@ -246,7 +271,9 @@ def _one_run(plan: _Plan, cfg: ExperimentConfig, pool_p: np.ndarray, pool_s: np.
     prim_b, sec_b = pool_p[idx_b], pool_s[idx_b]
     before = float(prim_b.mean())
     if rel_lift:
-        _inject(rng, prim_b, sec_b, pool_p, pool_s, p, rel_lift, cfg.primary.better)
+        flip = _inject(rng, prim_b, sec_b, pool_p, pool_s, p, rel_lift, cfg.primary.better)
+        _net_secondary(rng, sec_b, flip, pool_p, pool_s, p, rel_lift, cfg.primary.better,
+                       cfg.secondary.type == "binary")
     after = float(prim_b.mean())
 
     seq = naive = None  # (decision, rule, look, reason) of each path's first non-CONTINUE verdict
@@ -363,7 +390,13 @@ def rates(res: ValidationResults) -> dict[str, tuple[int, int]]:
         "pw_cross_seq": (_count(pw.crossed_primary_seq), len(pw)),
         "pw_cross_naive": (_count(pw.crossed_primary_naive), len(pw)),
         "pw_harm": (_count(pw.decision, {State.STOPPED_HARM}), len(pw)),
+        "pw_blocked": (_count(pw.decision, {State.BLOCKED_GUARDRAIL}), len(pw)),
     }
+
+
+def plan_z(cfg: ExperimentConfig) -> float:
+    """The naive fixed threshold: one-sided z_{1-alpha_win} at every look (1.96 at 2.5%)."""
+    return float(norm.ppf(1 - cfg.alpha_win))
 
 
 def checks(res: ValidationResults) -> list[Check]:
@@ -376,11 +409,13 @@ def checks(res: ValidationResults) -> list[Check]:
     out = [Check("A/A false-win rate", lo <= cfg.alpha_win,
                  f"{_fmt_rate(k, n)} vs nominal {cfg.alpha_win:.2%}",
                  "95% CI contains the nominal rate or lies below it")]
-    k, n = r["aa_naive_false_win"]
+    k, n = r["aa_cross_naive"]
+    ks, _ = r["aa_cross_seq"]
     _, lo, _ = rate_ci(k, n)
-    out.append(Check("Naive peeking inflates the false-win rate", lo > cfg.alpha_win,
-                     f"naive {_fmt_rate(k, n)} vs nominal {cfg.alpha_win:.2%}",
-                     "95% CI lies above the nominal rate"))
+    out.append(Check("Naive peeking inflates the false-win rate", lo > cfg.alpha_win and k > ks,
+                     f"z >= {plan_z(cfg):.2f} at any look: {_fmt_rate(k, n)} vs sequential "
+                     f"{_fmt_rate(ks, n)} and nominal {cfg.alpha_win:.2%}",
+                     "95% CI lies above the nominal rate, and above the sequential rate"))
     k, n = r["aa_false_harm"]
     _, lo, _ = rate_ci(k, n)
     out.append(Check("A/A false-harm-stop rate", lo <= cfg.alpha_harm,
@@ -424,8 +459,8 @@ def _false_win_chart(res: ValidationResults):
     import plotly.graph_objects as go
 
     r, alpha = rates(res), res.cfg.alpha_win
-    keys = ("aa_false_win", "aa_naive_false_win")
-    names = ("Sequential (alpha spending)", "Naive peeking (fixed z at every look)")
+    keys = ("aa_cross_seq", "aa_cross_naive")  # the check's quantity: z crossing the win line
+    names = ("Sequential (alpha spending)", f"Naive peeking (z >= {plan_z(res.cfg):.2f} at every look)")
     vals = [rate_ci(*r[key]) for key in keys]
     # The value goes under the name: a label on the bar would collide with the CI whisker.
     labels = [f"{n}<br><b>{v[0]:.2%}</b> (95% CI {v[1]:.2%} to {v[2]:.2%})"
@@ -438,7 +473,7 @@ def _false_win_chart(res: ValidationResults):
     fig.add_hline(y=alpha, line=dict(color=GOLD, width=2, dash="dash"),
                   annotation_text=f"nominal {alpha:.1%}", annotation_position="top left",
                   annotation_font=dict(color=SLATE))
-    _layout(fig, f"A/A false-win rate over {len(res.aa):,} runs", 820, 500)
+    _layout(fig, f"A/A: runs whose z crossed the win line, {len(res.aa):,} runs", 820, 500)
     fig.update_layout(showlegend=False, margin=dict(l=70, r=30, t=70, b=100))
     fig.update_yaxes(tickformat=".0%", rangemode="tozero", title_text="runs declaring a win")
     return fig
@@ -558,9 +593,9 @@ def render_report(res: ValidationResults, charts: list[Path], chart_error: str |
     ]))
     if rel_pool > POOL_P_NOTE_REL:
         L.append(f"\nNOTE: the pool rate differs from the config's baseline p by {rel_pool:.0%}. "
-                 f"The pool counts calls only inside a {pool.window_days}-day block while baseline p "
-                 f"is measured at a fixed follow-up horizon, so the power runs test a slightly "
-                 f"different problem from the one n_max was sized for.")
+                 f"Likely causes: units dropped by the maturity filter at the end of the data, and "
+                 f"units whose secondary is undefined. The power runs then test a slightly different "
+                 f"rate from the one n_max was sized for.")
     L.append("")
 
     L.append("## Planned looks and boundaries\n")
@@ -580,11 +615,12 @@ def render_report(res: ValidationResults, charts: list[Path], chart_error: str |
     rows = [
         ["false win, sequential (PROMOTED or PENDING_APPROVAL)", f("aa_false_win"),
          f"{cfg.alpha_win:.1%} (nominal)"],
-        ["false win, naive peeking", f("aa_naive_false_win"), "much higher"],
+        ["false win, naive peeking, full rules (informational)", f("aa_naive_false_win"),
+         "muted: naive harm stops and the guardrail end runs early"],
         ["false-harm stop, sequential (STOPPED_HARM)", f("aa_false_harm"), f"<= {cfg.alpha_harm:.0%}"],
         ["false-harm stop, naive peeking", f("aa_naive_false_harm"), "higher"],
         ["primary-only win crossing, sequential", f("aa_cross_seq"), f"<= {cfg.alpha_win:.1%}"],
-        ["primary-only win crossing, naive", f("aa_cross_naive"),
+        ["primary-only win crossing, naive (the peeking check)", f("aa_cross_naive"),
          f"much higher ({inflation:.1f}x sequential)"],
     ]
     L.append(_md_table(["quantity", "observed", "target"], rows))
@@ -603,14 +639,24 @@ def render_report(res: ValidationResults, charts: list[Path], chart_error: str |
         ["primary-only win crossing, naive", f("pw_cross_naive"), "not a target"],
         ["primary crossed but not promoted (guardrail not cleared)", f"{gap:.2%}",
          "0 if the guardrail never binds"],
+        ["blocked by the guardrail (BLOCKED_GUARDRAIL)", f("pw_blocked"), "the guardrail's cost"],
         ["harm stop, sequential", f("pw_harm"), "should be rare"],
         ["realised lift injected into B (pooled over runs)",
          f"{realised_lift(pw, cfg.primary.better):.2%}", f"{res.rel_lift:.2%} (injected)"],
     ]
     L.append(_md_table(["quantity", "observed", "target"], rows))
-    L.append("\nA gap between the win call and the primary-only crossing is the guardrail "
-             "refusing to clear (rule 4); a gap between the crossing rate and the target power is "
-             "the planned power not being met by the engine's boundaries.\n")
+    L.append("\nThe power runs inject the lift with zero total change in the secondary, the "
+             "simulator's rule (`secondary_change` is the total true change): converting leads would "
+             "otherwise also lengthen B's calls. A gap between the win call and the primary-only "
+             "crossing is the guardrail refusing to clear (rule 4); a gap between the crossing rate "
+             "and the target power is the planned power not being met by the engine's boundaries.\n")
+    k, n = r["pw_blocked"]
+    if cfg.secondary.role == "guardrail" and k / n > 1 - cfg.power:
+        L.append(f"LIMITATION of this config: {k / n:.0%} of true-MDE runs end BLOCKED_GUARDRAIL "
+                 f"although B's true {cfg.secondary.name} change is 0. The guardrail's repeated CI at "
+                 f"n_B,max is too wide to fit inside the {cfg.secondary.margin:g} margin, so this "
+                 "experiment can stop B but can rarely promote it. Widen the margin or size n_max "
+                 "for the guardrail to change that.\n")
 
     L.append("## Stop look by terminal state (sequential)\n")
     L.append("A/A:\n")
