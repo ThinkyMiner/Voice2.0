@@ -286,6 +286,12 @@ def audit_call(t: Transcript, rubrics=None, model=None) -> CallAudit:
     active, model = _active(rubrics), model or llm.model_for("judge")
     path = None if t.source == "replay" else audit_path(t.call_id, t.prompt_version)  # checked before paying
     verdicts, data, cost = _judge(t, active, model, full=True)
+    # Audio-only parameters (dead air, pronunciation) are heard, not read: a transcript-only judge
+    # records them as na rather than guessing, so they never move a call's overall grade.
+    audio = {r.id for r in active if r.needs_audio}
+    verdicts = [v.model_copy(update={"grade": "na", "evidence": (),
+                                     "reason": "Audio parameter: graded by listening, not from the transcript."})
+                if v.rubric_id in audio else v for v in verdicts]
     flags, disposition = data.get("risk_flags"), data.get("disposition")
     flags = [f for f in flags if isinstance(f, str) and f in RISK_FLAGS] if isinstance(flags, list) else []
     audit = CallAudit(
@@ -343,8 +349,41 @@ def audit_many(transcripts, rubrics=None, model=None, workers: int = 4) -> list[
     return [done[i] for i in sorted(done)]
 
 
-def load_audits(version: str = "v1") -> list[CallAudit]:
-    return [models.load(p, CallAudit) for p in sorted((models.AUDITS_DIR / _safe(version)).glob("*.json"))]
+CALIBRATION = models.LOOP_DIR / "calibration.json"   # {rubric_id: grade}: what auditors call a minor flag
+TUNING_CALLS = 40                                      # the first audited calls, in sheet order
+
+
+def calibrate(audits: list[CallAudit], human: dict[str, dict], rubrics: list[Rubric]) -> dict[str, str]:
+    """Learn, per QA rubric, what IndiaMART's auditors call the judge's minor (non_fatal) flags.
+
+    The QA sheet fills several columns only when something notable happened, so a flaw the judge
+    calls minor is often "na" or "pass" to an auditor. Only non_fatal grades are remapped (ties keep
+    non_fatal); fatal, pass and na are never changed, so the calibration cannot hide a fatal call.
+    Learn it on tuning calls only and report agreement on the others."""
+    by_id = {a.call_id: a for a in audits}
+    soft = {}
+    for r in rubrics:
+        if not r.qa_column:
+            continue
+        seen = Counter(human[c]["grades"].get(r.qa_column, "na") for c, a in by_id.items()
+                       if c in human and any(v.rubric_id == r.id and v.grade == "non_fatal" for v in a.verdicts))
+        if seen and (best := max(("non_fatal", "pass", "na"), key=lambda g: (seen[g], g == "non_fatal"))) != "non_fatal":
+            soft[r.id] = best
+    return soft
+
+
+def apply_calibration(a: CallAudit, soft: dict[str, str]) -> CallAudit:
+    vs = tuple(v.model_copy(update={"grade": soft[v.rubric_id],
+                                    "reason": f"{v.reason} (minor flag, below the QA team's threshold)"})
+               if v.grade == "non_fatal" and v.rubric_id in soft else v for v in a.verdicts)
+    return a.model_copy(update={"verdicts": vs, "overall": models.worst(v.grade for v in vs)})
+
+
+def load_audits(version: str = "v1", calibrated: bool = True) -> list[CallAudit]:
+    """The saved audits of a version; calibrated (see calibrate) once `make agreement` has learned it."""
+    audits = [models.load(p, CallAudit) for p in sorted((models.AUDITS_DIR / _safe(version)).glob("*.json"))]
+    soft = models.load(CALIBRATION, default={}) if calibrated else {}
+    return [apply_calibration(a, soft) for a in audits] if soft else audits
 
 
 def test_rubric(rubric: Rubric | dict, t: Transcript, model=None) -> RubricVerdict:
@@ -384,11 +423,18 @@ def agreement(audits: list[CallAudit], human: dict[str, dict], rubrics: list[Rub
     class), and on Overall Quality (3 classes, and Fatal vs the rest). Pass audits of one model and
     one rubric set, or the numbers blend different graders."""
     matched = [a for a in audits if a.call_id in human]
+    # Like for like: the human Overall Quality also counts audio-only parameters the judge cannot hear,
+    # and the judge's own overall counts prompt rules the QA sheet has no column for. So both overalls
+    # are recomputed as the worst grade over the same text-observable QA parameters.
+    shared = {r.id: r.qa_column for r in rubrics if r.qa_column and not r.needs_audio}
     pairs = []
     for a in matched:
-        h = human[a.call_id].get("overall")
-        if h in models.SEVERITY:  # a blank Overall Quality is no label
-            pairs.append((h, a.overall))
+        grades = human[a.call_id].get("grades", {})
+        if human[a.call_id].get("overall") not in models.SEVERITY:  # a blank Overall Quality is no label
+            continue
+        h = models.worst(grades.get(col, "na") for col in shared.values())
+        j = models.worst(v.grade for v in a.verdicts if v.rubric_id in shared)
+        pairs.append((h, j))
     if not pairs:
         raise ValueError("no audited call has a human grade")
     rows = []
@@ -423,8 +469,10 @@ def _num(x: float | None) -> str:
     return "n/a" if x is None else f"{x:.2f}"
 
 
-def write_agreement_report(report: models.AgreementReport, path: Path) -> Path:
-    """Markdown with aggregate numbers only: no call ids, no call content."""
+def write_agreement_report(report: models.AgreementReport, path: Path,
+                           raw: models.AgreementReport | None = None, soft: dict | None = None) -> Path:
+    """Markdown with aggregate numbers only: no call ids, no call content. With `raw`, the report is
+    the calibrated one and the uncalibrated numbers on the same held-out calls are shown beside it."""
     names = {r.id: r for r in rubric_lib.all_rubrics(include_archived=True)}
     lines = [
         "# Judge agreement with IndiaMART's human QA audit", "",
@@ -432,16 +480,32 @@ def write_agreement_report(report: models.AgreementReport, path: Path) -> Path:
         f"- Judge model: {report.model}",
         f"- Held out: {'yes' if report.held_out else 'no'} (yes = no compared call was used to tune the "
         "rubrics; their guidance summarises the auditors' remark patterns)",
-        f"- Overall Quality, 3 classes: accuracy {_pct(report.overall_accuracy)}, Cohen's kappa "
-        f"{_num(report.overall_kappa)}",
+        f"- Overall, 3 classes: accuracy {_pct(report.overall_accuracy)}, Cohen's kappa "
+        f"{_num(report.overall_kappa)}. Like for like: on both sides the overall is the worst grade over "
+        "the same text-observable QA parameters (audio-only ones and the prompt rules the sheet lacks are "
+        "left out)",
         f"- Fatal vs rest: accuracy {_pct(report.fatal_vs_rest_accuracy)}", "",
+    ]
+    if raw is not None:
+        rows_raw = {r.rubric_id: r for r in raw.rows}
+        lines += [
+            f"**Calibrated.** The judge's minor (non-fatal) flags were remapped to what the auditors call them, "
+            f"learned on {report.n_tuning} other audited calls (the first in sheet order) and applied unchanged "
+            "here; fatal, pass and na grades are never changed. Remapped: "
+            + (", ".join(f"{names[k].name if k in names else k} -> {v}" for k, v in sorted((soft or {}).items())) or "none") + ".",
+            f"Uncalibrated, on the same calls: overall {_pct(raw.overall_accuracy)} (kappa {_num(raw.overall_kappa)}), "
+            f"fatal vs rest {_pct(raw.fatal_vs_rest_accuracy)}.", "",
+        ]
+    lines += [
         "Per QA parameter (na counts as a class; audio parameters are graded from text, so na is expected):", "",
-        "| Parameter | n | Accuracy | Kappa | Fatal recall |", "|---|---|---|---|---|",
+        "| Parameter | n | Accuracy | Kappa | Fatal recall |" + (" Uncalibrated |" if raw else ""),
+        "|---|---|---|---|---|" + ("---|" if raw else ""),
     ]
     label = {i: r.name + (" (audio)" if r.needs_audio else "") for i, r in names.items()}
     for row in report.rows:
+        extra = f" {_pct(rows_raw[row.rubric_id].accuracy)} |" if raw and row.rubric_id in rows_raw else (" – |" if raw else "")
         lines.append(f"| {label.get(row.rubric_id, row.rubric_id)} | {row.n} | {_pct(row.accuracy)} | "
-                     f"{_num(row.kappa)} | {_pct(row.fatal_recall)} |")
+                     f"{_num(row.kappa)} | {_pct(row.fatal_recall)} |" + extra)
     lines += ["", "## Confusion (rows: human grade, columns: judge grade)"]
     for row in report.rows:
         lines += ["", f"### {label.get(row.rubric_id, row.rubric_id)}", "",
@@ -490,7 +554,7 @@ def main(argv: list[str] | None = None) -> int:
               f"total spend ${llm.spent_usd():.2f}")
         return 0 if len(audits) == len(ts) else 1
 
-    audits = [x for x in load_audits(args.version) if x.model == model]
+    audits = [x for x in load_audits(args.version, calibrated=False) if x.model == model]
     if audits:  # one rubric set only (today's if any audit used it): mixing sets blends different criteria
         sets, current = Counter(x.rubric_set_hash for x in audits), rubric_lib.set_hash(rubric_lib.all_rubrics())
         h = current if current in sets else sets.most_common(1)[0][0]
@@ -498,17 +562,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"note: {len(audits) - sets[h]} audits graded with another rubric set are left out",
                   file=sys.stderr)
         audits = [x for x in audits if x.rubric_set_hash == h]
+    human, rubs = human_labels(), rubric_lib.all_rubrics(include_archived=True)
+    order = [c["call_id"] for c in listen.audited_calls()]
+    have = {a.call_id for a in audits}
+    graded = [c for c in order if c in have and c in human]
+    tune = set(graded[:min(TUNING_CALLS, len(graded) // 4)])  # at most a quarter: most calls stay held out
+    soft = calibrate([a for a in audits if a.call_id in tune], human, rubs)
+    models.save(CALIBRATION, soft)
+    held = [a for a in audits if a.call_id not in tune]
     try:
-        report = agreement(audits, human_labels(), rubric_lib.all_rubrics(include_archived=True),
-                           held_out=not args.tuned)
+        raw = agreement(held, human, rubs, held_out=not args.tuned)
+        report = agreement([apply_calibration(a, soft) for a in held], human, rubs, held_out=not args.tuned)
     except ValueError as e:
         print(f"no agreement for {model} on {args.version}: {e} (audit the audited set first)", file=sys.stderr)
         return 1
+    report = report.model_copy(update={"calibrated": True, "n_tuning": len(tune)})
     models.save(AGREEMENT_JSON, report)
-    md = write_agreement_report(report, REPORTS_DIR / "judge_agreement.md")
-    print(f"{report.n_calls} calls: overall accuracy {report.overall_accuracy:.1%}, kappa "
-          f"{report.overall_kappa if report.overall_kappa is None else round(report.overall_kappa, 2)}, "
-          f"fatal vs rest {report.fatal_vs_rest_accuracy:.1%}\nreport -> {md}\njson   -> {AGREEMENT_JSON}")
+    md = write_agreement_report(report, REPORTS_DIR / "judge_agreement.md", raw=raw, soft=soft)
+    k = lambda r: "n/a" if r.overall_kappa is None else f"{r.overall_kappa:.2f}"
+    print(f"{report.n_calls} held-out calls ({len(tune)} tuning calls learned the calibration)\n"
+          f"  raw:        overall {raw.overall_accuracy:.1%}, kappa {k(raw)}, fatal vs rest {raw.fatal_vs_rest_accuracy:.1%}\n"
+          f"  calibrated: overall {report.overall_accuracy:.1%}, kappa {k(report)}, fatal vs rest "
+          f"{report.fatal_vs_rest_accuracy:.1%}\nreport -> {md}\njson   -> {AGREEMENT_JSON}")
     return 0
 
 

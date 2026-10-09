@@ -181,13 +181,17 @@ def reject(name: str) -> PromptVersion:
 # --- seams: the sibling modules, imported on first use (tests replace these) ------------------
 
 def calls(name: str) -> list[Transcript]:
-    """The calls a cycle on this version judges. v1: the real production calls. A later version has no
-    live calls (no bot ever spoke it), so its calls are Prompt B's replay transcripts from the test that
-    proved it, relabelled with the version; their source stays replay."""
+    """The calls a cycle on this version judges. v1: real calls, by default the buyer-side calls
+    IndiaMART's QA team audited (env LOOP_CORPUS=audited|production). They match the buyer-side prompt
+    and the QA checklist; the 2026-10-06 production sample turned out to be the seller-side bot, whose
+    prompt we do not have. A later version has no live calls (no bot ever spoke it), so its calls are
+    Prompt B's replay transcripts from the test that proved it, relabelled with the version; their
+    source stays replay."""
     v = version(name)
     if v.fix_id is None:
         from abtest.ext import listen
-        return [t for t in listen.load_transcripts("production") if t.prompt_version == name]
+        corpus = os.environ.get("LOOP_CORPUS", "audited")
+        return [t for t in listen.load_transcripts(corpus) if t.prompt_version == name]
     from abtest.ext import improve
     return [load(p, Transcript).model_copy(update={"prompt_version": name})
             for p in sorted((improve.REPLAY_DIR / v.fix_id).glob("*-B.json"))]

@@ -278,14 +278,19 @@ def test_no_transcripts_wait_at_listen(world):
 
 # --- the real listen glue (production calls; a later version's replay transcripts) ---------------
 
-def test_calls_and_audits_of_v1_are_production_and_of_v2_its_replay_b_transcripts():
+def test_calls_and_audits_of_v1_are_the_corpus_and_of_v2_its_replay_b_transcripts(monkeypatch):
     from abtest.ext import improve
     save(models.TRANSCRIPTS_DIR / "p1.json", transcript("p1", source="production"))
     save(models.TRANSCRIPTS_DIR / "a1.json", transcript("a1", source="audited"))
     for t in (transcript("p1"), transcript("a1")):
         save(models.AUDITS_DIR / "v1" / f"{t.call_id}.json", audit(t))
+    # Default corpus: the buyer-side calls the QA team audited (they match the buyer-side prompt).
+    assert [t.call_id for t in loop.calls("v1")] == ["a1"]
+    assert [a.call_id for a in loop.audits("v1")] == ["a1"]
+    monkeypatch.setenv("LOOP_CORPUS", "production")
     assert [t.call_id for t in loop.calls("v1")] == ["p1"]
-    assert [a.call_id for a in loop.audits("v1")] == ["p1"]  # the audited set is for agreement, not the cycle
+    assert [a.call_id for a in loop.audits("v1")] == ["p1"]
+    monkeypatch.delenv("LOOP_CORPUS")
 
     rep = improve.REPLAY_DIR / "fx-1"
     save(rep / "p1-A.json", transcript("p1-A", source="replay", version="v1"))
