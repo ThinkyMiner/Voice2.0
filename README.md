@@ -31,7 +31,38 @@ Contents: [Quick start](#quick-start) · [Setup](#setup) · [Make targets](#make
 [Why this method](#why-this-method) · [Decision rules](#decision-rules-and-state-machine) ·
 [Decision log](#decision-log) · [Simulation](#how-outcomes-are-simulated) ·
 [Scenarios](#scenarios) · [Validation](#validation) · [Dashboard and slide](#dashboard-and-slide) ·
-[Limitations](#limitations)
+[Limitations](#limitations) · [Vani Loop: where prompt B comes from](#vani-loop-where-prompt-b-comes-from)
+
+## Vani Loop: where prompt B comes from
+
+The A/B engine above decides whether a new prompt is better. The Vani Loop (`src/abtest/ext/`)
+writes that new prompt from the calls themselves, then feeds it to the engine, and repeats:
+
+1. **Listen.** Call recordings become bot / buyer transcripts (Gemini 3 Flash through OpenRouter).
+2. **Judge.** Every call is graded Pass / Non-Fatal / Fatal on IndiaMART's own QA checklist (18
+   rubrics, one per column of the human audit sheet) plus 3 prompt rules, with a reason and the quote
+   behind each grade. Agreement with the human auditors is measured on calls they graded.
+3. **Improve.** Failures become named root causes, ranked by
+   `priority = 100 × (3·fatal + non-fatal) / (3·audited)`. The top prompt-fixable cause gets 1–3
+   minimal edits to the prompt (Claude Opus 5.5).
+4. **Gate and replay.** A safety check blocks edits that add promises or weaken honesty rules; then
+   the same buyers are simulated against Prompt A and Prompt B for a fair before/after.
+5. **Prove and roll out.** Prompt B goes to 10% through the engine above (simulated traffic, with the
+   assumed effect stated). A person approves, B becomes production, and the next cycle audits B.
+
+```bash
+make platform                    # the platform: http://127.0.0.1:8600 (demo data if nothing has run)
+make listen SOURCE=production ARGS=--yes-send-real-audio        # recordings -> transcripts
+make judge SOURCE=audited ARGS=--yes-send-real-transcripts       # grade the human-audited calls
+make agreement                   # judge vs IndiaMART's auditors -> reports/judge_agreement.md
+make loop ARGS=--yes-send-real-transcripts   # one cycle: judge, root causes, fix, gate, replay, A/B
+make loop-status                 # the prompt registry, the cycles and the next action
+```
+
+The `--yes-send-real-*` flags send real customer calls to the model provider; nothing goes out
+without them. Loop artifacts (recordings, transcripts, audits, prompt versions) live under
+`data/derived/loop/`, git-ignored like the rest of `data/`. The API is in
+[docs/loop_api.md](docs/loop_api.md); the build journey is in [skills.md](skills.md).
 
 ## Quick start
 
@@ -58,8 +89,9 @@ gated by a human instead of being auto-promoted: it reaches PENDING_APPROVAL at 
 `pyproject.toml` allows 3.11+). `make setup` runs `uv sync`, which creates `.venv` from `uv.lock`.
 
 **Data.** The source files come from the organisers' shared Drive folder. Put them in `data/` at
-the repo root, as a folder or a symlink. `data/` is gitignored and is **read-only**: nothing in this
-repo writes to it, and no row of it may be committed.
+the repo root, as a folder or a symlink. `data/` is gitignored. The provided files are
+**read-only**: nothing in this repo writes to them, and no row of them may be committed. The Vani
+Loop writes its own artifacts under `data/derived/loop/`.
 
 | File | Used for |
 |---|---|
