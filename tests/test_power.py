@@ -5,10 +5,14 @@ import pytest
 import yaml
 from scipy.stats import norm
 
+from abtest import power as power_module
+from abtest.boundaries import monte_carlo_crossing, planned_info_fractions, win_boundaries
 from abtest.contracts import CONFIGS_DIR, ExperimentConfig
 from abtest.power import detectable_lift, fixed_n_b, inflation_factor, n_max, preflight
 
 CONFIGS = sorted((CONFIGS_DIR / "experiments").glob("*.yaml"))
+MC_PATHS = 1_000_000   # PLAN.md §2.7: at least 10^6 paths
+MC_SEED = 20261009
 
 
 def _cfg(path):
@@ -69,8 +73,79 @@ def test_n_max_fields(cfg):
     assert nm.n_total_max == pytest.approx(nm.n_a_max + nm.n_b_max)
 
 
-def test_inflation_factor_placeholder(cfg):
-    assert inflation_factor(cfg) == 1.0
+def _looks(c: ExperimentConfig, k: int) -> ExperimentConfig:
+    return c.model_copy(update={"window": c.window.model_copy(update={"looks": k})})
+
+
+def test_inflation_factor_is_one_for_a_single_look(cfg):
+    # one look at t = 1 is the fixed design: boundary z_{1-alpha}, drift z_{1-alpha} + z_power
+    assert inflation_factor(_looks(cfg, 1)) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_inflation_factor_grows_with_the_number_of_looks(cfg):
+    r = [inflation_factor(_looks(cfg, k)) for k in (1, 2, 5, 7)]
+    assert r[0] == pytest.approx(1.0, abs=1e-6)
+    assert all(b > a for a, b in zip(r, r[1:])), r  # every extra look costs a little power
+
+
+def test_inflation_factor_bounds_for_five_looks(cfg):
+    """O'Brien-Fleming-type spending is cheap: R is a few percent, nowhere near Pocock's ~1.2.
+
+    Rigorous bounds (no published table needed): stopping early never adds required information,
+    so R > 1; and P(cross) >= P(Z_K >= b_K) = Phi(theta - b_K), so theta <= b_K + z_power and
+    R <= ((b_K + z_power) / (z_{1-alpha} + z_power))^2, with b_K the final win boundary."""
+    c = _looks(cfg, 5)
+    r = inflation_factor(c)
+    b_final = win_boundaries(planned_info_fractions(c), c.alpha_win)[-1]
+    z_power, z_fixed = norm.ppf(c.power), norm.isf(c.alpha_win) + norm.ppf(c.power)
+    upper = ((b_final + z_power) / z_fixed) ** 2
+    assert 1.0 < r < upper < 1.06
+
+
+def test_inflation_factor_depends_on_alpha_power_and_schedule(cfg):
+    base = inflation_factor(cfg)
+    assert inflation_factor(cfg.model_copy(update={"alpha_win": 0.05})) != base
+    assert inflation_factor(cfg.model_copy(update={"power": 0.9})) != base
+    # first look no earlier than t = 0.5: three looks fit between 0.5 and 1, not seven from 0.2
+    assert inflation_factor(cfg.model_copy(update={"min_info_first_look": 0.5})) != base
+    # harm, mde and allocation never enter R: the harm boundary is non-binding (§2.7)
+    assert inflation_factor(cfg.model_copy(update={"alpha_harm": 0.01})) == base
+    mde = cfg.primary.model_copy(update={"mde_rel": 0.3})
+    assert inflation_factor(cfg.model_copy(update={"primary": mde})) == base
+
+
+def test_inflation_factor_is_cached_across_configs(cfg):
+    power_module._inflation.cache_clear()
+    first = inflation_factor(cfg)
+    assert power_module._inflation.cache_info().misses == 1
+    assert inflation_factor(cfg.model_copy()) == first
+    other = cfg.model_copy(update={"id": "another-experiment", "salt": "x"})  # same statistics
+    assert inflation_factor(other) == first
+    info = power_module._inflation.cache_info()
+    assert (info.misses, info.hits) == (1, 2)
+
+
+def test_power_at_the_inflated_drift_is_the_configured_power(cfg):
+    """theta = (z_{1-alpha} + z_power) * sqrt(R) crosses the planned win boundaries with
+    probability = power. Monte Carlo, independent of the recursion that produced R."""
+    for k in (5, 7):
+        c = _looks(cfg, k)
+        planned = planned_info_fractions(c)
+        theta = (norm.isf(c.alpha_win) + norm.ppf(c.power)) * math.sqrt(inflation_factor(c))
+        mc = monte_carlo_crossing(win_boundaries(planned, c.alpha_win), planned, theta,
+                                  MC_PATHS, MC_SEED)
+        se = math.sqrt(c.power * (1 - c.power) / MC_PATHS)
+        assert mc == pytest.approx(c.power, abs=4 * se)
+        # and the fixed-design drift (R = 1) falls short: that is why n_max is inflated
+        fixed = monte_carlo_crossing(win_boundaries(planned, c.alpha_win), planned,
+                                     norm.isf(c.alpha_win) + norm.ppf(c.power), MC_PATHS, MC_SEED)
+        assert fixed < c.power - 4 * se
+
+
+def test_n_max_scales_the_fixed_design_by_the_computed_r(cfg):
+    nm = n_max(cfg)
+    assert nm.inflation_factor == inflation_factor(cfg) > 1.0
+    assert nm.n_b_max > nm.n_b_fixed
 
 
 @pytest.mark.parametrize("better", ["increase", "decrease"])
@@ -102,3 +177,17 @@ def test_preflight_rejects_window_inside_maturation(cfg):
     c = cfg.model_copy(update={"maturation_days": float(cfg.window.days)})
     with pytest.raises(ValueError):
         preflight(c, 100.0)
+
+
+def test_preflight_cli_reports_how_r_was_computed(cfg, monkeypatch, capsys):
+    from abtest import data, profile
+    from abtest.contracts import VolumeStats
+
+    path = next(p for p in CONFIGS if _cfg(p).id == cfg.id)
+    monkeypatch.setattr(data, "load", lambda *a, **k: (None, None))  # no data/ on CI
+    monkeypatch.setattr(profile, "volume_stats", lambda df, days: VolumeStats(
+        window_days=days, daily_leads=500.0, daily_triggered_leads=300.0))
+    power_module.main([str(path)])
+    row = next(ln for ln in capsys.readouterr().out.splitlines() if "inflation factor R" in ln)
+    assert f"{inflation_factor(cfg):.3f}" in row
+    assert "7 looks at t = 0.20…1.00" in row and "placeholder" not in row
