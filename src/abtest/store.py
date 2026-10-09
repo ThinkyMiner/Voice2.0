@@ -113,7 +113,8 @@ def _now() -> str:
 
 
 def _iso(ts: datetime | None) -> str | None:
-    return None if ts is None else ts.isoformat()
+    # Always microseconds: isoformat() drops zero microseconds, and mixed formats break parsing.
+    return None if ts is None else ts.isoformat(timespec="microseconds")
 
 
 def reset_experiment(conn: sqlite3.Connection, experiment_id: str) -> None:
@@ -187,7 +188,7 @@ def insert_df(conn: sqlite3.Connection, table: str, df: pd.DataFrame) -> int:
     out = df.copy()
     for col in out.columns:
         if pd.api.types.is_datetime64_any_dtype(out[col]):
-            out[col] = out[col].map(lambda t: None if pd.isna(t) else t.isoformat())
+            out[col] = out[col].map(lambda t: None if pd.isna(t) else _iso(t))
     out = out.astype(object).where(out.notna(), None)
     cols = ", ".join(out.columns)
     marks = ", ".join("?" * len(out.columns))
@@ -199,4 +200,7 @@ def insert_df(conn: sqlite3.Connection, table: str, df: pd.DataFrame) -> int:
 
 def read_df(conn: sqlite3.Connection, sql: str, params: tuple | dict = (),
             parse_dates: list[str] | None = None) -> pd.DataFrame:
-    return pd.read_sql_query(sql, conn, params=params, parse_dates=parse_dates)
+    df = pd.read_sql_query(sql, conn, params=params)
+    for col in parse_dates or ():
+        df[col] = pd.to_datetime(df[col], format="ISO8601")
+    return df

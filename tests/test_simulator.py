@@ -106,6 +106,7 @@ def test_pool_lead_windows_synthetic(tmp_path):
     assert pool.leads.lead_id.tolist() == ["11", "22"] and pool.start == datetime(2026, 4, 4)
 
 
+@pytest.mark.data
 def test_volume_matches_profile(bttc):
     cfg, sim, pool = bttc
     W = cfg.window.days
@@ -117,6 +118,7 @@ def test_volume_matches_profile(bttc):
 
 # --- generation and routing -------------------------------------------------------------------
 
+@pytest.mark.data
 def test_store_columns_and_insert(bttc):
     cfg, sim, pool = bttc
     out = simulate_day(pool, cfg, sim, _state(cfg), 0, 1)
@@ -130,6 +132,7 @@ def test_store_columns_and_insert(bttc):
     assert out.calls.call_id.is_unique
 
 
+@pytest.mark.data
 def test_deterministic(bttc):
     cfg, sim, pool = bttc
     a, b = (simulate_day(pool, cfg, sim, _state(cfg), 3, 1) for _ in range(2))
@@ -139,6 +142,7 @@ def test_deterministic(bttc):
     assert not a.calls[["ts", "disposition"]].equals(c.calls[["ts", "disposition"]])
 
 
+@pytest.mark.data
 def test_daily_counts_and_ids(bttc):
     cfg, sim, pool = bttc
     W, R, seed = cfg.window.days, 3.65 * 2.0, 5
@@ -154,6 +158,7 @@ def test_daily_counts_and_ids(bttc):
     assert t.lead_id.iat[0] == f"sim-{seed}-{math.floor(R)}" and len(t) == math.floor(2 * R) - math.floor(R)
 
 
+@pytest.mark.data
 def test_routing_uses_router(bttc):
     cfg, sim, pool = bttc
     st = _state(cfg)
@@ -168,6 +173,7 @@ def test_routing_uses_router(bttc):
     assert abs(share - 0.1) < 4 * se
 
 
+@pytest.mark.data
 def test_arm_a_replays_pool_lead_window(bttc):
     cfg, sim, pool = bttc
     seed, day = 4, 0  # day 0: a lead-window (< W days from its first call) is never truncated
@@ -184,6 +190,7 @@ def test_arm_a_replays_pool_lead_window(bttc):
         pd.testing.assert_frame_equal(got[cols], hist[cols])
 
 
+@pytest.mark.data
 def test_window_end(bttc):
     cfg, sim, pool = bttc
     W, seed = cfg.window.days, 6
@@ -203,6 +210,7 @@ def test_window_end(bttc):
 # --- injection ----------------------------------------------------------------------------
 # bttc runs use B = 100% and scale 10: about 8,900 triggered B leads on day 0, cf rate p ~ 0.18.
 
+@pytest.mark.data
 def test_positive_lift(bttc):
     cfg, sim, pool = bttc
     out = simulate_day(pool, cfg, _sim(sim, L=0.25, scale=10), _state(cfg, 1.0), 0, 11)
@@ -218,6 +226,7 @@ def test_positive_lift(bttc):
     assert len(conv) == len(inj) and conv.duration_s.isin(pool_mf).all()
 
 
+@pytest.mark.data
 def test_negative_lift(bttc):
     cfg, sim, pool = bttc
     out = simulate_day(pool, cfg, _sim(sim, L=-0.30, scale=10), _state(cfg, 1.0), 0, 12)
@@ -230,6 +239,7 @@ def test_negative_lift(bttc):
     assert not (c.answered & c.disposition.isin(cfg.primary.dispositions)).any()
 
 
+@pytest.mark.data
 def test_null_effect_and_untriggered_unchanged(bttc):
     cfg, sim, pool = bttc
     st = _state(cfg, 1.0)
@@ -245,6 +255,7 @@ def test_null_effect_and_untriggered_unchanged(bttc):
     pd.testing.assert_frame_equal(eff.calls[eff.calls.lead_id.isin(untrig)], null.calls[null.calls.lead_id.isin(untrig)])
 
 
+@pytest.mark.data
 def test_continuous_secondary_multiplies_answered_b(bttc):
     cfg, sim, pool = bttc
     st = _state(cfg, 0.5)
@@ -256,6 +267,7 @@ def test_continuous_secondary_multiplies_answered_b(bttc):
     pd.testing.assert_frame_equal(eff.calls[~b], base.calls[~b])
 
 
+@pytest.mark.data
 def test_binary_secondary(buyer):
     cfg, sim, pool = buyer
     st = _state(cfg, 1.0)  # scale 100: ~12,900 triggered B leads
@@ -278,6 +290,7 @@ def test_binary_secondary(buyer):
 
 # --- fault injection and truth ------------------------------------------------------------
 
+@pytest.mark.data
 def test_fault_drops_b_exposures_only(bttc):
     cfg, sim, pool = bttc
     out = simulate_day(pool, cfg, _sim(sim, scale=3, drop=0.15), _state(cfg, 0.5), 0, 17)
@@ -290,6 +303,7 @@ def test_fault_drops_b_exposures_only(bttc):
     assert b.lead_id[~b.exposure_logged].isin(out.calls.lead_id).all()
 
 
+@pytest.mark.data
 def test_truth_summary_and_report(bttc, buyer, tmp_path):
     cfg, sim, pool = bttc
     truth = pd.concat([simulate_day(pool, cfg, sim, _state(cfg), d, 21).truth for d in range(3)],

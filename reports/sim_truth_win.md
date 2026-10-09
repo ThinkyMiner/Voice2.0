@@ -2,18 +2,18 @@
 
 The engine never sees this file or the sim config.
 
-Experiment `vani-meeting-v1-win`, seed 7.
+Experiment `vani-meeting-v1-win`, seed 1101.
 
 | effect | Injected (sim config) | Realised (this run) |
 |---|---|---|
-| primary relative lift | +25.00% | +27.21% |
-| secondary change (relative) | +3.00% | +8.41% |
+| primary relative lift | +25.00% | +24.94% |
+| secondary change (relative) | +3.00% | +6.20% |
 
 | arm | leads | triggered leads | primary rate | secondary |
 |---|---|---|---|---|
-| A | 26,294 | 22,181 | 0.1765 | 39.85 |
-| B, counterfactual (before injection) | 2,963 | 2,492 | 0.1681 | 39.59 |
-| B, realised | 2,963 | 2,492 | 0.2139 | 42.92 |
+| A | 26,363 | 22,146 | 0.1713 | 39.76 |
+| B, counterfactual (before injection) | 2,894 | 2,458 | 0.1745 | 40.96 |
+| B, realised | 2,894 | 2,458 | 0.2181 | 43.50 |
 
 Exposures dropped (fault injection): 0 B leads have calls but no logged exposure.
 

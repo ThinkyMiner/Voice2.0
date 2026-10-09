@@ -4,6 +4,7 @@ from abtest import config, runner, store
 from abtest.contracts import DATA_DIR, State
 
 
+@pytest.mark.data
 @pytest.mark.skipif(not (DATA_DIR / "Call_Logs_Hackathon.csv").exists(), reason="data not present")
 def test_run_scenario_fills_store_deterministically(tmp_path):
     sc = config.load_scenario("win").model_copy(update={"seed": 7})
