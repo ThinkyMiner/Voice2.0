@@ -64,3 +64,27 @@ dashboard:  ## http://localhost:8501 (reads the store; auto-refreshes while make
 
 slide:  ## slide/one_slide.pptx, plus its chart PNG in reports/
 	$(RUN) python slide/build_slide.py
+
+# --- Vani Loop (docs/loop_api.md). SOURCE = production | audited. ARGS passes flags through, e.g.
+# make listen ARGS=--yes-send-real-audio, make loop ARGS="--until judge --yes-send-real-transcripts".
+# The --yes-* flags send real customer calls to the model provider: only on the user's go-ahead.
+.PHONY: platform listen judge agreement loop loop-status
+SOURCE ?= production
+
+platform:  ## the Vani Loop platform (API + web): http://127.0.0.1:8600
+	$(RUN) uvicorn abtest.ext.service:app --host 127.0.0.1 --port 8600
+
+listen:  ## make listen SOURCE=production|audited ARGS=--yes-send-real-audio  (recordings -> transcripts)
+	$(RUN) python -m abtest.ext.listen --source $(SOURCE) $(ARGS)
+
+judge:  ## make judge SOURCE=production|audited ARGS=--yes-send-real-transcripts  (grade every call)
+	$(RUN) python -m abtest.ext.judge audit --source $(SOURCE) $(ARGS)
+
+agreement:  ## the judge vs IndiaMART's human QA grades -> reports/judge_agreement.md
+	$(RUN) python -m abtest.ext.judge agreement $(ARGS)
+
+loop:  ## advance the loop's current cycle: make loop ARGS="--until judge" (stops at approvals and go-aheads)
+	$(RUN) python -m abtest.ext.loop advance $(ARGS)
+
+loop-status:  ## the prompt registry, the cycles and the next action
+	$(RUN) python -m abtest.ext.loop status

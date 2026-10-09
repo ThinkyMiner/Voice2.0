@@ -1,0 +1,10 @@
+# Simulator ground truth: the engine must never read this file.
+# buyer_win (Vani Loop prove stage): BL success +20% for B (2x the 10% MDE), abrupt disconnects
+# -4 pp. The disconnect drop is no extra assumption: the +20% injection converts failed calls, and
+# that alone removes 4.3 pp of disconnects in this pool; -4 pp is the total. Held flat instead,
+# the 2 pp guardrail rarely clears at n_B,max (+15% with flat disconnects: 27 of 40 seeds BLOCKED_GUARDRAIL).
+# Under the template's promotion: approval, 98 of seeds 1-100 end PENDING_APPROVAL (2 BLOCKED_GUARDRAIL).
+true_effect: {primary_rel_lift: 0.20, secondary_change: -0.04}   # relative for continuous, absolute for binary
+reference: {from: null, to: null, bot_version: null}   # the whole buyer file (5-9 Oct 2026); no bot_version column
+volume: {daily_leads: 164.8, scale: 4.0}   # as buyer_disconnect_stop: data_profile_buyer_logs VolumeStats, x4
+fault: {drop_b_exposure_rate: 0.0}
