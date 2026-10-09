@@ -562,7 +562,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"no {args.source} transcripts in {models.TRANSCRIPTS_DIR}; run the listen step first",
                   file=sys.stderr)
             return 1
-        audits = audit_many(ts, model=model, workers=args.workers)
+        try:
+            audits = audit_many(ts, model=model, workers=args.workers)
+        except llm.BudgetExceeded as e:  # each finished audit is saved: a rerun grades only the rest
+            print(f"stopped: {e}\nfinished audits are saved: raise the limit and rerun the same command",
+                  file=sys.stderr)
+            return 1
         split = Counter(x.overall for x in audits)
         print(f"{len(audits)}/{len(ts)} audited with {model}: " + ", ".join(f"{k} {split[k]}" for k in models.SEVERITY)
               + f"; judge cost of these audits ${sum(x.cost_usd for x in audits):.2f} (cached reruns are free), "
