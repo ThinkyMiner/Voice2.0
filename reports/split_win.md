@@ -1,9 +1,9 @@
 # Split evidence: vani-meeting-v1-win
 
-- Assigned leads (A 26,363 / B 2,894): configured 10.00%, achieved 9.89% [9.55%, 10.24%]; SRM χ² = 0.38, p = 0.5367: OK
-- Triggered leads (A 22,146 / B 2,458): configured 10.00%, achieved 9.99% [9.62%, 10.37%]; SRM χ² = 0.00, p = 0.9593: OK
+- Assigned leads (A 15,062 / B 1,656): configured 10.00%, achieved 9.91% [9.46%, 10.37%]; SRM χ² = 0.17, p = 0.6838: OK
+- Triggered leads (A 12,715 / B 1,414): configured 10.00%, achieved 10.01% [9.52%, 10.51%]; SRM χ² = 0.00, p = 0.9754: OK
 - Leads in both arms: 0
-- Re-hash determinism: PASS (checked 29,257, mismatches 0)
+- Re-hash determinism: PASS (checked 16,718, mismatches 0)
 
 SRM is flagged when p < 0.001 (`srm_p_threshold`).
 
@@ -27,18 +27,6 @@ SRM is flagged when p < 0.001 (`srm_p_threshold`).
 | 2026-10-14 | 943 | 102 | 9.76% |
 | 2026-10-15 | 941 | 104 | 9.95% |
 | 2026-10-16 | 936 | 109 | 10.43% |
-| 2026-10-17 | 942 | 103 | 9.86% |
-| 2026-10-18 | 917 | 128 | 12.25% |
-| 2026-10-19 | 937 | 108 | 10.33% |
-| 2026-10-20 | 944 | 101 | 9.67% |
-| 2026-10-21 | 948 | 96 | 9.20% |
-| 2026-10-22 | 954 | 91 | 8.71% |
-| 2026-10-23 | 934 | 111 | 10.62% |
-| 2026-10-24 | 944 | 101 | 9.67% |
-| 2026-10-25 | 945 | 100 | 9.57% |
-| 2026-10-26 | 950 | 95 | 9.09% |
-| 2026-10-27 | 946 | 99 | 9.47% |
-| 2026-10-28 | 940 | 105 | 10.05% |
 
 ## Method
 
