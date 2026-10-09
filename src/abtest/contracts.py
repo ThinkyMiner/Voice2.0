@@ -289,7 +289,8 @@ class AdapterReport(_Frozen):
 class VolumeStats(_Frozen):
     """Mean over non-overlapping `window_days` blocks (partial trailing block dropped) of the
     distinct leads dialed in the block (daily_leads) or answered in it (daily_triggered_leads),
-    divided by window_days."""
+    divided by window_days. If the data spans fewer than window_days days, the whole span is
+    one block, divided by its day count."""
     window_days: int
     daily_leads: float
     daily_triggered_leads: float
@@ -303,8 +304,10 @@ class DataProfile(_Frozen):
     date_from: datetime
     date_to: datetime
     triggered_leads: int
-    # Success rate per triggered lead, counting calls up to window.days after the trigger.
+    # Success rate per triggered lead, counting calls up to baseline_horizon_days after the
+    # trigger: window.days, or the longest horizon with full follow-up if the data is shorter.
     baseline_p: float
+    baseline_horizon_days: int
     baseline_p_by_horizon_days: dict[int, float]  # same rate at other follow-up horizons
     volume: VolumeStats
     markdown: str

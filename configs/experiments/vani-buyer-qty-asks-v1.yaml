@@ -11,7 +11,7 @@ variants:
   B: {base: prompts/base_buyer_vani.txt, patch: {mode: replace_text, find: "quantity = 3", replace: "quantity = 2"}}
 window: {days: 14, looks: 7}
 maturation_days: 2             # placeholder: set from reports/data_profile_buyer_logs.md at Checkpoint 1
-baseline_p: 0.50               # placeholder: set from reports/data_profile_buyer_logs.md at Checkpoint 1
+baseline_p: 0.6512             # reports/data_profile_buyer_logs.md §6: H = 1 d (100% of successes arrive within 1 d; data spans 5 d), n = 473
 exclude_leads_with_calls_gt: 10
 primary:   {name: bl_success, type: binary, dispositions: ["BL Enriched", "BL Approved"], better: increase, mde_rel: 0.10}
 secondary: {name: abrupt_disconnect, type: binary, dispositions: ["Abruptly Disconnected Call"], role: guardrail, worse_if: increase, margin_abs: 0.02}

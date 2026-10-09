@@ -1,0 +1,7 @@
+# Expect INCONCLUSIVE at the final look.
+# Seed is a placeholder: Phase 4 pins the demo seed after the 20-seed hit-rate run.
+name: inconclusive
+experiment: configs/experiments/vani-meeting-v1.yaml
+sim: configs/sims/inconclusive.yaml
+seed: 1104
+overrides: {}

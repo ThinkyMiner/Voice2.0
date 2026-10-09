@@ -12,7 +12,7 @@ variants:
   B: {base: prompts/base_buyer_vani.txt, patch: {mode: append, text: "Offer two concrete meeting slots before asking open availability."}}
 window: {days: 14, looks: 7}
 maturation_days: 2             # placeholder: set from reports/data_profile_bttc.md at Checkpoint 1
-baseline_p: 0.25               # placeholder: set from reports/data_profile_bttc.md at Checkpoint 1
+baseline_p: 0.1963             # reports/data_profile_bttc.md §6: H = 14 d, all bot versions, n = 118,756
 primary:   {name: meeting_fixed, type: binary, dispositions: ["Meeting Fixed"], better: increase, mde_rel: 0.15}
 secondary: {name: answered_duration_s, type: continuous, role: guardrail, worse_if: increase, margin_rel: 0.10}
 alpha_win: 0.025               # one-sided, O'Brien-Fleming-type spending

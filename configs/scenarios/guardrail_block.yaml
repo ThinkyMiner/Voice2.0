@@ -1,0 +1,7 @@
+# Expect BLOCKED_GUARDRAIL.
+# Seed is a placeholder: Phase 4 pins the demo seed after the 20-seed hit-rate run.
+name: guardrail_block
+experiment: configs/experiments/vani-meeting-v1.yaml
+sim: configs/sims/guardrail_block.yaml
+seed: 1105
+overrides: {}

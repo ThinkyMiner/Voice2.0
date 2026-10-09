@@ -1,0 +1,7 @@
+# Expect STOPPED_HARM at look <= 3.
+# Seed is a placeholder: Phase 4 pins the demo seed after the 20-seed hit-rate run.
+name: harm
+experiment: configs/experiments/vani-meeting-v1.yaml
+sim: configs/sims/harm.yaml
+seed: 1103
+overrides: {}

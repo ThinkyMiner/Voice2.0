@@ -1,0 +1,6 @@
+# Simulator ground truth: the engine must never read this file.
+# inconclusive: lift +3%, well below the 15% MDE. Expect INCONCLUSIVE at the final look.
+true_effect: {primary_rel_lift: 0.03, secondary_change: 0.0}   # relative for continuous, absolute for binary
+reference: {from: null, to: null, bot_version: null}   # placeholder: set from reports/data_profile_bttc.md at Checkpoint 1
+volume: {daily_leads: 1.0, scale: 1.0}                 # placeholder: set from reports/data_profile_bttc.md at Checkpoint 1
+fault: {drop_b_exposure_rate: 0.0}

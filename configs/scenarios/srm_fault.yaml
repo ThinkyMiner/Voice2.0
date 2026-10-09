@@ -1,0 +1,7 @@
+# Expect HALTED_SRM.
+# Seed is a placeholder: Phase 4 pins the demo seed after the 20-seed hit-rate run.
+name: srm_fault
+experiment: configs/experiments/vani-meeting-v1.yaml
+sim: configs/sims/srm_fault.yaml
+seed: 1106
+overrides: {}
