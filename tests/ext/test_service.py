@@ -100,7 +100,10 @@ def test_recordings_are_local_only(client):
 
 def test_audit_issues_fixes_prompts(client):
     _calls_on_disk()
-    a = client.get("/api/audit?version=v1").json()
+    a = client.get("/api/audit?version=v1").json()                           # the loop's corpus by default
+    assert (a["source"], a["n_calls"], a["n_audited"]) == ("audited", 1, 0)
+    assert client.get("/api/overview").json()["kpis"]["calls_total"] == 1
+    a = client.get("/api/audit?version=v1&source=all").json()
     assert (a["n_calls"], a["n_audited"], a["split"]) == (3, 2, {"pass": 1, "non_fatal": 0, "fatal": 1})
     assert a["human_split"] == {"pass": 0, "non_fatal": 0, "fatal": 1}
     assert a["by_rubric"] == [{"rubric_id": "quantity_probing", "name": "quantity_probing", "category": None,

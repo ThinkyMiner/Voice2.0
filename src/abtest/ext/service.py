@@ -223,14 +223,14 @@ def _business(conn, eids) -> tuple[float, float]:
 @router.get("/overview")
 def overview() -> dict:
     prod, cs = loop.production(), loop.cycles()
-    audits = _maybe(lambda: _audits_of(prod.version), [])
+    audits = _maybe(lambda: loop.audits(prod.version), [])  # the calls the loop judges, not every set on disk
     split = Counter(a.overall for a in audits)
     rate = (lambda k: split[k] / len(audits)) if audits else (lambda k: None)
     agreement = _maybe(_agreement)
     with closing(store.connect(loop.DB_PATH)) as conn:
         gained, protected = _business(conn, _loop_cycles())
     fixes = _maybe(lambda: _mod("improve").load_fixes(), [])
-    kpis = {"calls_total": _maybe(lambda: len(_transcripts_of(prod.version))), "calls_audited": len(audits),
+    kpis = {"calls_total": _maybe(lambda: len(loop.calls(prod.version))), "calls_audited": len(audits),
             "fatal_rate": rate("fatal"), "non_fatal_rate": rate("non_fatal"), "pass_rate": rate("pass"),
             "agreement_overall": agreement.overall_accuracy if agreement else None,
             "agreement_kappa": agreement.overall_kappa if agreement else None,
@@ -239,7 +239,8 @@ def overview() -> dict:
             "fixes_tested": sum(f.gate is not None or f.replay is not None for f in fixes),
             "experiments": len(_loop_cycles()), "per_week_gained": gained, "per_week_protected": protected}
     return {"production": _dump(prod), "cycle": _dump(cs[-1] if cs else None), "cycles": _dump(cs[::-1]),
-            "kpis": _finite(kpis), "simulated_traffic": True}
+            "kpis": _finite(kpis), "corpus": loop.corpus() if prod.fix_id is None else "replay",
+            "simulated_traffic": True}
 
 
 @router.get("/calls")
@@ -289,9 +290,13 @@ def recording(call_id: str) -> FileResponse:
 
 
 @router.get("/audit")
-def audit(version: str = "v1") -> dict:
+def audit(version: str = "v1", source: str | None = None) -> dict:
+    """How the judge graded a version's calls: by default v1's are the loop's corpus (source=all: every set)."""
     v = _version(version)
-    ts, audits = _transcripts_of(version), _audits_of(version)
+    src = source or (loop.corpus() if v.fix_id is None else "all")
+    ts = [t for t in _transcripts_of(version) if src == "all" or t.source == src]
+    ids = {t.call_id for t in ts}
+    audits = [a for a in _audits_of(version) if a.call_id in ids]
     human = _human() if v.fix_id is None else {}
     labelled = [human[t.call_id]["overall"] for t in ts if t.call_id in human and human[t.call_id]["overall"]]
     split = Counter(a.overall for a in audits)
@@ -306,7 +311,7 @@ def audit(version: str = "v1") -> dict:
                   "n_applicable": g["pass"] + g["non_fatal"] + g["fatal"], **{k: g[k] for k in ("pass", "non_fatal", "fatal", "na")}}
                  for rid, g in sorted(grades.items(), key=lambda kv: list(meta).index(kv[0]) if kv[0] in meta else len(meta))]
     risky = sorted((a for a in audits if a.risk_flags), key=lambda a: (-models.SEVERITY[a.overall], a.call_id))
-    return {"version": version, "n_calls": len(ts), "n_audited": len(audits),
+    return {"version": version, "source": src, "n_calls": len(ts), "n_audited": len(audits),
             "split": {k: split[k] for k in ("pass", "non_fatal", "fatal")},
             "human_split": {k: labelled.count(k) for k in ("pass", "non_fatal", "fatal")} if labelled else None,
             "agreement": _dump(_maybe(_agreement)) if v.fix_id is None else None,
