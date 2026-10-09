@@ -34,3 +34,7 @@ dev = [
     "hypothesis>=6.168.5",
     "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = ["data: needs the real files in data/; local only, CI runs -m 'not data' (TEAM.md §4)"]

@@ -4,6 +4,8 @@ import pandas as pd
 import pytest
 
 from abtest.contracts import CANONICAL_COLUMNS, DATA_DIR
+
+pytestmark = pytest.mark.data
 from abtest.data import FILES, load
 
 

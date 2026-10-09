@@ -64,6 +64,7 @@ def test_baseline_horizon_rule():
     assert tab.loc[11, "leads with full follow-up"] == 0 and math.isnan(tab.loc[11, "p"])
 
 
+@pytest.mark.data
 def test_profile_smoke_buyer_logs(tmp_path):
     if not (DATA_DIR / FILES["buyer_logs"]).exists():
         pytest.skip("buyer_logs data absent")

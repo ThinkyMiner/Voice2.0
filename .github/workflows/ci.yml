@@ -1,0 +1,15 @@
+# TEAM.md §3: every PR runs the suite on the merged result. data/ never reaches CI (§7),
+# so tests that need the real files are marked `data` and run locally only.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked
+      - run: uv run pytest -m "not data" -q
