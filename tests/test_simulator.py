@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from abtest import router, store
+from abtest import router, simulator, store
 from abtest.config import load_experiment, load_sim
 from abtest.contracts import (DATA_DIR, Allocation, ExperimentState, Fault, Reference, SimConfig,
                               State, TrueEffect, Volume, Window)
@@ -222,8 +222,11 @@ def test_positive_lift(bttc):
     assert (t.primary[~t.injected_primary] == t.primary_cf[~t.injected_primary]).all()
     mf = cfg.primary.dispositions[0]
     conv = out.calls[out.calls.lead_id.isin(inj.lead_id) & out.calls.disposition.eq(mf)]
-    pool_mf = pool.calls.duration_s[pool.calls.answered & pool.calls.disposition.eq(mf)]
-    assert len(conv) == len(inj) and conv.duration_s.isin(pool_mf).all()
+    pool_mf = np.unique(pool.calls.duration_s[pool.calls.answered & pool.calls.disposition.eq(mf)].dropna())
+    # B durations are also scaled so the total secondary change stays at c = 0 (Checkpoint 2)
+    mult = 1 / (1 + simulator._from_primary(pool, cfg, 0.25, simulator._q(pool, 0.25)))
+    raw = conv.duration_s.dropna().to_numpy() / mult
+    assert len(conv) == len(inj) and np.abs(raw[:, None] - pool_mf[None, :]).min(axis=1).max() < 1e-6
 
 
 @pytest.mark.data
@@ -329,3 +332,17 @@ def test_truth_summary_and_report(bttc, buyer, tmp_path):
     bt = truth_summary(simulate_day(bpool, bcfg, bs, _state(bcfg), 0, 3).truth, bpool, bcfg, bs, "b", 3)
     assert bt.secondary_change_type == "absolute"
     assert bt.realised_secondary_change == pytest.approx(bt.secondary_B - bt.secondary_B_counterfactual)
+
+
+@pytest.mark.data
+def test_secondary_change_is_the_total_true_change(bttc, buyer):
+    """Checkpoint 2: the extra meetings lengthen calls / overwrite dispositions; the direct
+    injection nets that out so the realised total lands on secondary_change."""
+    cfg, sim, pool = bttc
+    t = _trig_b(simulate_day(pool, cfg, _sim(sim, L=0.25, c=0.03, scale=10), _state(cfg, 1.0), 0, 21))
+    assert t.secondary.mean() / t.secondary_cf.mean() - 1 == pytest.approx(0.03, abs=0.01)
+    t = _trig_b(simulate_day(pool, cfg, _sim(sim, L=0.25, scale=10), _state(cfg, 1.0), 0, 22))
+    assert t.secondary.mean() / t.secondary_cf.mean() - 1 == pytest.approx(0.0, abs=0.01)
+    cfg, sim, pool = buyer
+    t = _trig_b(simulate_day(pool, cfg, _sim(sim, L=0.10, c=0.05), _state(cfg, 1.0), 0, 23))
+    assert (t.secondary - t.secondary_cf).mean() == pytest.approx(0.05, abs=0.01)

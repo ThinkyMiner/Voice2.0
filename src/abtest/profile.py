@@ -67,15 +67,31 @@ def success_by_horizon(df: pd.DataFrame, dispositions, horizons) -> pd.DataFrame
     return _horizons(triggers(df, dispositions), df.ts.max(), horizons)
 
 
-def volume_stats(df: pd.DataFrame, window_days: int) -> VolumeStats:
-    """Blocks start on the first calendar day in the data. If the data spans fewer days than
-    one block, the whole span is the single (partial) block, divided by its day count."""
+def _blocks(df: pd.DataFrame, window_days: int) -> tuple[pd.Series, int, int]:
+    """(block of each row, number of full blocks, block length in days). Blocks start on the
+    first calendar day in the data; if the data spans fewer days than one block, the whole span
+    is the single (partial) block."""
     offset = (df.ts.dt.normalize() - df.ts.min().normalize()).dt.days
     span = int(offset.max()) + 1
     n_blocks, length = span // window_days, window_days
-    if not n_blocks:  # contract gap: no full block exists, so use the data we have
+    if not n_blocks:
         n_blocks, length = 1, span
-    block = offset // length
+    return offset // length, n_blocks, length
+
+
+def lead_window_p(df: pd.DataFrame, dispositions, window_days: int) -> tuple[float, int]:
+    """(success rate, n) per triggered lead-window: one lead's calls inside one full block, the
+    unit the simulator bootstraps. This is the rate the experiment actually samples."""
+    block, n_blocks, _ = _blocks(df, window_days)
+    d = df[block < n_blocks].assign(block=block, hit=df.answered & df.disposition.isin(dispositions))
+    g = d.groupby(["lead_id", "block"])[["answered", "hit"]].any()
+    t = g[g.answered]
+    return float(t.hit.mean()), len(t)
+
+
+def volume_stats(df: pd.DataFrame, window_days: int) -> VolumeStats:
+    """Blocks as in _blocks; the daily figure divides by the block length."""
+    block, n_blocks, length = _blocks(df, window_days)
     keep = block < n_blocks
 
     def per_day(m: pd.Series) -> float:
@@ -235,6 +251,11 @@ def build_profile(cfg: ExperimentConfig, data_dir: Path = DATA_DIR) -> DataProfi
                f"baseline_p uses H = {h}, the longest horizon with full follow-up. Shorter horizons have "
                f"larger denominators; section 8(c) shows how fast successes accrue. Uncensored rate over all "
                f"{len(t):,} triggered leads (follow-up cut at the end of the data): {t.lag.notna().mean():.4f}."]
+    lw_p, lw_n = lead_window_p(df, prim, W)
+    md += ["", f"**Lead-window baseline = {lw_p:.4f}** over {lw_n:,} triggered lead-windows (one lead's calls "
+           f"inside one {W}-day block, the unit the simulator bootstraps and the experiment samples). "
+           "This is the rate a live experiment sees, because repeat sellers re-enter each window; it is the "
+           "value `baseline_p` uses for n_max (Checkpoint 2 decision)."]
     if has_bv:
         md += ["", f"Per bot_version of the trigger call (H = {h}):", "", _md(per_bv.rename_axis("bot_version"))]
     s = cfg.secondary

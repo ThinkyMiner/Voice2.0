@@ -65,6 +65,27 @@ def _outcomes(lead: np.ndarray, m: int, ans: np.ndarray, disp: np.ndarray, val: 
     return trig, primary, secondary, any_(ans & ~is_p & ~is_s)
 
 
+def _lead_stats(lead: np.ndarray, m: int, ans: np.ndarray, disp: np.ndarray, val: np.ndarray,
+                cfg: ExperimentConfig) -> dict[str, np.ndarray]:
+    """Per pool lead, what _from_primary needs: answered-value count/sum, last answered value,
+    primary answered calls (all, and with a value), secondary answered calls."""
+    prim, sec = _sets(cfg)
+    is_p, is_s = np.isin(disp, prim), np.isin(disp, sec)
+    ok = ans & ~np.isnan(val)
+
+    def cnt(mask):
+        return np.bincount(lead[mask], minlength=m)
+
+    def tot(mask):
+        return np.bincount(lead[mask], val[mask], minlength=m)
+
+    last = _last(lead, ans, m)
+    at = np.maximum(last, 0)
+    return {"n_val": cnt(ok), "s_val": tot(ok), "v_last": np.where(last >= 0, val[at], np.nan),
+            "k_prim": cnt(ans & is_p), "n_pval": cnt(ok & is_p), "s_pval": tot(ok & is_p),
+            "n_sec": cnt(ans & is_s), "last_sec": (last >= 0) & is_s[at]}
+
+
 def build_pool(cfg: ExperimentConfig, sim: SimConfig, data_dir: Path = DATA_DIR) -> Pool:
     df = reference_calls(load(cfg.dataset, data_dir, cfg.exclude_leads_with_calls_gt)[0], sim)
     if df.empty:
@@ -93,6 +114,8 @@ def build_pool(cfg: ExperimentConfig, sim: SimConfig, data_dir: Path = DATA_DIR)
         "lead_id": df.lead_id.to_numpy()[row], "block": block[row], "row": row,
         "n_calls": np.diff(np.r_[row, len(df)]), "tod": first - first.astype("datetime64[D]"),
         "triggered": trig, "primary": prim, "secondary": sec, "has_other": other,
+        **_lead_stats(pl, len(row), df.answered.to_numpy(), df.disposition.to_numpy(),
+                      df[col].to_numpy(float), cfg),
     })
     return Pool(calls=calls, leads=leads, start=start, p=float(np.mean(prim[trig])),
                 secondary_base=float(np.nanmean(sec[trig])))
@@ -131,6 +154,37 @@ def _eligible_share(pool: Pool, L: float, q: float) -> float:
     t = pool.leads[pool.leads.triggered]
     touch = q * (t.primary == (0 if L > 0 else 1)) if L else 0.0
     return float(((1 - touch) * (t.secondary == 0) * t.has_other).mean())
+
+
+def _from_primary(pool: Pool, cfg: ExperimentConfig, L: float, q: float) -> float:
+    """Expected change in B's secondary metric caused by the primary injection alone (relative
+    for continuous, absolute for binary), over triggered pool leads. Converting a call to a
+    meeting also gives it a meeting-length duration (and may overwrite a secondary
+    disposition), so the secondary moves even when secondary_change is 0."""
+    if L == 0:
+        return 0.0
+    t = pool.leads[pool.leads.triggered]
+    C = pool.calls[pool.calls.answered]
+    prim, sec = _sets(cfg)
+    is_p = C.disposition.isin(prim)
+    p_hit = q * (t.primary == (0 if L > 0 else 1)).to_numpy()
+    if cfg.secondary.type == "binary":
+        if L > 0:  # the converted last answered call was the lead's only secondary call
+            return float(-(p_hit * ((t.n_sec == 1) & t.last_sec)).mean())
+        s_np = C.disposition[~is_p].isin(sec).mean()  # redrawn dispositions can land in the set
+        return float((p_hit * (t.secondary == 0) * (1 - (1 - s_np) ** t.k_prim)).mean())
+    if cfg.secondary.column != "duration_s":
+        return 0.0  # the primary injection only rewrites durations
+    mean = (t.s_val / t.n_val).to_numpy()
+    if L > 0:  # last answered value -> a meeting-call duration
+        d = C.duration_s[C.disposition.eq(prim[0])].mean()
+        had = t.v_last.notna()
+        new = (t.s_val - t.v_last.fillna(0) + d) / (t.n_val - had + 1)
+    else:      # every primary call's value -> a non-primary call's duration
+        d = C.duration_s[~is_p].mean()
+        new = (t.s_val - t.s_pval + t.k_prim * d) / (t.n_val - t.n_pval + t.k_prim)
+    after = np.where(p_hit > 0, mean + p_hit * (new.to_numpy() - mean), mean)
+    return float(np.nanmean(after) / np.nanmean(mean) - 1)
 
 
 def simulate_day(pool: Pool, cfg: ExperimentConfig, sim: SimConfig, state: ExperimentState,
@@ -182,18 +236,23 @@ def simulate_day(pool: Pool, cfg: ExperimentConfig, sim: SimConfig, state: Exper
         src = _draw(rng, C.answered & ~C.disposition.isin(prim), len(tgt))
         disp[tgt], dur[tgt] = C.disposition.take(src).to_numpy(dtype=object), C.duration_s.to_numpy()[src]
 
-    # arm B secondary, after the primary
+    # arm B secondary, after the primary. secondary_change is the TOTAL true change in B's
+    # secondary (Checkpoint 2 decision), so the direct effect nets out what the primary
+    # injection already caused (_from_primary).
+    fp = _from_primary(pool, cfg, L, q)
     if cfg.secondary.type == "binary":
-        e = _eligible_share(pool, L, q)
-        if not 0 <= c <= e:
-            raise ValueError(f"binary secondary_change {c} must lie in [0, {e:.4f}], the eligible share")
-        hit2 = trig_b & ~hit & (sec_cf == 0) & other & (u_sec < (c / e if c else 0.0))
+        e, need = _eligible_share(pool, L, q), c - fp
+        if not 0 <= need <= e:  # ponytail: no removal path; a net decrease would need one
+            raise ValueError(f"binary secondary_change {c} needs a direct rise of {need:.4f}, "
+                             f"outside [0, {e:.4f}] (eligible share)")
+        hit2 = trig_b & ~hit & (sec_cf == 0) & other & (u_sec < (need / e if need else 0.0))
         tgt = _last(lead, ans & ~np.isin(disp, prim) & ~np.isin(disp, sec), m)[hit2]
         src = _draw(rng, C.answered & C.disposition.eq(sec[0]), len(tgt))
         disp[tgt], dur[tgt] = sec[0], C.duration_s.to_numpy()[src]
     else:
-        val[is_b[lead] & ans] *= 1 + c
-        hit2 = trig_b & (c != 0)
+        mult = (1 + c) / (1 + fp)
+        val[is_b[lead] & ans] *= mult
+        hit2 = trig_b & (mult != 1)
     _, primary, secondary, _ = _outcomes(lead, m, ans, disp, val, cfg)
 
     lead_id = pd.Series(ids[lead], dtype="str")
@@ -235,7 +294,29 @@ def truth_summary(truth: pd.DataFrame, pool: Pool, cfg: ExperimentConfig, sim: S
         realised_primary_rel_lift=rate_b / rate_cf - 1,
         secondary_A=float(a.secondary.mean()), secondary_B_counterfactual=sec_cf, secondary_B=sec_b,
         realised_secondary_change=sec_b / sec_cf - 1 if relative else sec_b - sec_cf,
+        secondary_from_primary=_from_primary(pool, cfg, sim.true_effect.primary_rel_lift,
+                                             _q(pool, sim.true_effect.primary_rel_lift)),
+        window_days=cfg.window.days,
     )
+
+
+def _business(t: SimTruth) -> str:
+    """The true effect in business terms, projected to 100% of traffic at this run's volume."""
+    per_week = sum(t.triggered.values()) / t.window_days * 7  # answered (triggered) leads per week
+    gain = t.rate_B - t.rate_B_counterfactual
+    lines = ["## Business impact of the true effect (if B served 100% of traffic)", "",
+             f"- Primary: {t.rate_B_counterfactual * 1000:.0f} → {t.rate_B * 1000:.0f} successes per 1,000 "
+             f"answered leads ({gain * 1000:+.0f}); about **{gain * per_week:+,.0f} per week** at "
+             f"{per_week:,.0f} answered leads a week."]
+    if t.secondary_change_type == "relative":
+        lines.append(f"- Talk time per answered lead: {t.secondary_B_counterfactual:.1f} s → "
+                     f"{t.secondary_B:.1f} s ({t.secondary_B - t.secondary_B_counterfactual:+.1f} s, "
+                     f"{t.realised_secondary_change:+.1%}).")
+    else:
+        d = t.secondary_B - t.secondary_B_counterfactual
+        lines.append(f"- Secondary rate: {t.secondary_B_counterfactual:.1%} → {t.secondary_B:.1%} of answered "
+                     f"leads ({d * 100:+.1f} pp); about {d * per_week:+,.0f} leads a week.")
+    return "\n".join(lines)
 
 
 def write_truth_report(truth: SimTruth, out_dir: Path = REPORTS_DIR) -> Path:
@@ -254,11 +335,17 @@ Experiment `{t.experiment_id}`, seed {t.seed}.
 | primary relative lift | {t.injected_primary_rel_lift:+.2%} | {t.realised_primary_rel_lift:+.2%} |
 | secondary change ({t.secondary_change_type}) | {sc(t.injected_secondary_change)} | {sc(t.realised_secondary_change)} |
 
+The injected secondary change is the **total** true change in B. The extra meetings alone would
+move it by {sc(t.secondary_from_primary)} (meeting calls run longer), so the direct effect is
+sized to make the total land on the injected value.
+
 | arm | leads | triggered leads | primary rate | secondary |
 |---|---|---|---|---|
 | A | {t.leads['A']:,} | {t.triggered['A']:,} | {t.rate_A:.4f} | {sv(t.secondary_A)} |
 | B, counterfactual (before injection) | {t.leads['B']:,} | {t.triggered['B']:,} | {t.rate_B_counterfactual:.4f} | {sv(t.secondary_B_counterfactual)} |
 | B, realised | {t.leads['B']:,} | {t.triggered['B']:,} | {t.rate_B:.4f} | {sv(t.secondary_B)} |
+
+{_business(t)}
 
 Exposures dropped (fault injection): {t.exposures_dropped:,} B leads have calls but no logged exposure.
 

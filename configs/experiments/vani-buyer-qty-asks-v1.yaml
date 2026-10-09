@@ -13,7 +13,7 @@ window: {days: 14, looks: 7}
 maturation_days: 1             # data_profile_buyer_logs §8(c): 100% of successes within 1 day
 # Checkpoint 1: 1,000 rows over 5 days is too small for a 10% split, so this experiment runs at
 # bootstrap volume scale 4.0 (needs 2.93x at R = 1; set in its Phase 4 sim config).
-baseline_p: 0.6512             # reports/data_profile_buyer_logs.md §6: H = 1 d (100% of successes arrive within 1 d; data spans 5 d), n = 473
+baseline_p: 0.6667             # data_profile_buyer_logs §6 lead-window baseline (642 triggered leads; data spans one block)
 exclude_leads_with_calls_gt: 10
 primary:   {name: bl_success, type: binary, dispositions: ["BL Enriched", "BL Approved"], better: increase, mde_rel: 0.10}
 secondary: {name: abrupt_disconnect, type: binary, dispositions: ["Abruptly Disconnected Call"], role: guardrail, worse_if: increase, margin_abs: 0.02}

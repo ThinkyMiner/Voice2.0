@@ -146,6 +146,8 @@ VolumeStats (input to the simulator's `volume.daily_leads`): the mean, over non-
 
 **Warning:** no lead has 14 days of follow-up (the data spans 5 days), so baseline_p uses H = 4, the longest horizon with full follow-up. Shorter horizons have larger denominators; section 8(c) shows how fast successes accrue. Uncensored rate over all 642 triggered leads (follow-up cut at the end of the data): 0.6667.
 
+**Lead-window baseline = 0.6667** over 642 triggered lead-windows (one lead's calls inside one 14-day block, the unit the simulator bootstraps and the experiment samples). This is the rate a live experiment sees, because repeat sellers re-enter each window; it is the value `baseline_p` uses for n_max (Checkpoint 2 decision).
+
 Secondary `abrupt_disconnect` (binary, guardrail) baseline: per-lead rate of an answered call in ['Abruptly Disconnected Call'] within H = 4 days, same censoring:
 
 | statistic | value |
