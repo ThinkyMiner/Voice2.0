@@ -54,13 +54,19 @@ def _srm(p=0.5, share=0.10) -> SrmResult:
                      ci95=(share - 0.02, share + 0.02), chi2=0.0, p=p)
 
 
-def _sec(rci=(-0.02, 0.05), role="guardrail", type="continuous", margin=0.10) -> SecondaryStats:
+def _sec(rci=(-0.02, 0.05), role="guardrail", type="continuous", margin=0.10,
+         c_k=BOUNDS.win[1]) -> SecondaryStats:
+    """Stats whose RCI is delta +/- c_k se. ci95 = delta +/- 1.96 se is narrower, as at a real
+    look, so a rule reading ci95 instead of the RCI fails the margin-edge cases below."""
     absolute = type == "binary"
-    delta = (rci[0] + rci[1]) / 2 if not any(map(math.isnan, rci)) else 0.0
+    lo, hi = rci
+    delta = (lo + hi) / 2 if not any(map(math.isnan, rci)) else 0.0
+    se = (hi - lo) / (2 * c_k)
     return SecondaryStats(
         name="answered_duration_s", type=type, role=role, mean_A=100.0, mean_B=100.0 * (1 + delta),
         rel_change=delta, delta=delta, delta_type="absolute" if absolute else "relative",
-        se=0.02, ci95=rci, rci=rci, margin=None if role == "goal" else margin)
+        se=se, ci95=(delta - 1.96 * se, delta + 1.96 * se), rci=rci,
+        margin=None if role == "goal" else margin)
 
 
 def _look(k=2, z=0.5, rci=(-0.02, 0.05), is_final=False, srm_a=0.5, srm_t=0.5,
@@ -71,7 +77,7 @@ def _look(k=2, z=0.5, rci=(-0.02, 0.05), is_final=False, srm_a=0.5, srm_t=0.5,
         primary=PrimaryStats(rate_A=0.20, rate_B=0.21, lift_abs=0.01, lift_rel=0.05,
                              ci95=(-0.012, 0.032), se_pooled=0.04, se_unpooled=0.04, z=z,
                              detectable_mde_rel=mde),
-        secondary=sec if sec is not None else _sec(rci),
+        secondary=sec if sec is not None else _sec(rci, c_k=BOUNDS.win[k - 1]),
         srm_assigned=_srm(srm_a), srm_triggered=_srm(srm_t))
 
 
@@ -177,6 +183,17 @@ def test_binary_guardrail_uses_absolute_units_in_the_reason():
     assert "[+3.10 pp, +6.20 pp]" in v.reason and "+2.00 pp" in v.reason
 
 
+def test_guardrail_reads_the_rci_not_the_plain_ci():
+    # Look 2, c_k = 3.36: the RCI is much wider than ci95, and only the RCI may decide.
+    straddles = _sec(rci=(-0.06, 0.12))
+    assert straddles.ci95 == pytest.approx((-0.0225, 0.0825), abs=1e-4)  # inside the +10% margin
+    assert _decide(_look(k=2, z=0.5, sec=straddles)) == ("CONTINUE", 0)
+    assert _decide(_look(k=2, z=3.5, sec=straddles)) == ("CONTINUE", 4)  # a win, but not cleared
+    beyond = _sec(rci=(0.06, 0.30))
+    assert beyond.ci95 == pytest.approx((0.11, 0.25), abs=1e-4)  # entirely beyond the margin
+    assert _decide(_look(k=2, z=0.5, sec=beyond)) == ("CONTINUE", 0)  # the RCI straddles: no harm
+
+
 # --- rule 3: promotion -----------------------------------------------------------------------
 
 @pytest.mark.parametrize("worse_if,rci,cleared", [
@@ -250,6 +267,13 @@ def test_rule5_only_at_the_final_look():
     assert _decide(_look(k=5, z=1.0, is_final=True)) == (State.INCONCLUSIVE, 5)
 
 
+def test_rule5_says_no_boundary_crossed_at_this_look():
+    # An earlier look may have crossed the win boundary with the guardrail not cleared (rule 4).
+    reason = evaluate_look(_look(k=5, z=1.0, is_final=True), BOUNDS, _cfg()).reason
+    assert reason.startswith("Final look 5 reached with no boundary crossed at this look: z = 1.00 "
+                             f"is between the harm ({MINUS}2.00) and win (2.03) boundaries; ")
+
+
 def test_inconclusive_reason_reports_the_lift_ci_and_the_detectable_mde():
     v = evaluate_look(_look(k=5, z=1.2, is_final=True, mde=0.1834), BOUNDS, _cfg())
     assert f"[{MINUS}1.20 pp" not in v.reason  # CI is written "A to B", not as a bracket pair
@@ -274,13 +298,28 @@ def test_continue_says_where_z_sits_between_the_boundaries():
     assert f"z = 0.80" in v.reason and f"{MINUS}2.21" in v.reason and "3.36" in v.reason
 
 
+def test_a_z_next_to_a_boundary_never_prints_equal_to_it():
+    close = Boundaries(info_fractions=(0.5, 1.0), win=(3.0, 2.0451), harm=(2.2049, 2.0))
+    mid = evaluate_look(_look(k=1, z=-2.2001), close, _cfg()).reason  # 2 decimals: -2.20 both
+    assert f"z = {MINUS}2.200 is between the harm ({MINUS}2.205) and win (3.000)" in mid
+    fin = evaluate_look(_look(k=2, z=2.0449, is_final=True), close, _cfg()).reason  # 3: 2.045 both
+    assert f"z = 2.0449 is between the harm ({MINUS}2.0000) and win (2.0451)" in fin
+
+
+def test_minus_zero_prints_as_zero():
+    reason = evaluate_look(_look(k=2, z=-0.001), BOUNDS, _cfg()).reason
+    assert "z = 0.00 is between" in reason and f"{MINUS}0.00" not in reason
+
+
 # --- NaN and infinite boundaries -------------------------------------------------------------
 
 def test_nan_z_never_crosses():
     assert _decide(_look(k=2, z=NAN)) == ("CONTINUE", 0)
     assert _decide(_look(k=5, z=NAN, is_final=True)) == (State.INCONCLUSIVE, 5)
     assert primary_crossings(_look(z=NAN), BOUNDS) == (False, False)
-    assert "not available" in evaluate_look(_look(z=NAN), BOUNDS, _cfg()).reason
+    nan_z = "z is not available, so no boundary was evaluated"
+    assert nan_z in evaluate_look(_look(z=NAN), BOUNDS, _cfg()).reason
+    assert nan_z in evaluate_look(_look(k=5, z=NAN, is_final=True), BOUNDS, _cfg()).reason
 
 
 def test_nan_rci_neither_harms_nor_clears():
@@ -315,7 +354,7 @@ def test_infinite_boundaries_cannot_be_crossed():
 @pytest.mark.parametrize("k", [0, 6, -1])
 def test_look_outside_the_boundaries_is_rejected(k):
     with pytest.raises(ValueError, match="look"):
-        evaluate_look(_look(k=max(k, 1)).model_copy(update={"look": k}), BOUNDS, _cfg())
+        evaluate_look(_look(k=1).model_copy(update={"look": k}), BOUNDS, _cfg())
 
 
 def test_mismatched_boundary_lengths_are_rejected():

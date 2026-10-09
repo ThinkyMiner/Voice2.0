@@ -13,6 +13,7 @@ import pytest
 import yaml
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from scipy.optimize import brentq
 from scipy.stats import multivariate_normal, norm
 
 from abtest import boundaries as bnd
@@ -39,6 +40,7 @@ EQUAL_5 = tuple(k / 5 for k in range(1, 6))
 EQUAL_7 = tuple(k / 7 for k in range(1, 8))
 UNEQUAL = (0.2, 0.25, 0.7, 0.95, 1.0)
 CLOSE = (0.3, 0.31, 0.32, 1.0)   # 1% apart: the kernel is narrow, the grid must follow
+TIGHT = (0.2, 0.2001, 1.0)       # 1e-4 apart: look-2 kernel sd 0.01 vs sqrt(t1) = 0.45
 OVERSHOOT = (0.4, 0.9, 1.15, 1.3)  # observed information past n_max: spending is capped at alpha
 SCHEDULES = {"equal5": EQUAL_5, "equal7": EQUAL_7, "unequal": UNEQUAL, "close": CLOSE,
              "overshoot": OVERSHOOT}
@@ -165,6 +167,33 @@ def test_matches_scipy_multivariate_normal(bounds, t, theta):
     p_none = multivariate_normal.cdf(np.array(bounds), mean=theta * np.sqrt(t_arr), cov=cov,
                                      abseps=1e-9, releps=1e-9, maxpts=2_000_000)
     assert crossing_probability(bounds, t, theta) == pytest.approx(1 - p_none, abs=1e-6)
+
+
+def test_tight_spacing_matches_scipy_multivariate_normal(cfg):
+    """Look 2 sits 1e-4 after look 1, so the look-1 grid must be sized for the narrow look-2 kernel.
+
+    Reference: b2 solved from scipy's MVN CDF, P(Z1 < b1, Z2 >= b2) = alpha(t2) - alpha(t1), with
+    corr = sqrt(t1 / t2); it agrees with an adaptive 1-D quadrature to < 1e-9 z. Tolerance 1e-6 z,
+    as in test_quadrature_has_converged: sizing the grid for look 1 alone moves b2 by ~6e-3 z,
+    which the spec's 1e-2 would miss. The 3-D CDF checks the final look against the total alpha.
+    """
+    t = np.array(TIGHT)
+    b = compute_boundaries(TIGHT, cfg)
+    rho = math.sqrt(t[0] / t[1])
+    cov = np.minimum.outer(t, t) / np.sqrt(np.outer(t, t))
+    for bounds, spend, alpha in ((b.win, spend_win, cfg.alpha_win),
+                                 (b.harm, spend_harm, cfg.alpha_harm)):
+        inc = spend(t[1], alpha) - spend(t[0], alpha)
+
+        def gap(x, b1=bounds[0], inc=inc):  # P(Z1 < b1, Z2 >= x) - inc, as a CDF of (Z1, -Z2)
+            return multivariate_normal.cdf([b1, -x], cov=[[1, -rho], [-rho, 1]], abseps=1e-15,
+                                           releps=1e-10, maxpts=10_000_000) - inc
+
+        b2_ref = brentq(gap, bounds[0] - 1, bounds[0] + 3, xtol=1e-12)
+        assert bounds[1] == pytest.approx(b2_ref, abs=1e-6)
+        p_none = multivariate_normal.cdf(np.array(bounds), cov=cov, abseps=1e-10, releps=1e-10,
+                                         maxpts=5_000_000)
+        assert 1 - p_none == pytest.approx(alpha, abs=1e-7)
 
 
 def test_quadrature_has_converged(cfg, monkeypatch):

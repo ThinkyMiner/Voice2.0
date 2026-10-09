@@ -149,6 +149,14 @@ def test_repeated_exposures_use_the_first_whatever_the_row_order():
         assert out.triggered_ts[0] == at(days=1.5)
 
 
+def test_same_instant_exposures_resolve_by_variant_whatever_the_row_order():
+    # _first_exposures breaks a same-instant tie on variant, so "A" sorts first in either order.
+    for expo in ([("L", "B", T0), ("L", "A", T0)], [("L", "A", T0), ("L", "B", T0)]):
+        row = one([("L", at(hours=1), True, SUCCESS, 60.0)], expo)
+        assert row.variant == "A" and row.assigned_ts == T0
+        assert row.n_calls == 1 and row.primary == 1
+
+
 def test_calls_of_unexposed_leads_are_ignored():
     # A dropped B exposure must show up as an SRM, so those leads cannot sneak in through calls.
     out = lead_outcomes(calls_frame([("ghost", at(hours=1), True, SUCCESS, 10.0),

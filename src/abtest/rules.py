@@ -43,6 +43,7 @@ def _num(x: float, nd: int = 2, signed: bool = False) -> str:
         return "n/a"
     if math.isinf(x):
         return "+inf" if x > 0 else f"{_MINUS}inf"
+    x = round(x, nd) + 0.0  # + 0.0 turns -0.0 into 0.0: never "−0.00"
     return f"{x:{'+' if signed else ''}.{nd}f}".replace("-", _MINUS)
 
 
@@ -56,6 +57,18 @@ def _pp(x: float, signed: bool = True) -> str:
 
 def _p_value(p: float) -> str:
     return "n/a" if math.isnan(p) else f"{p:.3g}"
+
+
+def _between(z: float, h: float, w: float) -> str:
+    """Where a z that crossed neither boundary sits. 3 decimals when z is within 0.005 of a
+    boundary (more if still needed), so it never prints equal to the boundary it did not cross."""
+    if math.isnan(z):
+        return "z is not available, so no boundary was evaluated"
+    nd = 3 if any(abs(z - b) < 0.005 for b in (-h, w)) else 2
+    while nd < 6 and _num(z, nd) in (_num(-h, nd), _num(w, nd)):
+        nd += 1
+    return (f"z = {_num(z, nd)} is between the harm ({_num(-h, nd)}) and win ({_num(w, nd)}) "
+            f"boundaries")
 
 
 def _units(sec: SecondaryStats, x: float, signed: bool = True) -> str:
@@ -205,20 +218,16 @@ def evaluate_look(look: LookResult, bounds: Boundaries, cfg: ExperimentConfig) -
         lo, hi = pr.ci95
         rel_ci = (f", {_pct(lo / pr.rate_A)} to {_pct(hi / pr.rate_A)} relative"
                   if pr.rate_A > 0 else "")
+        # "at this look": a win may have crossed earlier with the guardrail not yet cleared.
         return Verdict(decision=State.INCONCLUSIVE, rule=5, reason=(
-            f"Final look {k} reached with no boundary crossed (z = {_num(z)}, between "
-            f"{_MINUS}{_num(h)} and {_num(w)}): observed lift {_pct(pr.lift_rel)} relative "
-            f"({_pp(pr.lift_abs)}; 95% CI {_pp(lo)} to {_pp(hi)}{rel_ci}), and this sample could "
-            f"have detected a lift of about {mde} relative; A stays."))
+            f"Final look {k} reached with no boundary crossed at this look: {_between(z, h, w)}; "
+            f"observed lift {_pct(pr.lift_rel)} relative ({_pp(pr.lift_abs)}; 95% CI {_pp(lo)} "
+            f"to {_pp(hi)}{rel_ci}), and this sample could have detected a lift of about {mde} "
+            f"relative; A stays."))
 
     # No rule matched: keep going.
-    if math.isnan(z):
-        where = "z is not available, so no boundary was evaluated"
-    else:
-        where = (f"z = {_num(z)} is between the harm ({_MINUS}{_num(h)}) and win ({_num(w)}) "
-                 f"boundaries")
     guard = (f"; guardrail {sec.name} RCI {_rci_text(sec)} has not crossed the "
              f"{_margin_text(sec, worse_if)} margin" if _gates(sec, worse_if) else "")
     return Verdict(decision=CONTINUE, rule=0, reason=(
-        f"Look {k} of {cfg.window.looks}: {where}; SRM p-values pass (assigned {_p_value(p_a)}, "
-        f"triggered {_p_value(p_t)}){guard}; continuing."))
+        f"Look {k} of {cfg.window.looks}: {_between(z, h, w)}; SRM p-values pass (assigned "
+        f"{_p_value(p_a)}, triggered {_p_value(p_t)}){guard}; continuing."))
