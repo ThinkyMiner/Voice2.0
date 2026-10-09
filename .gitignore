@@ -7,3 +7,5 @@ data/
 __pycache__/
 .pytest_cache/
 .hypothesis/
+.env
+reports/qa_audit_sample.csv
