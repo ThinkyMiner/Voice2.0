@@ -33,15 +33,21 @@ EXPECTED: dict[str, tuple[State, int | None]] = {
     "srm_fault": (State.HALTED_SRM, None), "approval": (State.PENDING_APPROVAL, None),
     "buyer_disconnect_stop": (State.STOPPED_HARM, None),
 }
-GRID_EPS = 1e-9  # float slack when placing t on the 1/K look grid (3/7 * 7 is 2.9999999999999996)
 LOOK_FIELDS = ("stop_look", "info_fraction", "lift_rel", "lift_rel_ci95", "guardrail_delta",
                "guardrail_rci", "weekly_impact")
 
 
 def _engine():
-    """The Phase 3 stats chain. Imported at first use until phase-3 merges (then top-level)."""
+    """The Phase 3 stats chain, behind one seam so runner tests can swap in fakes."""
     from abtest import analysis, boundaries, metrics, rules
     return metrics, analysis, boundaries, rules
+
+
+def _look_fraction(t: float, done: tuple[float, ...]) -> float:
+    """The fraction a look is computed at. Boundaries need strictly increasing fractions > 0, so
+    a forced final look with no newly matured B leads moves a hair past the last one: that spends
+    no new alpha, so its boundary is effectively uncrossable and the rules end the test honestly."""
+    return max(t, done[-1] * (1 + 1e-9) if done else 1e-9)
 
 
 def _pct(x: float) -> str:
@@ -55,7 +61,8 @@ def _pp(x: float) -> str:
 def _look_line(day: int, look: LookResult, bounds: Boundaries, verdict: Verdict) -> str:
     p = look.primary
     return (f"day {day:<2}  look {look.look}  t={look.info_fraction:.2f}  n_A={look.n_A:,} n_B={look.n_B:,}  "
-            f"lift {_pct(p.lift_rel)} [{_pct(p.ci95[0] / p.rate_A)}, {_pct(p.ci95[1] / p.rate_A)}]  "
+            f"lift {_pct(p.lift_rel)} (95% CI {_pct(p.ci95[0] / p.rate_A)}, {_pct(p.ci95[1] / p.rate_A)}; "
+            "the decision uses the boundaries)  "
             f"z={p.z:+.2f} (win {bounds.win[-1]:.2f} / harm {-bounds.harm[-1]:.2f})  "
             f"-> {verdict.decision}: {verdict.reason}")
 
@@ -73,8 +80,9 @@ def _run(scenario: Scenario, conn: sqlite3.Connection, speed: float | None = Non
     store.create_experiment(conn, frozen, scenario.name, scenario.seed)
     state = decision.start(conn, frozen, pool.start)
 
-    K = cfg.window.looks
-    next_tau = max(1 / K, cfg.min_info_first_look)
+    # Looks target the planned schedule, the one the inflation factor R is computed on (§2.7).
+    planned = boundaries.planned_info_fractions(cfg)
+    next_tau = planned[0]
     truths = []
     for day in range(cfg.window.days):
         out = simulator.simulate_day(pool, cfg, sim, state, day, scenario.seed)
@@ -96,12 +104,14 @@ def _run(scenario: Scenario, conn: sqlite3.Connection, speed: float | None = Non
 
         is_final = t >= 1 or day == cfg.window.days - 1
         if is_final or t >= next_tau:
-            # Lan-DeMets at the observed fractions; capped at 1 so total alpha is never exceeded.
-            bounds = boundaries.compute_boundaries(state.info_fractions + (min(t, 1.0),), cfg)
+            # Lan-DeMets at the observed fractions, uncapped: boundaries.py clips the spending at
+            # t = 1, so a final look past n_max spends exactly alpha with the right correlations.
+            fractions = state.info_fractions + (_look_fraction(t, state.info_fractions),)
+            bounds = boundaries.compute_boundaries(fractions, cfg)
             look = analysis.analyze_look(outcomes, cfg, state.looks_done + 1, look_ts, bounds, is_final)
             verdict = rules.evaluate_look(look, bounds, cfg)
             state = decision.apply_verdict(conn, state, look, bounds, verdict)
-            next_tau = (math.floor(t * K + GRID_EPS) + 1) / K  # next grid point strictly above t
+            next_tau = min((p for p in planned if p > t), default=math.inf)  # skip points already passed
             if not quiet:
                 print(_look_line(day + 1, look, bounds, verdict), flush=True)
         else:
@@ -201,8 +211,9 @@ def scenario_table(pinned: list[ScenarioRun], runs: list[ScenarioRun], n_seeds: 
         if r.stop_look is None:
             cols = ["-", "-", "-", "-"]
         else:
+            week = "untrusted (SRM)" if r.state == State.HALTED_SRM else f"{r.weekly_impact:+,.0f}"
             cols = [f"{r.stop_look} (day {r.sim_days})", _ci(r.lift_rel, r.lift_rel_ci95, _pct),
-                    _ci(r.guardrail_delta, r.guardrail_rci, fmt), f"{r.weekly_impact:+,.0f}"]
+                    _ci(r.guardrail_delta, r.guardrail_rci, fmt), week]
         lines.append(f"| {r.scenario} (seed {r.seed}) | {state} | " + " | ".join(cols) + f" | {hits}/{n_seeds} |")
     return "\n".join(lines)
 
@@ -240,7 +251,9 @@ def _simulate(name: str, speed: float | None) -> None:
     print(arms.to_string(index=False))
     print(f"calls with no logged exposure (fault injection): {orphan.calls:,} calls, {orphan.leads:,} leads")
     print(f"final state {state.state.value} after {run.sim_days} sim days: {last.reason}")
-    if run.weekly_impact is not None:
+    if state.state == State.HALTED_SRM:
+        print("no business estimate: the split is broken, so the metrics are untrusted")
+    elif run.weekly_impact is not None:
         print(f"engine estimate: ≈ {run.weekly_impact:+,.0f} '{' / '.join(cfg.primary.dispositions)}' "
               "a week if B served 100% of traffic")
     print(f"ground truth -> {REPORTS_DIR / f'sim_truth_{sc.name}.md'} (the engine never reads it)")

@@ -146,6 +146,10 @@ def fake_engine(log, evaluate):
         log.matured_b.append(int((out.variant.eq("B") & out.mature).sum()))
         return out[OUTCOME_COLUMNS].reset_index(drop=True)
 
+    def planned(cfg):  # boundaries.planned_info_fractions, written independently
+        k = cfg.window.looks
+        return tuple(float(x) for x in np.linspace(max(cfg.min_info_first_look, 1 / k), 1.0, k))
+
     def compute_boundaries(info_fractions, cfg):
         log.args.append(("compute_boundaries", info_fractions, cfg))
         log.fractions.append(tuple(info_fractions))
@@ -179,7 +183,7 @@ def fake_engine(log, evaluate):
         return evaluate(look, bounds, cfg)
 
     return (types.SimpleNamespace(lead_outcomes=lead_outcomes), types.SimpleNamespace(analyze_look=analyze_look),
-            types.SimpleNamespace(compute_boundaries=compute_boundaries),
+            types.SimpleNamespace(compute_boundaries=compute_boundaries, planned_info_fractions=planned),
             types.SimpleNamespace(evaluate_look=evaluate_look))
 
 
@@ -206,14 +210,16 @@ def _day(ts_sim):
 @pytest.mark.parametrize("leads_per_day, n_b_max, ends", [
     (200, 95.0, "t>=1"),     # t grows ~0.2 a day: reaches t >= 1 mid-window
     (200, 400.0, "window"),  # ~0.05 a day: the window ends at t < 1
-    (1000, 230.0, "skip"),   # ~0.4 a day: skips grid points, reaches t >= 1
+    (1000, 230.0, "skip"),   # ~0.4 a day: skips planned points, reaches t >= 1
 ])
 def test_look_schedule(fakes, leads_per_day, n_b_max, ends):
     log = fakes(leads_per_day, n_b_max)
     days = 10
     sc = scenario(days=days)
     cfg = config.scenario_experiment(sc)
-    K, first_tau = cfg.window.looks, max(1 / cfg.window.looks, cfg.min_info_first_look)
+    K = cfg.window.looks
+    planned = np.linspace(max(cfg.min_info_first_look, 1 / K), 1.0, K)
+    first_tau = planned[0]
     state = runner.run_scenario(sc, store.connect(":memory:"))
 
     t = [m / n_b_max for m in log.matured_b]  # observed fraction after each simulated day
@@ -227,17 +233,24 @@ def test_look_schedule(fakes, leads_per_day, n_b_max, ends):
     assert state.state == State.INCONCLUSIVE and log.looks[-1].is_final
     assert not any(look.is_final for look in log.looks[:-1])
     assert log.days == list(range(look_days[-1] + 1))  # nothing simulated after the final look
-    # no scheduled grid point is skipped on a day that reached it
-    taus = [first_tau] + [(math.floor(f * K + runner.GRID_EPS) + 1) / K for f in fracs[:-1]]
+    # no planned point is skipped on a day that reached it; passed points are not looked at again
+    taus = [first_tau] + [min((p for p in planned if p > f), default=math.inf) for f in fracs[:-1]]
     for d in range(look_days[-1]):
         due = taus[sum(ld < d for ld in look_days)]
         assert (d in look_days) == (t[d] >= due)
     if ends == "window":
         assert look_days[-1] == days - 1 and fracs[-1] == t[-1] < 1
     else:
-        assert t[look_days[-1]] > 1 and fracs[-1] == 1.0 and look_days[-1] < days - 1  # capped at 1
+        # the observed fraction, uncapped: boundaries.py clips the spending at t = 1 itself
+        assert fracs[-1] == t[look_days[-1]] > 1 and look_days[-1] < days - 1
     if ends == "skip":
         assert len(log.looks) < K
+
+
+def test_forced_final_look_without_new_information_still_increases():
+    assert runner._look_fraction(0.62, (0.2, 0.47)) == 0.62
+    assert 0.47 < runner._look_fraction(0.47, (0.2, 0.47)) < 0.4700001  # nothing new matured
+    assert 0 < runner._look_fraction(0.0, ()) < 1e-6                    # nothing matured at all
 
 
 @pytest.mark.parametrize("decided", [State.STOPPED_HARM, State.PENDING_APPROVAL])

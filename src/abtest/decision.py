@@ -58,48 +58,44 @@ def _label(cfg: ExperimentConfig) -> str:
     return " / ".join(cfg.primary.dispositions)
 
 
+def _num(x: float, fmt: str) -> str:
+    """Formatted with a true minus sign, as rules.py writes its reasons."""
+    return format(x, fmt).replace("-", "−")
+
+
 def _delta(d: float, s: SecondaryStats) -> str:
-    return f"{d:+.1%}" if s.delta_type == "relative" else f"{d * 100:+.1f} pp"
-
-
-def _guardrail(s: SecondaryStats, cfg: ExperimentConfig) -> tuple[str, str]:
-    """(RCI, margin) as text in the units of delta; the margin's sign follows worse_if."""
-    margin = s.margin if cfg.secondary.worse_if == "increase" else -s.margin
-    return f"[{_delta(s.rci[0], s)}, {_delta(s.rci[1], s)}]", _delta(margin, s)
+    return _num(d, "+.1%") if s.delta_type == "relative" else f"{_num(d * 100, '+.1f')} pp"
 
 
 def _business(to: State, look: LookResult, bounds: Boundaries, cfg: ExperimentConfig,
               elapsed_days: float) -> str:
-    """What a move out of RUNNING means for the business, per week at full rollout."""
+    """What a move out of RUNNING is worth per week at full rollout. The rules' reason already
+    states the action and the evidence, so this adds only the business consequence."""
     p, s, label = look.primary, look.secondary, _label(cfg)
 
-    def week(lift: float) -> float:
-        return weekly_impact(lift, look.n_A + look.n_B, elapsed_days, cfg)
+    def week(lift: float) -> str:
+        return _num(weekly_impact(lift, look.n_A + look.n_B, elapsed_days, cfg), "+,.0f")
 
     w = week(p.lift_abs)
     if to == State.PROMOTED:
-        return (f"B now gets 100% of traffic, worth ≈ {w:+,.0f} {label} a week "
-                f"({p.lift_abs * 1000:+.0f} per 1,000 triggered leads).")
+        return (f"Business impact: ≈ {w} {label} a week at full traffic "
+                f"({_num(p.lift_abs * 1000, '+.0f')} per 1,000 triggered leads).")
     if to == State.PENDING_APPROVAL:
-        return (f"Approving B is worth ≈ {w:+,.0f} {label} a week; B keeps its "
+        return (f"Business impact: approving B is worth ≈ {w} {label} a week; B keeps its "
                 f"{cfg.allocation.B:.0%} share until someone approves or rejects.")
     if to == State.STOPPED_HARM and p.z <= -bounds.harm[look.look - 1]:  # rule 2, primary side
-        return f"All traffic back to A; at full rollout B would have cost ≈ {abs(w):,.0f} {label} a week."
+        return f"Business impact: at full rollout B would have cost ≈ {w.lstrip('−+')} {label} a week."
     if to == State.STOPPED_HARM:  # rule 2, guardrail side
-        rci, margin = _guardrail(s, cfg)
-        return (f"All traffic back to A; B moved {s.name} by {_delta(s.delta, s)} (RCI {rci}), "
-                f"beyond the {margin} margin.")
+        return (f"Business impact: at full rollout B would move {s.name} by {_delta(s.delta, s)} for "
+                f"≈ {w} {label} a week; the guardrail does not allow that trade.")
     if to == State.BLOCKED_GUARDRAIL:
-        rci, margin = _guardrail(s, cfg)
-        return (f"A stays; B's ≈ {w:+,.0f} {label} a week does not clear the {s.name} guardrail "
-                f"(RCI {rci} vs margin {margin}).")
+        return (f"Business impact: B's ≈ {w} {label} a week comes with {s.name} {_delta(s.delta, s)}, "
+                f"which the guardrail does not allow.")
     if to == State.INCONCLUSIVE:
         lo, hi = (week(x) for x in p.ci95)
-        return (f"A stays; B's effect is between {lo:+,.0f} and {hi:+,.0f} {label} a week (95% CI), "
+        return (f"Business impact: B's effect is between {lo} and {hi} {label} a week (95% CI), "
                 f"too small to call with this sample.")
-    srm = min(look.srm_assigned, look.srm_triggered, key=lambda r: r.p)  # HALTED_SRM: the failing count
-    return (f"All traffic back to A; the split is broken (B got {srm.observed_share_B:.2%} of leads vs "
-            f"{srm.configured_share_B:.0%} configured), so no result can be trusted until routing is fixed.")
+    return "Business impact: no estimate; the split is broken, so fix routing and rerun."  # HALTED_SRM
 
 
 def start(conn: sqlite3.Connection, frozen: FrozenConfig, ts_sim: datetime) -> ExperimentState:
@@ -174,7 +170,7 @@ def approve(conn: sqlite3.Connection, experiment_id: str, actor: str, approved: 
         cfg = store.get_config(conn, experiment_id)
         d = next(d for d in reversed(store.read_decisions(conn, experiment_id)) if d.kind == "look")
         w = weekly_impact(d.primary.lift_abs, d.n_A + d.n_B, (d.ts_sim - state.started_ts_sim) / DAY, cfg)
-        reason = f"Approved by {actor}: B now gets 100% of traffic, worth ≈ {w:+,.0f} {_label(cfg)} a week."
+        reason = f"Approved by {actor}: B now gets 100% of traffic, worth ≈ {_num(w, '+,.0f')} {_label(cfg)} a week."
     else:
         reason = f"Rejected by {actor}: all traffic back to A."
     out = state.model_copy(update={"state": to, "allocation": LIVE_ALLOCATION[to]})
