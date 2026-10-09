@@ -1,0 +1,36 @@
+# Loop configuration (PLAN_LOOP.md §L7.3). Every key the loop reads, with its default.
+# A loop instance copies this file to configs/loop/<loop id>.yaml and overrides keys there.
+# `caps` are frozen with each generation; changing them starts a new generation (PLAN_LOOP §L1.6).
+loop: {id: vani-loop, flow: buyer, mode: sim, auto_after_generations: 3}
+template: configs/experiments/vani-buyer-qty-asks-v1.yaml
+rubric: configs/rubrics/vani-call-quality-v1.yaml
+provider:
+  name: sarvam                 # sarvam | stub (tests and sim mode use stub)
+  rpm: 40                      # sarvam-105b Starter tier: 40 requests/minute
+  concurrency: 4
+  roles:
+    judge:    {reasoning_effort: low,    max_tokens: 4096}
+    proposer: {reasoning_effort: high,   max_tokens: 8192}
+    buyer:    {reasoning_effort: low,    max_tokens: 1024}
+    bot:      {reasoning_effort: low,    max_tokens: 2048}
+stt: {model: "saaras:v4", language_code: unknown, max_jobs_in_flight: 3, poll_interval_s: 30}
+observe: {window_days: 14, min_duration_s: 10}
+audit: {calls_per_arm: 30, corpus_calls: 60, min_rho: 0.6, min_hard_agreement: 0.9}
+diagnose: {top_k: 3}
+propose: {candidates: 2, max_candidates: 8, max_patch_chars: 1500, modes: [append, replace_text, replace_section]}
+gate: {block_threshold: 0.5, extra_questions: []}
+bot_tests: {personas: 3, max_turns: 3, min_gap: 0.02, bootstrap: 2000, seed: 20261010}
+dogfood: {calls: 3, min_score: 0.7}
+guardrail: {rubric_risk_margin: 0.05}
+ingest: {score_timeout_h: 6}
+live: {surface: fake, disposition_field: disposition}
+sim:                           # simulated traffic for the live A/B in sim mode (PLAN_LOOP §L9.3-4)
+  base_sim: configs/loop/sims/buyer_base.yaml
+  effect_mode: from_bot_tests
+  lift_per_score_point: 1.5    # +0.10 bot-test rubric_score -> +15% injected relative lift
+  max_abs_lift: 0.30
+  scenario_sequence: [0.15, -0.20, 0.02]
+  risk_base: {"BL Enriched": 0.08, "BL Approved": 0.08, "Abruptly Disconnected Call": 0.55, default: 0.20}
+  risk_noise_sd: 0.08
+  seed: 20261010
+caps: {max_share_b: 0.10, max_live_calls_per_day: 0, max_spend_inr: 150, max_generations: 3}   # 0 calls/day until L0 sets it

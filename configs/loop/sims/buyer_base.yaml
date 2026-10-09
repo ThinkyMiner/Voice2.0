@@ -1,0 +1,6 @@
+# Simulated traffic for the loop's live A/B (PLAN_LOOP §L9.3). Ground truth: read only by
+# loop/live_ab.py, never by the engine path. true_effect is replaced per generation.
+true_effect: {primary_rel_lift: 0.0, secondary_change: 0.0}
+reference: {from: null, to: null, bot_version: null}
+volume: {daily_leads: 164.8, scale: 4.0}   # buyer volume x4, as configs/sims/buyer_disconnect_stop.yaml
+fault: {drop_b_exposure_rate: 0.0}

@@ -1,0 +1,8 @@
+# Sarvam list prices in INR (docs.sarvam.ai/api/getting-started/pricing, read 10 Oct 2026).
+# Re-check at L0 (PLAN_LOOP.md §L4 L0); every paid call is costed from this file into loop_spend.
+currency: INR
+llm:
+  sarvam-105b: {input_per_million_tokens: 29.28, output_per_million_tokens: 73.2}
+stt:
+  "saaras:v4": {per_audio_hour: 30.0, per_audio_hour_diarized: 45.0}
+free_credit_new_account: 100.0

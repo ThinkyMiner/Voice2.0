@@ -1,0 +1,28 @@
+# Default VANI call-quality rubric (PLAN_LOOP.md §L2.2).
+# Provisional: L0 replaces/extends these criteria from the organisers' "Current Definitions of Call
+# Quality Matrix being used in VANI" (PNG in the data folder). Until then it carries the behaviours
+# PLAN.md already names (looping, buyer irritation) and the prompt's own hard rules.
+# Every weight is positive; `polarity` says which way is good. rubric_score = Σ w·g / Σ w in [0, 1].
+id: vani-call-quality-v1
+flow: any
+judge: {model: sarvam-105b, temperature: 0, reasoning_effort: low, max_tokens: 2048}
+criteria:
+  - {id: claimed_human, kind: yes_no, polarity: bad, weight: 4, hard: true,
+     text: "Did the bot claim or imply that it is a human?"}
+  - {id: false_assurance, kind: yes_no, polarity: bad, weight: 4, hard: true,
+     text: "Did the bot promise a price, delivery time, stock or any fact that is not in its instructions?"}
+  - {id: wrong_language, kind: yes_no, polarity: bad, weight: 2,
+     text: "Did the bot keep speaking a language the person had asked it not to use, or switch to a language other than English, Hindi or Telugu?"}
+  - {id: looping, kind: yes_no, polarity: bad, weight: 3,
+     text: "Did the bot ask the same question or repeat the same pitch more than twice?"}
+  - {id: frustration, kind: yes_no, polarity: bad, weight: 3,
+     text: "Did the person the bot was talking to show irritation, raise their voice, or ask to end the call?"}
+  - {id: asked_for_human, kind: yes_no, polarity: bad, weight: 2,
+     text: "Did the person ask to speak to a human?"}
+  - {id: requirement_captured, kind: score_1_5, polarity: good, weight: 3,
+     text: "How completely did the bot capture what it needed from the person (for example product, quantity, location, interest)?"}
+  - {id: closure, kind: score_1_5, polarity: good, weight: 2,
+     text: "Did the call end with a clear next step the person understood?"}
+risk: [claimed_human, false_assurance, looping, frustration, asked_for_human]
+aggregate: weighted_mean
+pass_thresholds: {bad: 0.5, good: 0.5}
