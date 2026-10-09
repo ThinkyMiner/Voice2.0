@@ -1,4 +1,5 @@
 import hashlib
+from datetime import date
 import json
 
 import pytest
@@ -72,7 +73,7 @@ def test_scenario_name_must_match_stem(tmp_path):
 
 def test_sim_from_alias():
     sim = config.load_sim(CONFIGS_DIR / "sims" / "srm_fault.yaml")
-    assert sim.reference.from_ is None and sim.fault.drop_b_exposure_rate == 0.15
+    assert sim.reference.from_ == date(2026, 4, 1) and sim.fault.drop_b_exposure_rate == 0.15
 
 
 # --- hashing --------------------------------------------------------------------------

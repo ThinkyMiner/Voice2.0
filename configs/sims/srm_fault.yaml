@@ -1,6 +1,6 @@
 # Simulator ground truth: the engine must never read this file.
 # srm_fault: drop 15% of B exposure events before logging. Expect HALTED_SRM.
 true_effect: {primary_rel_lift: 0.0, secondary_change: 0.0}   # relative for continuous, absolute for binary
-reference: {from: null, to: null, bot_version: null}   # placeholder: set from reports/data_profile_bttc.md at Checkpoint 1
-volume: {daily_leads: 1.0, scale: 1.0}                 # placeholder: set from reports/data_profile_bttc.md at Checkpoint 1
+reference: {from: 2026-04-01, to: 2026-09-30, bot_version: null}   # Checkpoint 1: full Apr-Sep pool, all bot versions
+volume: {daily_leads: 1044.9, scale: 1.0}   # data_profile_bttc: distinct leads dialed per 28-day block / 28; real volume
 fault: {drop_b_exposure_rate: 0.15}
