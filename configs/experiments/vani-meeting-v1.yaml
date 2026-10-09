@@ -1,0 +1,23 @@
+# Headline experiment on Dataset A (seller-side bot). The seller-side prompt is not in the
+# data folder, so variants version the buyer-side prompt as a stand-in; outcomes never depend
+# on prompt text (PLAN.md §0, §2.3).
+id: vani-meeting-v1
+dataset: bttc                  # bttc | buyer_logs
+unit: lead_id
+trigger: first_answered_call   # §2.6
+salt: "7f3a91"                 # new salt per experiment
+allocation: {A: 0.90, B: 0.10}
+variants:
+  A: {base: prompts/base_buyer_vani.txt}
+  B: {base: prompts/base_buyer_vani.txt, patch: {mode: append, text: "Offer two concrete meeting slots before asking open availability."}}
+window: {days: 14, looks: 7}
+maturation_days: 2             # placeholder: set from reports/data_profile_bttc.md at Checkpoint 1
+baseline_p: 0.25               # placeholder: set from reports/data_profile_bttc.md at Checkpoint 1
+primary:   {name: meeting_fixed, type: binary, dispositions: ["Meeting Fixed"], better: increase, mde_rel: 0.15}
+secondary: {name: answered_duration_s, type: continuous, role: guardrail, worse_if: increase, margin_rel: 0.10}
+alpha_win: 0.025               # one-sided, O'Brien-Fleming-type spending
+alpha_harm: 0.05               # one-sided, Pocock-type spending
+power: 0.80
+min_info_first_look: 0.20
+srm_p_threshold: 0.001
+promotion: approval            # auto | approval (Phase 0 decision: approval is the demo default)

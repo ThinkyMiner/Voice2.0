@@ -1,0 +1,36 @@
+[project]
+name = "abtest"
+version = "0.1.0"
+description = "Voice bot A/B testing and auto-rollout platform"
+readme = "README.md"
+authors = [
+    { name = "ThinkyMiner", email = "131332283+ThinkyMiner@users.noreply.github.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "duckdb>=1.5.6",
+    "fastapi>=0.143.0",
+    "kaleido>=1.5.0",
+    "numpy>=2.4.6",
+    "pandas>=3.0.6",
+    "plotly>=7.1.0",
+    "pydantic>=2",
+    "python-docx>=1.2.0",
+    "python-pptx>=1.0.2",
+    "pyyaml>=6.0.3",
+    "scipy>=1.17.1",
+    "statsmodels>=0.15.0",
+    "streamlit>=1.65.0",
+    "uvicorn>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.9,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "hypothesis>=6.168.5",
+    "pytest>=9.1.1",
+]

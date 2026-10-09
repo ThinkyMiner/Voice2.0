@@ -1,0 +1,9 @@
+data/
+*.db
+*.db-wal
+*.db-shm
+*.png
+.venv/
+__pycache__/
+.pytest_cache/
+.hypothesis/

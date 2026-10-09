@@ -1,0 +1,23 @@
+# Buyer-side experiment on Dataset B. B lowers the prompt's quantity ask limit from 3 to 2;
+# the quality matrix treats repeated probing as looping behaviour (PLAN.md §2.3).
+id: vani-buyer-qty-asks-v1
+dataset: buyer_logs
+unit: lead_id
+trigger: first_answered_call
+salt: "c42e07"                 # new salt per experiment
+allocation: {A: 0.90, B: 0.10}
+variants:
+  A: {base: prompts/base_buyer_vani.txt}
+  B: {base: prompts/base_buyer_vani.txt, patch: {mode: replace_text, find: "quantity = 3", replace: "quantity = 2"}}
+window: {days: 14, looks: 7}
+maturation_days: 2             # placeholder: set from reports/data_profile_buyer_logs.md at Checkpoint 1
+baseline_p: 0.50               # placeholder: set from reports/data_profile_buyer_logs.md at Checkpoint 1
+exclude_leads_with_calls_gt: 10
+primary:   {name: bl_success, type: binary, dispositions: ["BL Enriched", "BL Approved"], better: increase, mde_rel: 0.10}
+secondary: {name: abrupt_disconnect, type: binary, dispositions: ["Abruptly Disconnected Call"], role: guardrail, worse_if: increase, margin_abs: 0.02}
+alpha_win: 0.025
+alpha_harm: 0.05
+power: 0.80
+min_info_first_look: 0.20
+srm_p_threshold: 0.001
+promotion: approval
