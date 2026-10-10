@@ -26,7 +26,7 @@ export async function render(el) {
     <div class="privacy"><svg viewBox="0 0 56 56" aria-hidden="true"><rect x="13" y="25" width="30" height="22" rx="4"/><path d="M19 25v-6a9 9 0 0 1 18 0v6M28 34v5"/></svg>
       <div><h3>Stored only on this machine</h3>
         <p>Recordings, transcripts and QA remarks are real customer calls. They live under <code>data/</code>, which git ignores, and the platform answers only on this computer (127.0.0.1).</p>
-        <p>Audio and transcripts were sent to OpenRouter only to transcribe and grade them. Replies are cached, so reruns send nothing new. The web UI never sends real calls, and rubric tests on real calls are ${s.allow_real_rubric_tests ? "on" : "off"}.${state.demo ? " This page is showing demo data: invented calls, real engine runs." : ""}</p></div></div>
+        <p>Audio and transcripts were sent to OpenRouter only to transcribe and grade them. Replies are cached, so reruns send nothing new. From this site, real call content is sent only when the platform was started with <code>LOOP_ALLOW_REAL=1</code>: ${(s.allow_real ?? s.allow_real_rubric_tests) ? "it was, so the loop's buttons and rubric tests can send it" : "it was not, so those steps run from a terminal with the go-ahead flag"}.${state.demo ? " This page is showing demo data: invented calls, real engine runs." : ""}</p></div></div>
     <div class="grid cols-2 section">
       <div class="card"><div class="card-head"><h3>Models per role</h3><span class="eyebrow">${state.demo ? "demo data" : live ? "from the platform" : "llm.py defaults"}</span></div>
         <dl class="kv">${Object.entries(s.models).map(([k, m]) => html`<dt>${ROLE[k] || k}</dt><dd>${m}</dd>`)}</dl></div>

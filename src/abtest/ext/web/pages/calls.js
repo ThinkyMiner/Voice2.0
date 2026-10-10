@@ -256,7 +256,7 @@ export async function renderCall(el, { id }) {
   const shown = rows.filter(applies), notApplied = rows.filter((r) => !applies(r));
   const failing = verdicts.filter((v) => v.grade === "fatal" || v.grade === "non_fatal").sort((x, y) => byRank(x.grade, y.grade));
   const naSide = (r) => (r.v.grade === "na" ? 2 : r.hg === "na" ? 1 : 0);  // real grade clashes before "did it apply" ones
-  const qaDiff = h ? rows.filter((r) => r.v && r.hg && r.v.grade !== r.hg).sort((x, y) => naSide(x) - naSide(y)) : [];
+  const qaDiff = h ? rows.filter((r) => r.v && r.hg && r.v.grade !== r.hg && !meta[r.rid]?.needs_audio).sort((x, y) => naSide(x) - naSide(y)) : [];
   const tEnd = turns.reduce((mx, x) => Math.max(mx, x.end_s ?? x.start_s ?? 0), 0);
   const total = t.duration_s || tEnd || 0;
   const m = readMemo(), at = m?.ids?.indexOf(t.call_id) ?? -1;

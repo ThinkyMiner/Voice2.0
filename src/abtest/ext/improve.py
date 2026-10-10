@@ -450,7 +450,9 @@ def gate(fix: Fix, model: str | None = None) -> GateResult:
     res = llm.chat(model, [{"role": "system", "content": _GATE}, {"role": "user", "content": user}],
                    schema=_GATE_SCHEMA, schema_name="gate", max_tokens=THINK_TOKENS)
     data = res.data if isinstance(res.data, dict) else {}
-    checks = tuple(GateCheck(id=cid, question=q, probability=_prob(data.get(cid), blocking), blocking=blocking)
+    ans = {cid: data[cid] if isinstance(data.get(cid), dict) else {} for cid, _, _ in GATE_CHECKS}
+    checks = tuple(GateCheck(id=cid, question=q, probability=_prob(ans[cid], blocking), blocking=blocking,
+                             reason=str(ans[cid].get("reason") or "").strip())
                    for cid, blocking, q in GATE_CHECKS)
     result = GateResult(passed=not any(c.blocking and c.probability >= c.threshold for c in checks),
                         checks=checks, model=res.model)

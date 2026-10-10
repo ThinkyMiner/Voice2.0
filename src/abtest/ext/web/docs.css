@@ -33,6 +33,8 @@
 @media (max-width: 1023.98px) {  /* 64px: the 56px sticky topbar (or rail, at 900px and below) plus 8px */
   .docs .toc-m { position: sticky; top: 64px; z-index: 15; box-shadow: var(--shadow); }
   .docs .toc-m[open] ol { max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; }
+  /* the open list overlays the article, so opening or closing it never moves what you were reading */
+  .docs .toc-m > nav { position: absolute; left: -1px; right: -1px; top: calc(100% - 1px); background: var(--surface); border: 1px solid var(--hairline); border-top: 0; border-radius: 0 0 var(--r) var(--r); box-shadow: var(--shadow); }
 }
 .docs .toc ol, .docs .toc-m ol { list-style: none; margin: 0; padding: 0; }
 .docs .toc ol { display: grid; gap: 1px; margin-top: 12px; }
@@ -178,7 +180,7 @@
 .docs .tw .table { min-width: 540px; }
 .docs .tw .table td { vertical-align: top; line-height: 1.5; }
 .docs .tw .table td:first-child { white-space: nowrap; }
-.docs .tw .table code { background: none; padding: 0; }
+.docs .tw .table code { background: none; padding: 0; white-space: normal; overflow-wrap: anywhere; }  /* config paths break at any point */
 .docs .tw .table .chip { margin: 0 4px 2px 0; }
 .docs .tw .cfgt { min-width: 600px; }
 .docs .tw .cfgt td:first-child { width: 28%; color: var(--muted); font-size: var(--fs-cap); white-space: normal; }
@@ -215,7 +217,7 @@
 .docs .cmds { margin: 14px 0 22px; padding: 16px 18px; border: 1px solid transparent; border-radius: var(--r); background: var(--ink); color: var(--bg); font: 400 12.5px/1.85 var(--f-mono); white-space: pre; overflow-x: auto; overscroll-behavior-x: contain; tab-size: 2; }
 :root[data-theme="dark"] .docs .cmds { background: var(--raised); color: var(--ink); border-color: var(--hairline-2); }  /* dark in both themes */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .docs .cmds { background: var(--raised); color: var(--ink); border-color: var(--hairline-2); } }
-@container (max-width: 560px) {  /* a phone: each comment under its command, long commands wrap at spaces */
+@container (max-width: 720px) {  /* a phone or a narrow column: each comment under its command, long commands wrap at spaces */
   .docs .cmds { white-space: pre-wrap; }
   .docs .cmds .pad { display: none; }
   .docs .cmds .nw { white-space: nowrap; }

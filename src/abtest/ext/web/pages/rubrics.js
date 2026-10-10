@@ -76,7 +76,7 @@ export async function renderStudio(el, { id }) {
   // Testing sends the transcript to the model provider, so real customer calls stay out of the picker
   // unless the platform was started with LOOP_ALLOW_REAL=1 (demo calls are invented and never leave the tab).
   const allowReal = state.demo || settings?.allow_real_rubric_tests === true;
-  const calls = all.items.filter((c) => allowReal || !REAL.includes(c.source));
+  const calls = all.items.filter((c) => allowReal || !(c.real ?? REAL.includes(c.source)));  // real: replays of real calls too
   const hiddenReal = all.items.length - calls.length;
   const cur = isNew ? null : items.find((r) => r.id === id);
   if (!isNew && !cur) throw Object.assign(new Error(`There is no rubric called ${id}.`), { status: 404 });
@@ -95,7 +95,7 @@ export async function renderStudio(el, { id }) {
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Rubric studio${cur ? ` · ${kind(cur)} · v${cur.version}` : ""}</div>
       <h1 class="title">${cur ? html`Edit <em>${cur.name}</em>` : html`Write a <em>rubric</em>`}</h1>
-      <p class="lede">Describe one thing a good Vani call does, in the words your auditors use. The judge reads the preview card exactly as shown and grades every call against it. Fields marked <span class="req">*</span> are required.</p></div>
+      <p class="lede">Describe one thing a good Vani call does, in the words your auditors use. The judge reads the card's name, question, when it applies, guidance, fatal and non-fatal lines and examples, and grades every call against them; the category, root type, weight and author are for people. Fields marked <span class="req">*</span> are required.</p></div>
       <div class="row"><button class="btn sm narrow-only" type="button" id="to-preview">See the preview</button><a class="btn ghost" href="#/rubrics">Back to the library</a></div></div>
     ${state.demo ? html`<div class="note" style="margin-bottom:20px"><b>Demo mode.</b> Saving keeps the rubric in this browser only (localStorage), and "Try it" uses phrase matching instead of the judge model.</div>` : ""}
     <div class="studio">

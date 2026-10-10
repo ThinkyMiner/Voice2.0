@@ -263,7 +263,8 @@ def calls(source: str | None = None, overall: str | None = None, flag: str | Non
     for t in ts:
         a, h = audits.get((t.prompt_version, t.call_id)), human.get(t.call_id)
         grades = Counter(v.grade for v in a.verdicts) if a else Counter()
-        item = {"call_id": t.call_id, "source": t.source, "duration_s": t.duration_s, "language": t.language,
+        item = {"call_id": t.call_id, "source": t.source, "real": models.is_real(t),
+                "duration_s": t.duration_s, "language": t.language,
                 "prompt_version": t.prompt_version, "overall": a.overall if a else None,
                 "disposition": a.disposition if a else None, "risk_flags": list(a.risk_flags) if a else [],
                 "summary": a.summary if a else "", "n_fatal": grades["fatal"], "n_non_fatal": grades["non_fatal"],

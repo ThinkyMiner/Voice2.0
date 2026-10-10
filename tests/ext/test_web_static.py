@@ -29,7 +29,7 @@ def test_files_exist_and_index_references_them():
         assert (WEB / name).is_file(), name
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert re.search(r'<link rel="stylesheet" href="app\.css">', html)
-    assert re.search(r'<script type="module" src="app\.js"></script>', html)
+    assert re.search(r'<script type="module" src="app\.js".*?></script>', html)
 
 
 def test_no_external_scripts_and_only_google_fonts_styles():

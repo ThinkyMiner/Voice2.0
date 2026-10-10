@@ -222,6 +222,7 @@ def test_gate_blocks_when_any_blocking_check_reaches_the_threshold(answer, passe
     res = improve.gate(fix, model="m")
     assert res.passed is passed
     assert {c.id: c.blocking for c in res.checks} == {cid: b for cid, b, _ in improve.GATE_CHECKS}
+    assert {c.id: c.reason for c in res.checks} == {cid: "r" if cid in answer else "" for cid, _, _ in improve.GATE_CHECKS}
     assert PROMPT_A in seen[0] and fix.diff in seen[0]
     assert improve.load_fixes()[0].gate == res
 

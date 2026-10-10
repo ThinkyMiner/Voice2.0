@@ -283,7 +283,7 @@ const fixes = () => sec("fixes", html`Root causes, fixes and the gate`, html`
   </ul>
   <p>It is told never to add facts, prices, delivery times, promises or assurances, never to weaken an identity, honesty, compliance or consent rule, never to contradict another instruction and never to raise an ask limit. Edits that do not apply get one retry; a second failure ends the try as FIX_INVALID. Prompt B is saved with its sha256, so the gate and the replay read exactly the text that was drafted, and the A/B test and the roll-out check that they hold the same text.</p>
   <h3>The safety gate</h3>
-  <p>Before the replay, the gate model reads Prompt A, Prompt B and the diff, and answers five questions, each with a probability (it is asked for a one-sentence reason too, but only the probability is kept today). Only prompt text is sent: no call content.</p>
+  <p>Before the replay, the gate model reads Prompt A, Prompt B and the diff, and answers five questions, each with a probability and a one-sentence reason, both shown on the fix's page. Only prompt text is sent: no call content.</p>
   ${tbl(["Check", "The question, about B against A", "At p ≥ 0.5"], GATE.map(([id, blocking, q]) => [html`<code>${id}</code>`, q,
     blocking ? html`<span class="chip harm">blocks</span>` : html`<span class="chip">shown only</span>`]))}
   <p>An answer that is missing or not a probability counts as 1.0 on a blocking check, so the gate fails closed. The gate runs before the A/B test because a compliance break would not move the A/B metric within two weeks, and it is unacceptable even once.</p>

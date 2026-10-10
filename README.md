@@ -52,10 +52,10 @@ writes that new prompt from the calls themselves, then feeds it to the engine, a
 4. **Gate and replay.** A safety check blocks edits that add promises or weaken honesty rules; then
    the same buyers are simulated against Prompt A and Prompt B for a fair before/after.
 5. **Prove and roll out.** Prompt B goes to 10% through the engine above (simulated traffic, with the
-   assumed effect stated). A person approves, B becomes production, and the next cycle audits B.
+   assumed effect stated). A person approves, B becomes production, and the next cycle audits B's replay conversations (no live bot has spoken B yet).
 
 ```bash
-make platform                    # the platform: http://127.0.0.1:8600 (demo data if nothing has run)
+make platform                    # the platform: http://127.0.0.1:8600 (its pages fill as the loop runs)
 make listen SOURCE=production ARGS=--yes-send-real-audio        # recordings -> transcripts
 make judge SOURCE=audited ARGS=--yes-send-real-transcripts       # grade the human-audited calls
 make agreement                   # judge vs IndiaMART's auditors -> reports/judge_agreement.md

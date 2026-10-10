@@ -55,6 +55,7 @@ def test_calls_list_filters_and_detail(client):
     _calls_on_disk()
     r = client.get("/api/calls").json()
     assert r["total"] == 3 and [i["call_id"] for i in r["items"]] == ["aud-1", "fx-1", "real-1"]
+    assert {i["call_id"]: i["real"] for i in r["items"]} == {"aud-1": True, "fx-1": False, "real-1": True}  # the picker hides real ones
     real = next(i for i in r["items"] if i["call_id"] == "real-1")
     assert (real["overall"], real["risk_flags"], real["n_fatal"], real["human_overall"]) == ("fatal", ["loop"], 1, None)
     aud = next(i for i in r["items"] if i["call_id"] == "aud-1")

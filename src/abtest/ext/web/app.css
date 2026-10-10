@@ -258,7 +258,7 @@ a.chip:hover { border-color: var(--hairline-2); color: var(--ink); }
 
 .grade { display: inline-flex; align-items: center; gap: 6px; font: 500 10.5px/1 var(--f-mono); letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
 .grade::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: currentColor; }
-.g-pass { color: var(--win); }
+.g-pass { color: var(--win-ink); }
 .g-non_fatal { color: var(--warn-ink); }
 .g-fatal { color: var(--harm); }
 .g-na, .g-none { color: var(--muted); }
