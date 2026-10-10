@@ -3,13 +3,16 @@ temp LOOP_DIR, invented calls, audits, root causes and fixes; the stubbed model 
 
 import time
 import types
+from contextlib import closing
 
 import httpx
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from test_loop import audit, cause, transcript, world  # noqa: F401 - world is a fixture
 
-from abtest.contracts import BASE_PROMPT, State
+from abtest import config, store
+from abtest.contracts import BASE_PROMPT, ROOT, ExperimentConfig, State
 from abtest.ext import improve, judge, listen, llm, loop, models, rubrics, service
 from abtest.ext.models import CallAudit, Fix, RubricVerdict, save
 
@@ -248,6 +251,21 @@ def test_experiments_and_approval_continue_the_loop(world, client):  # noqa: F81
     o = client.get("/api/overview").json()
     assert o["production"]["version"] == "v2" and [c["n"] for c in o["cycles"]] == [2, 1]
     assert o["kpis"]["experiments"] == 1 and o["kpis"]["per_week_gained"] > 0
+
+
+def test_a_live_experiment_is_not_simulated(client):
+    """ext/sarvam_live's experiments (vani-live-*) run on real calls: the platform must not call them simulated."""
+    raw = yaml.safe_load((ROOT / loop.TEMPLATE).read_text(encoding="utf-8")) | {"id": "vani-live-t1"}
+    with closing(store.connect(loop.DB_PATH)) as conn:
+        store.create_experiment(conn, config.freeze(ExperimentConfig.model_validate(raw)))
+    item = client.get("/api/experiments").json()["items"][0]
+    assert (item["experiment_id"], item["simulated"], item["assumed_effect"]) == ("vani-live-t1", False, None)
+    assert client.get("/api/experiments/vani-live-t1").json()["simulated"] is False
+    t = transcript("live-1", source="live", version="live")  # a live call, graded by the judge
+    save(models.TRANSCRIPTS_DIR / "live-1.json", t)
+    save(models.AUDITS_DIR / "live" / "live-1.json", audit(t, "non_fatal"))
+    row = client.get("/api/calls?source=live").json()["items"][0]
+    assert (row["call_id"], row["real"], row["overall"], row["prompt_version"]) == ("live-1", True, "non_fatal", "live")
 
 
 def _idle(client) -> dict:

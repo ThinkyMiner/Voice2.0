@@ -91,3 +91,8 @@ loop-status:  ## the prompt registry, the cycles and the next action
 
 gate-eval:  ## the Jev patch gate on its 3 test edits (the safe one passes, the unsafe two block); prompt text only
 	$(RUN) python -m abtest.ext.improve gate-eval $(ARGS)
+
+# --- Live calls through Sarvam (docs/runbook_live_calls.md): real phones, the team allowlist only.
+.PHONY: calls
+calls:  ## make calls ARGS="start --split 0.5" | ARGS="call --yes-place-real-calls" | ARGS=fetch | ARGS=look | ARGS=status
+	$(RUN) python -m abtest.ext.sarvam_live $(ARGS)

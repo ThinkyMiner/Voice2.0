@@ -46,7 +46,7 @@ Grade = Literal["pass", "non_fatal", "fatal", "na"]     # the QA sheet's Pass / 
 Overall = Literal["pass", "non_fatal", "fatal"]
 RootType = Literal["prompt", "asr", "knowledge", "flow", "platform"]
 RiskFlag = Literal["wrong_requirement", "frustration", "loop", "low_confidence", "human_request"]
-CallSource = Literal["production", "audited", "fixture", "replay"]
+CallSource = Literal["production", "audited", "fixture", "replay", "live"]  # live: real calls placed through Sarvam
 SEVERITY = {"pass": 0, "non_fatal": 1, "fatal": 2}     # na is ignored when taking the worst
 
 
@@ -288,7 +288,7 @@ def load(path: Path, model=None, default=None):
     return [model.model_validate(d) for d in data] if isinstance(data, list) else model.model_validate(data)
 
 
-REAL_SOURCES = ("production", "audited")  # Transcript sources that are real customer calls
+REAL_SOURCES = ("production", "audited", "live")  # Transcript sources that are real calls (live: real people too)
 
 
 def is_real(t: Transcript) -> bool:

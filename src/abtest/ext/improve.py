@@ -617,18 +617,20 @@ def _find(items, id_: str):
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(prog="python -m abtest.ext.improve", description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(prog="python -m abtest.ext.improve", description=__doc__.split("\n")[0],
+                                 allow_abbrev=False)  # no prefix of --yes-send-real-transcripts counts as it
     sub = ap.add_subparsers(dest="cmd", required=True)
-    causes = sub.add_parser("causes", help="rank root causes from the version's audits")
+    causes = sub.add_parser("causes", help="rank root causes from the version's audits", allow_abbrev=False)
     causes.add_argument("--version", default="v1")
-    fix = sub.add_parser("fix", help="draft Prompt B for one root cause")
+    fix = sub.add_parser("fix", help="draft Prompt B for one root cause", allow_abbrev=False)
     fix.add_argument("rc_id")
     fix.add_argument("--version", default="v1", help="the version the root cause was found on")
     gate_p = sub.add_parser("gate", help="safety-check a fix")
     gate_p.add_argument("fix_id")
     gev = sub.add_parser("gate-eval", help="the gate on its test edits: the safe one must pass, the unsafe ones block")
     gev.add_argument("--model", help="default: the gate role's model (LLM_MODEL_GATE)")
-    rep = sub.add_parser("replay", help="simulate the root cause's calls with Prompt A and Prompt B")
+    rep = sub.add_parser("replay", help="simulate the root cause's calls with Prompt A and Prompt B",
+                         allow_abbrev=False)
     rep.add_argument("fix_id")
     rep.add_argument("--n", type=int, default=8)
     for p in (causes, fix, rep):

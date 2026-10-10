@@ -587,9 +587,10 @@ def status() -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m abtest.ext.loop", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog="python -m abtest.ext.loop", description=__doc__.split("\n\n")[0],
+                                 allow_abbrev=False)  # no prefix of --yes-send-real-transcripts counts as it
     sub = ap.add_subparsers(dest="cmd", required=True)
-    adv = sub.add_parser("advance", help="run the current cycle's next stages")
+    adv = sub.add_parser("advance", help="run the current cycle's next stages", allow_abbrev=False)
     adv.add_argument("--until", choices=STAGES, help="stop after running this stage")
     adv.add_argument("--yes-send-real-transcripts", dest="real", action="store_true",
                      help="the user approved sending real call content to the model provider")

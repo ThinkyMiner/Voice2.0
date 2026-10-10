@@ -109,8 +109,9 @@ def _transcripts_of(name: str) -> list[Transcript]:
 
 
 def _audits_of(name: str) -> list[CallAudit]:
-    """Every saved grade on a version (no model call): the judge's files, or the proving replay's."""
-    if _version(name).fix_id is not None:
+    """Every saved grade on a version (no model call): the judge's files, or the proving replay's. "live" is
+    no registry version: the live calls' own label (ext/sarvam_live), graded by the judge like v1's."""
+    if name != "live" and _version(name).fix_id is not None:
         return loop.audits(name)
     return _mod("judge").load_audits(name)
 
@@ -181,7 +182,8 @@ def _experiment(conn, eid: str, scenario: str | None, cycles: dict[str, int], de
            "lift_rel": last.primary.lift_rel if last else None,
            "started": s.started_ts_sim.isoformat() if s.started_ts_sim else None,
            "updated": s.updated_ts_sim.isoformat() if s.updated_ts_sim else None,
-           "cycle": cycles.get(eid), "simulated": True, "assumed_effect": _assumed(eid, scenario, cfg)}
+           "cycle": cycles.get(eid), "simulated": not eid.startswith("vani-live-"),  # ext/sarvam_live: real calls
+           "assumed_effect": _assumed(eid, scenario, cfg)}
     if detail:
         out |= {"config": cfg.model_dump(mode="json"), "n_b_max": s.n_b_max,
                 "looks": [{"look": d.look, "info_fraction": d.info_fraction, "z": d.primary.z,
