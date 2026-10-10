@@ -7,7 +7,7 @@ import { decodePeaks, drawWave } from "../viz.js";
 
 const PAGE = 25;
 const LANG = { hi: "Hindi", en: "English", te: "Telugu", mixed: "Hinglish" };
-const SOURCE = { production: "Production", audited: "Audited", replay: "Replay", fixture: "Fixture" };
+const SOURCE = { production: "Production", audited: "Audited", replay: "Replay", fixture: "Fixture", live: "Live" };
 const SEV = { fatal: 2, non_fatal: 1, pass: 0 };
 const ACTION = "action";  // pseudo-flag: any flag but low confidence (the ones a QA lead acts on)
 const sev = (g) => SEV[g] ?? -1;
@@ -60,7 +60,7 @@ const SORTS = {  // one sensible direction each; ties fall back to the call id
 };
 const LABELS = { source: "Source", overall: "Judge grade", human: "QA grade", vs: "Judge vs QA", flag: "Flag", disp: "Disposition" };
 const GRADES = [["", "Any"], ["fatal", "Fatal"], ["non_fatal", "Non-fatal"], ["pass", "Pass"]];
-const SEGS = { source: [["", "All"], ["production", "Production"], ["audited", "Audited"], ["replay", "Replay"]], overall: GRADES };
+const SEGS = { source: [["", "All"], ["production", "Production"], ["audited", "Audited"], ["replay", "Replay"], ["live", "Live"]], overall: GRADES };
 const REPLAY_NOTE = "Simulated replay conversations are not listed here: open Audit and pick the candidate prompt version.";
 
 function readParams(params) {
@@ -197,7 +197,7 @@ export async function renderList(el, { params }) {
 }
 
 // ------------------------------------------------------------------------------------- one call
-const SRC_LONG = { production: "Production call", audited: "Audited by IndiaMART QA", replay: "Simulated replay conversation", fixture: "Test fixture" };
+const SRC_LONG = { production: "Production call", audited: "Audited by IndiaMART QA", replay: "Simulated replay conversation", fixture: "Test fixture", live: "Live call" };
 const VENDOR = { SQUADSTACK: "SquadStack", SARVAM: "Sarvam" };
 const META_KEY = { bot: "Bot", hotlead_type: "Lead type" };
 const spaced = (s) => String(s).replaceAll("_", " ");

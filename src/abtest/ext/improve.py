@@ -467,7 +467,7 @@ def gate_check(a: str, b: str, diff: str, model: str | None = None, cache: bool 
                              reason=str(ans[cid].get("reason") or "").strip())
                    for cid, blocking, q in GATE_CHECKS)
     return GateResult(passed=not any(c.blocking and c.probability >= c.threshold for c in checks),
-                      checks=checks, model=res.model)
+                      checks=checks, model=model if res.model == model else f"{model} → {res.model}")  # Jev names the model it routed to
 
 
 def gate_eval(model: str | None = None) -> list[tuple[str, str, GateResult]]:

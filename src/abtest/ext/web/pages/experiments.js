@@ -25,6 +25,12 @@ function change(cfg, prompts) {
   return { kind: "full", title: v ? `Prompt ${v.version}${v.fix_id ? `, from fix ${v.fix_id}` : ""}` : `The prompt at ${p.path}`, verb: "Swaps in a new prompt version", v };
 }
 
+/** A live experiment's B as the one line of A's prompt it changes (service._live), else its config's change. */
+const changeOf = (x, prompts) => {
+  const c = x?.live?.change;
+  return c ? { kind: "replace", title: `“${c.find}” becomes “${c.replace}”`, verb: "Changes one line", a: c.a, b: c.b } : change(x?.config, prompts);
+};
+
 /** The guardrail at the last checkpoint: its change, its limit, and whether its interval crossed it. */
 function guard(g, sec) {
   if (!g || !sec || !g.rci) return null;
@@ -87,7 +93,8 @@ export async function renderList(el) {
   // ponytail: one detail request per run, for its change and deciding numbers; add them to the list route if runs reach the hundreds
   const det = await Promise.all(r.items.map((x) => get(`/api/experiments/${enc(x.experiment_id)}`).catch(() => null)));
   const rows = r.items.map((x, i) => ({ x, d: det[i], s: det[i] ? story(det[i]) : null }));
-  const fromLoop = rows.filter((o) => o.x.cycle != null), engine = rows.filter((o) => o.x.cycle == null);
+  const fromLoop = rows.filter((o) => o.x.cycle != null), live = rows.filter((o) => o.x.simulated === false);
+  const engine = rows.filter((o) => o.x.cycle == null && o.x.simulated !== false);
   const groups = [];
   for (const o of engine) {
     const ch = change(o.d?.config, pr.items), key = `${ch.title}|${o.d?.config?.primary?.name}`;
@@ -99,7 +106,7 @@ export async function renderList(el) {
   const row = (o, name) => {
     const { x, s } = o, lift = x.lift_rel;
     return html`<a class="xrow" href="#/experiments/${enc(x.experiment_id)}">
-      <div class="c-what"><div class="nm">${name}</div><div class="sub">Assumed for B: ${assumed(x) || "—"}</div></div>
+      <div class="c-what"><div class="nm">${name}</div><div class="sub">${x.simulated === false ? "Real calls through Sarvam" : `Assumed for B: ${assumed(x) || "—"}`}</div></div>
       <div class="c-out">${stateChip(x.state)}<div class="sub">${s ? outcome(x, s) : ""}</div></div>
       <div class="c-looks">${dots(x.looks_done, x.n_looks)}<span class="sub">${x.looks_done} of ${x.n_looks}</span></div>
       <div class="c-lift"><div class="v ${s?.tone || "muted"}">${lift == null ? "—" : spct(lift)}</div><div class="sub">${s?.prim || "primary"}${x.state === "HALTED_SRM" ? ", untrusted" : ""}</div></div>
@@ -118,6 +125,11 @@ export async function renderList(el) {
           body: c ? `Cycle ${c.n} is at ${cap(c.stage)}. A test starts once a fix passes the safety gate and the replay.` : "The loop has not started. A test starts once a cycle's fix passes the safety gate and the replay.",
           action: html`<a class="btn sm" href="#/">Open the Loop page</a>` })}
     </section>
+
+    ${live.length ? html`<section class="section">
+      <div class="section-head"><h2>Live <em>calls</em></h2><p>Real calls through Sarvam to consenting team members, each lead routed by the same sticky router.</p></div>
+      <div class="card xlist">${head}${live.map((o) => row(o, html`<span class="mono">${o.x.experiment_id}</span> · ${changeOf(o.d, pr.items).title}`))}</div>
+    </section>` : ""}
 
     <section class="section">
       <div class="section-head"><h2>Engine <em>scenarios</em></h2><p>Fixed test runs that show how the engine decides. None of them changed production.</p></div>
@@ -181,7 +193,7 @@ export async function renderExperiment(el, { id }) {
   const started = x.decisions?.find((d) => d.ts_sim)?.ts_sim || looks[0]?.ts_sim;
   const dayOf = (ts) => (started && ts ? Math.round((new Date(ts) - new Date(started)) / 864e5) : null);
   const pending = x.state === "PENDING_APPROVAL", untrusted = x.state === "HALTED_SRM";
-  const ch = change(cfg, pr.items), baseV = pr.items.find((p) => p.path === cfg.variants?.A?.base);
+  const ch = changeOf(x, pr.items), baseV = pr.items.find((p) => p.path === cfg.variants?.A?.base), lv = x.live;
   const sec = cfg.secondary || {};
   let actor = "";
   try { actor = localStorage.getItem("vani-actor") || ""; } catch { /* none */ }
@@ -208,7 +220,7 @@ export async function renderExperiment(el, { id }) {
     </div>` : ""}
 
     <section class="card change">
-      <div class="card-head"><h3>The change</h3><span class="eyebrow">A is ${baseV ? `prompt ${baseV.version}` : cfg.variants?.A?.base || "the base prompt"}</span></div>
+      <div class="card-head"><h3>The change</h3><span class="eyebrow">${lv ? `A is agent version ${lv.arms.A.version ?? "—"}, B is version ${lv.arms.B.version ?? "—"}` : `A is ${baseV ? `prompt ${baseV.version}` : cfg.variants?.A?.base || "the base prompt"}`}</span></div>
       ${ch.kind === "replace" ? html`<p class="redline-line">${wordDiff(ch.a, ch.b)}</p><p class="muted small">B is A with this one line changed.</p>`
         : ch.kind === "append" ? html`<p class="redline-line"><ins>${ch.b}</ins></p><p class="muted small">B is A with this sentence added at the end.</p>`
         : ch.kind === "full" ? html`<p>B is ${ch.v ? html`<a href="#/prompts?v=${enc(ch.v.version)}">prompt ${ch.v.version}</a>` : "a full prompt"}.${ch.v?.fix_id ? html` <a href="#/fixes/${enc(ch.v.fix_id)}">Read its fix as a redline</a>.` : ""}</p>`
@@ -224,12 +236,23 @@ export async function renderExperiment(el, { id }) {
           : html`<div class="big muted">—</div><div class="sub">no checkpoint yet</div>`}</div>
       <div class="kpi"><div class="eyebrow" title="The engine checks the evidence at planned checkpoints; it can stop early at any of them.">Checkpoints</div><div class="big">${looks.length}<small>of ${cfg.window?.looks ?? "—"}</small></div>
         <div class="sub">${L ? `${x.simulated === false ? "" : "simulated "}day ${dayOf(L.ts_sim)}; planned over ${cfg.window?.days ?? "—"} days` : "none yet"}</div></div>
-      <div class="kpi"><div class="eyebrow">Leads counted</div><div class="big">${int((L?.n_a || 0) + (L?.n_b || 0))}</div><div class="sub">A ${int(L?.n_a)} · B ${int(L?.n_b)} of ${int(x.n_b_max)} planned for B</div></div>
+      ${lv && !L ? html`<div class="kpi"><div class="eyebrow">Leads assigned</div><div class="big">${int(lv.arms.A.assigned + lv.arms.B.assigned)}</div><div class="sub">A ${int(lv.arms.A.assigned)} · B ${int(lv.arms.B.assigned)} · counted at the first checkpoint</div></div>`
+        : html`<div class="kpi"><div class="eyebrow">Leads counted</div><div class="big">${int((L?.n_a || 0) + (L?.n_b || 0))}</div><div class="sub">A ${int(L?.n_a)} · B ${int(L?.n_b)} of ${int(x.n_b_max)} planned for B</div></div>`}
       <div class="kpi"><div class="eyebrow">Impact a week</div><div class="big ${iTone}">${impact == null ? "—" : sint(impact)}</div>
         <div class="sub">${untrusted ? "no estimate: the split failed its check" : impact == null ? "after the first checkpoint" : `${x.impact.unit} if B took all traffic${s.tone === "win" ? "" : "; not taken"}`}</div></div>
       <div class="kpi"><div class="eyebrow">Split at the end</div><div style="margin-top:12px">${splitBar(x.allocation || cfg.allocation || { A: 1, B: 0 })}</div>
         <div class="sub">${pending ? "B keeps its share until someone decides" : x.state === "PROMOTED" ? `B serves all ${x.simulated === false ? "new calls" : "simulated traffic"}` : x.state === "RUNNING" ? "the planned split" : `all ${x.simulated === false ? "new calls" : "simulated traffic"} back on A`}</div></div>
     </section>
+
+    ${lv ? html`<section class="section">
+      <div class="card flush"><div class="card-head" style="padding:16px 18px 0"><h3>Calls per arm</h3><span class="eyebrow">Sarvam agent <span class="mono" style="text-transform:none">${lv.agent || "—"}</span></span></div>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>Arm</th><th class="r">Agent version</th><th class="r">Leads assigned</th><th class="r">Called</th><th class="r">Connected</th><th>Outcomes back</th></tr></thead>
+          <tbody>${["A", "B"].map((v) => { const a = lv.arms[v], d = Object.entries(a.dispositions || {});
+            return html`<tr><td><b>${v}</b></td><td class="r mono">${a.version ?? "—"}</td><td class="r mono">${int(a.assigned)}</td><td class="r mono">${int(a.called)}</td><td class="r mono">${int(a.connected)}</td>
+              <td>${d.length ? d.map(([k, n]) => `${k} ${n}`).join(" · ") : "—"}${a.provisional ? ` (${a.provisional} provisional)` : ""}</td></tr>`; })}</tbody></table></div>
+        <p class="muted small" style="padding:0 18px 16px">Our router hashed each lead to its arm and logged the exposure before Sarvam dialled it on that arm's agent version. The engine takes its first checkpoint once enough B leads have matured, so a handful of calls never decides anything.</p></div>
+    </section>` : ""}
 
     <section class="section">
       <div class="card">

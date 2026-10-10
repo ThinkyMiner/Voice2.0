@@ -624,21 +624,35 @@ def look(conn, eid: str, now: datetime) -> None:
     print(f"split report -> {md}")
 
 
-def status(conn, eid: str) -> None:
-    state, rows = _state(conn, eid), _attempts(conn, eid)
+def summary(conn, eid: str) -> dict:
+    """The agent eid calls, and per arm: its agent version, leads assigned, calls placed, outcomes back (and how
+    many are provisional), calls connected and dispositions. status prints it; the platform shows it."""
+    rows = _attempts(conn, eid)
+    row = conn.execute("SELECT agent FROM live_experiments WHERE experiment_id = ?", (eid,)).fetchone()
+    agent = json.loads(row["agent"]) if row else {}
     calls = {r["call_id"]: r for r in conn.execute(
         "SELECT call_id, answered, disposition FROM calls WHERE experiment_id = ?", (eid,))}
     assigned = {v: n for v, n in conn.execute(
         "SELECT variant, COUNT(DISTINCT lead_id) FROM exposures WHERE experiment_id = ? GROUP BY variant", (eid,))}
-    print(f"{eid}: {state.state.value}, live allocation A {state.allocation.A:.0%} / B {state.allocation.B:.0%}")
+    arms = {}
     for arm in "AB":
         mine = [r for r in rows if r["variant"] == arm and r["attempt_id"]]
         back = [calls[r["attempt_id"]] for r in mine if r["attempt_id"] in calls]
-        dispositions = Counter(row["disposition"] for row in back).most_common()
-        provisional = sum(r["outcome"] == "provisional" for r in mine)
-        print(f"  {arm}: assigned {assigned.get(arm, 0)}, called {len(mine)}, outcomes back {len(back)}"
-              + (f" ({provisional} provisional)" if provisional else "")
-              + f", connected {sum(row['answered'] for row in back)}" + "".join(f"; {d} {n}" for d, n in dispositions))
+        arms[arm] = {"version": agent.get(f"SARVAM_VERSION_{arm}"), "assigned": assigned.get(arm, 0),
+                     "called": len(mine), "back": len(back),
+                     "provisional": sum(r["outcome"] == "provisional" for r in mine),
+                     "connected": sum(c["answered"] for c in back),
+                     "dispositions": dict(Counter(c["disposition"] for c in back).most_common())}
+    return {"agent": agent.get("SARVAM_APP_ID"), "arms": arms}
+
+
+def status(conn, eid: str) -> None:
+    state, rows = _state(conn, eid), _attempts(conn, eid)
+    print(f"{eid}: {state.state.value}, live allocation A {state.allocation.A:.0%} / B {state.allocation.B:.0%}")
+    for arm, a in summary(conn, eid)["arms"].items():
+        print(f"  {arm}: assigned {a['assigned']}, called {a['called']}, outcomes back {a['back']}"
+              + (f" ({a['provisional']} provisional)" if a["provisional"] else "")
+              + f", connected {a['connected']}" + "".join(f"; {d} {n}" for d, n in a["dispositions"].items()))
     if unknown := [f"{r['lead_id']} ({r['note'] or 'the run stopped during the POST'})"
                    for r in rows if r["status"] == "unknown"]:
         print("  may have rung, no attempt id (never dialled again; fetch takes the call if Sarvam lists it, "

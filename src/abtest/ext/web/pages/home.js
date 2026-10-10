@@ -42,7 +42,7 @@ function station(c) {
   if (h >= 0) return { station: STATION[ORDER[h]], halt: true, detail: SUB[ORDER[h]] ? `→ ${SUB[ORDER[h]]}` : "" };
   return { station: STATION[c.stage] ?? 0, halt: false, detail: SUB[c.stage] ? `→ ${SUB[c.stage]}` : "" };
 }
-const figs = (s) => raw(esc(s).replace(/\b(v\d+|\d[\d,.]*)\b/g, '<span class="fig">$1</span>'));  // the serif's 1 reads as l
+const figs = (s) => raw(esc(s).replace(/(&#?\w+;)|\b(v\d+|\d[\d,.]*)\b/g, (m, ent, f) => ent || `<span class="fig">${f}</span>`));  // the serif's 1 reads as l; entities pass untouched ("v2&#39;s")
 const first = (s) => (String(s || "").match(/^.+?[.!?](?=\s|$)/)?.[0] || String(s || "")).trim();
 const plain = (note) => cap(String(note || "").replace(/^(blocked|waiting|done|close):\s*/, ""));
 const fixStatus = (f, x) => [
@@ -129,7 +129,9 @@ export async function render(el) {
     allowReal: Boolean(settings?.allow_real) });
   const p = plan(cur, lp, ctx(cur));
   const sp = shares({ pass: k.pass_rate, non_fatal: k.non_fatal_rate, fatal: k.fatal_rate });
-  const loopX = xs.items.filter((x) => x.cycle != null), engineX = xs.items.length - loopX.length;
+  const loopX = xs.items.filter((x) => x.cycle != null), liveX = xs.items.filter((x) => x.simulated === false).length;
+  const engineX = xs.items.length - loopX.length - liveX, scen = (n) => `${n} engine scenario${n === 1 ? "" : "s"}`;
+  const liveNote = liveX ? ` · ${liveX} live experiment${liveX === 1 ? "" : "s"} on real calls` : "";
   const finished = loopX.filter((x) => !["RUNNING", "DRAFT", "PENDING_APPROVAL"].includes(x.state));
   const latest = fx.items[0];
   const acc = k.agreement_overall, kap = k.agreement_kappa;
@@ -169,8 +171,8 @@ export async function render(el) {
       ${kpi("#/fixes", `${fx.items.length} prompt fixes. Open the fixes.`, html`<div class="eyebrow">Prompt fixes</div><div class="big ${fx.items.length ? "" : "none"}">${fx.items.length ? int(fx.items.length) : "—"}</div>
         <div class="sub">${latest ? `latest: ${fixStatus(latest, xBy[(ov.cycles || []).find((c) => c.fix_id === latest.id)?.experiment_id])}` : "none written yet: the fixer writes one for the top root cause"}</div>`)}
       ${kpi("#/experiments", "Weekly impact from loop experiments. Open the experiments.", html`<div class="eyebrow">Weekly impact</div>
-        ${finished.length ? html`<div class="big ${k.per_week_gained > 0 ? "win" : ""}">${sint(k.per_week_gained)}</div><div class="sub">simulated successes a week gained ·${int(k.per_week_protected)} protected · from ${finished.length} loop A/B test${finished.length === 1 ? "" : "s"}${engineX ? `, plus ${engineX} engine scenarios` : ""}</div>`
-          : html`<div class="big none">—</div><div class="sub">no loop A/B test has finished yet${engineX ? ` · ${engineX} engine scenarios ran, changing nothing` : ""}</div>`}`)}
+        ${finished.length ? html`<div class="big ${k.per_week_gained > 0 ? "win" : ""}">${sint(k.per_week_gained)}</div><div class="sub">simulated successes a week gained · ${int(k.per_week_protected)} protected · from ${finished.length} loop A/B test${finished.length === 1 ? "" : "s"}${engineX ? `, plus ${scen(engineX)}` : ""}${liveNote}</div>`
+          : html`<div class="big none">—</div><div class="sub">no loop A/B test has finished yet${engineX ? ` · ${scen(engineX)} ran, changing nothing` : ""}${liveNote}</div>`}`)}
     </section>
     ${acc != null && (kap != null ? kap <= 0.4 : acc < 0.7) ? html`<p class="kpi-note"><i class="dot demo" aria-hidden="true"></i><span>Judge grades are directional until they agree better with IndiaMART QA (${pct(acc, 0)} today). <a href="#/audit">Compare them call by call</a></span></p>` : ""}
 

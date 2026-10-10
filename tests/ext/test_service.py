@@ -1,6 +1,7 @@
 """The platform API (ext/service.py, docs/loop_api.md) with fastapi's TestClient: a temp store, the
 temp LOOP_DIR, invented calls, audits, root causes and fixes; the stubbed model for rubric tests."""
 
+import json
 import time
 import types
 from contextlib import closing
@@ -13,7 +14,7 @@ from test_loop import audit, cause, transcript, world  # noqa: F401 - world is a
 
 from abtest import config, store
 from abtest.contracts import BASE_PROMPT, ROOT, ExperimentConfig, State
-from abtest.ext import improve, judge, listen, llm, loop, models, rubrics, service
+from abtest.ext import improve, judge, listen, llm, loop, models, rubrics, sarvam_live, service
 from abtest.ext.models import CallAudit, Fix, RubricVerdict, save
 
 SEND = httpx.Client.send  # before conftest's no-network patch: TestClient's transport is in-process
@@ -255,12 +256,23 @@ def test_experiments_and_approval_continue_the_loop(world, client):  # noqa: F81
 
 def test_a_live_experiment_is_not_simulated(client):
     """ext/sarvam_live's experiments (vani-live-*) run on real calls: the platform must not call them simulated."""
-    raw = yaml.safe_load((ROOT / loop.TEMPLATE).read_text(encoding="utf-8")) | {"id": "vani-live-t1"}
+    raw = yaml.safe_load((ROOT / loop.TEMPLATE).read_text(encoding="utf-8")) | {"id": "vani-live-t1", "variants": {
+        v: {"patch": {"mode": "full", "path": f"prompts/live/vani_demo_{v}.txt"}} for v in "AB"}}
     with closing(store.connect(loop.DB_PATH)) as conn:
         store.create_experiment(conn, config.freeze(ExperimentConfig.model_validate(raw)))
     item = client.get("/api/experiments").json()["items"][0]
     assert (item["experiment_id"], item["simulated"], item["assumed_effect"]) == ("vani-live-t1", False, None)
-    assert client.get("/api/experiments/vani-live-t1").json()["simulated"] is False
+    x = client.get("/api/experiments/vani-live-t1").json()
+    assert x["simulated"] is False and x["live"] is None  # no live tables: sarvam_live did not start it
+    with closing(store.connect(loop.DB_PATH)) as conn:
+        conn.executescript(sarvam_live.LIVE_SCHEMA)
+        with conn:
+            conn.execute("INSERT INTO live_experiments VALUES (?, ?)", ("vani-live-t1", json.dumps(
+                {"SARVAM_APP_ID": "Outbound-t", "SARVAM_VERSION_A": "1", "SARVAM_VERSION_B": "2"})))
+    live = client.get("/api/experiments/vani-live-t1").json()["live"]
+    assert live["agent"] == "Outbound-t" and live["arms"]["B"] == {
+        "version": "2", "assigned": 0, "called": 0, "back": 0, "provisional": 0, "connected": 0, "dispositions": {}}
+    assert (live["change"]["find"], live["change"]["replace"]) == ("quantity = 3", "quantity = 2")  # the one line B changes
     t = transcript("live-1", source="live", version="live")  # a live call, graded by the judge
     save(models.TRANSCRIPTS_DIR / "live-1.json", t)
     save(models.AUDITS_DIR / "live" / "live-1.json", audit(t, "non_fatal"))

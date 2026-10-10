@@ -55,7 +55,7 @@ async function route(keepScroll = false) {
   }
   $$(".nav a").forEach((a) => (a.dataset.route === key ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
   $("#menu-label").textContent = label;
-  $("#sim-pill").hidden = key !== "experiments";  // the calls are real; only the A/B traffic is simulated
+  $("#sim-pill").hidden = key !== "experiments" || /^vani-live-/.test(id || "");  // the calls are real; only the A/B traffic is simulated, except a live experiment's
   const back = id ? [`All ${label.toLowerCase()}`, `#/${key}`] : key === "loop" ? null : toLoop;
   await show(n, label, id || null, (el) => render(el, { id, params }), key, keepScroll, back);
   if (keepScroll) scrollTo({ top });

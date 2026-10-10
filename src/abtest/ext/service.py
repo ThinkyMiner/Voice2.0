@@ -12,10 +12,12 @@ model provider from the web only when the server was started with LOOP_ALLOW_REA
 POST /api/loop/advance runs the loop with it, POST /api/rubrics/test grades such a transcript with it.
 """
 
+import difflib
 import importlib
 import math
 import os
 import re
+import sqlite3
 import threading
 from collections import Counter
 from contextlib import closing
@@ -194,7 +196,35 @@ def _experiment(conn, eid: str, scenario: str | None, cycles: dict[str, int], de
                            "ts_sim": d.ts_sim.isoformat() if d.ts_sim else None} for d in looks],
                 "decisions": [d.model_dump(mode="json") for d in ds],
                 "impact": {"per_week": _per_week(s, cfg, last), "unit": " / ".join(cfg.primary.dispositions)}}
+        if not out["simulated"]:
+            out["live"] = _live(conn, eid, cfg)
     return _finite(out)
+
+
+def _live(conn, eid: str, cfg: ExperimentConfig) -> dict | None:
+    """A live experiment's Sarvam agent and each arm's version and calls (sarvam_live.summary), plus B's change
+    when it is one line of A's prompt: both lines, and the changed words with the two words before them."""
+    from abtest.ext import sarvam_live
+    try:
+        out = sarvam_live.summary(conn, eid)
+    except sqlite3.OperationalError:  # no live tables: ext/sarvam_live did not start it
+        return None
+    try:
+        a, b = ((ROOT / cfg.variants[v].patch.path).read_text(encoding="utf-8").splitlines() for v in "AB")
+    except (AttributeError, KeyError, OSError, TypeError):  # not two prompt files
+        return out | {"change": None}
+    lines = [(x, y) for x, y in zip(a, b) if x != y] if len(a) == len(b) else []
+    if len(lines) != 1:
+        return out | {"change": None}
+    (la, lb), = lines
+    find, replace = la, lb
+    wa, wb = la.split(), lb.split()
+    ops = [o for o in difflib.SequenceMatcher(None, wa, wb, autojunk=False).get_opcodes() if o[0] != "equal"]
+    if len(ops) == 1:  # "quantity = 3" -> "quantity = 2", not the whole line
+        _, i1, i2, j1, j2 = ops[0]
+        k = min(2, i1, j1)
+        find, replace = " ".join(wa[i1 - k:i2]).rstrip(";,."), " ".join(wb[j1 - k:j2]).rstrip(";,.")
+    return out | {"change": {"a": la, "b": lb, "find": find, "replace": replace}}
 
 
 def _experiment_ids(conn) -> list[tuple[str, str | None]]:
