@@ -179,15 +179,12 @@ PAGES = {
         ("the QA team's own grade", "scroll", "#scorecard", "start", 1300),
         (("the QA team's own grade", 0.2), "spot", ".scorecard tbody tr:nth-child(-n+2)", 8),
     ]),
-    "07-audit": dict(src="loop", path="#/audit", ready=".page-head", beats=[
+    "07-audit": dict(src="loop", path="#/audit", ready=".trust", beats=[
         (0.3, "spot", ".trust"),
-        ("On individual checks", "scroll", "#by-param", "start", 1300),
-        (("On individual checks", 0.2), "spot", ".ag-table"),
-        (("it agrees strongly", -0.6), "scroll", ".ag-p.t-win", "center", 1200),
-        ("it agrees strongly", "spot", ".ag-p.t-win", 4),
-        ("On the overall verdict", "scrolly", 0, 1300),
-        (("On the overall verdict", 0.2), "spot", ".trust-say"),
-        ("The platform says so", "spot", ".trust"),
+        ("On six checks", "spot", ".trust-checks", 8),
+        ("On a call's overall grade", "spot", ".trust-why", 8),
+        ("The platform says so", "scroll", "#by-param", "start", 1300),
+        (("The platform says so", 0.2), "spot", ".ag-table"),
     ]),
     "08-rubric": dict(src="demo", path="#/rubrics/new", ready="#form", pre=[
         ("fill", "#form [name=name]", "Confirms the unit back"),
@@ -208,9 +205,10 @@ PAGES = {
         (0.3, "spot", "#ix-list > .cause:first-child"),
         ("ranked by a published formula", "click", ".ix-how summary"),
         (("ranked by a published formula", 0.9), "spot", ".ix-how"),
-        ("Cycle one took the top cause", "scroll", "#ix-list > .cause:first-child", "start", 1200),
-        (("Cycle one took the top cause", 0.2), "spot", "#ix-list > .cause:first-child .ix-head"),
-        (("Cycle one took the top cause", 2.0), "spot", "#ix-list > .cause:first-child .ix-mets"),
+        ("Cycle one tried the top cause", "scroll", "#ix-list > .cause:first-child", "start", 1200),
+        (("Cycle one tried the top cause", 0.2), "spot", "#ix-list > .cause:first-child .ix-head"),
+        ("and took the next", "scroll", "#ix-list > .cause:nth-child(2)", "start", 1100),
+        (("and took the next", 0.2), "spot", "#ix-list > .cause:nth-child(2) .ix-head"),
     ]),
     "10-fix": dict(src="loop", path=lambda: f"#/fixes/{cycle_fix(1)}", ready=".redline", beats=[
         (0.3, "spot", ".fix-head h1"),
@@ -219,7 +217,8 @@ PAGES = {
         ("a safety gate running on Jev", "scroll", ".fix-cards", "start", 1300),
         (("a safety gate running on Jev", 0.2), "spot", ".fix-cards > .card:first-child"),
         ("Then the same buyers", "spot", ".fix-cards > .card:nth-child(2)"),
-        ("and the failure falls", "spot", ".fix-cards .ba"),
+        ("The failure fell", "spot", ".fix-cards .ba"),
+        ("and looping got worse", "spot", ".fix-cards > .card:nth-child(2)"),
     ]),
     "11-engine": dict(src="platform", path="#/experiments/vani-meeting-v1-harm", ready="#z svg", beats=[
         (0.3, "spot", ".xhead"),
@@ -240,13 +239,14 @@ PAGES = {
     ]),
     "13-approve": dict(src="loop", path=lambda: f"#/experiments/{pending()}", ready="#decide", beats=[
         (0.3, "spot", ".xsim"),
-        (("It crossed the win line", -1.1), "spot", "#decide"),
-        (("It crossed the win line", -1.0), "type", "#actor", ACTOR),
-        (("so it waits for a person", -0.5), "click", "#approve"),
-        (("so it waits for a person", 0.2), "raise"),
-        (("so it waits for a person", 0.25), "spot", "dialog.confirm", 6),
-        (("Approve.", -0.6), "click", "dialog.confirm button[value=ok]"),  # the click lands on "Approve."
-        (("Approve.", 0.5), "spot", ".xchips"),
+        (("It crossed the win line", -0.4), "spot", "#decide"),
+        (("so it waits for a person", 0.3), "type", "#actor", ACTOR),
+        ("The person has seen the replay", "spot", ".card.change"),
+        (("So, reject.", -0.7), "click", "#reject"),
+        (("So, reject.", -0.2), "raise"),
+        (("So, reject.", -0.15), "spot", "dialog.confirm", 6),
+        (("So, reject.", 0.55), "click", "dialog.confirm button[value=ok]"),  # the click lands on "reject"
+        ("Version one stays", "spot", ".xchips"),
     ]),
     "14-live": dict(src="platform", path="#/experiments/vani-live-c1", ready=".card.change", beats=[
         (0.3, "spot", ".xtitle"),
@@ -260,10 +260,9 @@ PAGES = {
         (("With a handful of calls", -0.3), "unspot"),
         (("With a handful of calls", -0.3), "terminal", OUT / "terminal" / "14-live.txt"),
     ]),
-    "16-again": dict(src="loop", path="#/prompts", ready=".pv", beats=[
-        (0.25, "spot", ".pv.production"),
-        (("and cycle two", -0.3), "goto", "#/", ".ring-wrap svg .st"),
-        (("and cycle two", 0.4), "spot", ".status-main h1"),
+    "16-again": dict(src="loop", path="#/", ready=".ring-wrap svg .st", beats=[
+        (0.25, "spot", ".status-main h1"),
+        (("to try the next cause", 0.1), "spot", ".ring-wrap", 4),
         (("Everything is documented", -0.3), "goto", "#/docs", ".docs"),
         (("Everything is documented", 0.4), "spot", ".nav a[data-route=docs]", 4),
     ]),

@@ -55,10 +55,10 @@ scenes:
   - id: 07-audit
     show: "platform #/audit : the agreement card, then the per-check table"
     say: >-
-      Can the judge be trusted? We measured it against IndiaMART's auditors, on calls it never saw while tuning.
-      On individual checks, like quantity, units, specifications and product, it agrees strongly. On the overall
-      verdict, not yet, because the auditors also see the lead record the bot saved, and the judge cannot. The
-      platform says so on screen, instead of hiding it.
+      Can the judge be trusted? We measured it against IndiaMART's auditors, on a hundred and twenty calls it never
+      saw while tuning. On six checks, like quantity, units, specifications and product, it agrees well. On a call's
+      overall grade, not yet: one miss on any check changes it, and the auditors also see the lead record the bot
+      saved, which the judge cannot. The platform says so on screen, instead of hiding it.
 
   - id: 08-rubric
     show: "demo copy #/rubrics new rubric, filled in; Try it on a call, Grade, the result"
@@ -69,17 +69,19 @@ scenes:
   - id: 09-issues
     show: "platform #/issues : root causes ranked, How ranking works open; example call lists blurred"
     say: >-
-      Failed grades become named root causes, ranked by a published formula. Cycle one took the top cause a prompt
-      can fix: <cause>, in <n> calls.
+      Failed grades become named root causes, twenty eight of them here, ranked by a published formula. Cycle one
+      tried the top cause a prompt can fix: the bot misstating a buyer's spec. Its fix changed nothing in replay, so
+      the loop dropped it by itself, and took the next: specs the buyer volunteered, ignored or deferred.
 
   - id: 10-fix
     show: "platform #/fixes/<fix id> : the redline, the safety gate card naming typesafe/jev-router, the replay
       before and after"
     say: >-
-      The fix is a minimal edit, shown as a redline. Before any buyer hears it, a safety gate running on Jev checks
-      it: does it add a promise, weaken an honesty rule, or contradict the prompt? Jev passed our safe test edit,
-      and blocked one that said, you may say you are human. Then the same buyers are replayed against both prompts,
-      and the failure falls from <x> to <y>.
+      The fix is three small edits, shown as a redline. Before any buyer hears it, a safety gate running on Jev checks
+      it: does it add a promise, weaken an honesty rule, or contradict the prompt? Jev passed our safe test edit, and
+      blocked one that said, you may say you are human. Then the same buyers are replayed against both prompts. The
+      failure fell from twenty five percent to zero, but over just four conversations, and looping got worse. The
+      page shows both.
 
   - id: 11-engine
     show: "platform engine scenarios: vani-meeting-v1-harm (stopped on day 10), then -win (promoted on day 16),
@@ -98,11 +100,12 @@ scenes:
       prompts. If exposures ever stop being logged, a sample ratio check halts the test.
 
   - id: 13-approve
-    show: "platform #/experiments/vani-loop-c1 : 90/10, the stated assumption, the z-path; type a name, Approve B,
+    show: "platform #/experiments/vani-loop-c1 : 90/10, the stated assumption, the z-path; type a name, Reject,
       confirm"
     say: >-
-      Cycle one's Prompt B went through exactly this test, on simulated traffic, and the page states what was
-      assumed. It crossed the win line, so it waits for a person. Approve.
+      Cycle one's Prompt B then went through the same A B test, on simulated traffic, and the page states what was
+      assumed. It crossed the win line, so it waits for a person. The person has seen the replay: looping got worse.
+      So, reject. Version one stays in production.
 
   - id: 14-live
     show: "platform #/experiments/vani-live-c1 : the one-line change, agent versions 1 and 2, Calls per arm;
@@ -126,7 +129,7 @@ scenes:
   - id: 16-again
     show: "platform #/prompts (v2 is production), then #/ (cycle 2 opened on v2), then #/docs"
     say: >-
-      Prompt B is now production, and cycle two has already opened on it. Everything is documented in the Docs
+      And cycle two has already opened on version one, to try the next cause. Everything is documented in the Docs
       tab.
 
   - id: 17-close
