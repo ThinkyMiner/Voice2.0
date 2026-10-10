@@ -31,7 +31,6 @@ export const day = (ts) => (ts ? dt(ts).toLocaleDateString("en-IN", { day: "nume
 export const short = (sha, n = 8) => (sha ? String(sha).slice(0, n) : "—");
 export const words = (s) => (s.match(/\S+/g) || []).length;
 export const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-export const pad2 = (n) => String(n).padStart(2, "0");
 
 /** Counts or shares -> shares; `n` is the total when counts were given. */
 export function shares(o) {
@@ -53,8 +52,11 @@ const STATES = {
 };
 export const stateChip = (s) => { const [l, c] = STATES[s] || [cap(String(s || "—").toLowerCase().replaceAll("_", " ")), ""]; return html`<span class="chip ${c}"><i></i>${l}</span>`; };
 export const typeChip = (t) => html`<span class="chip t-${t}" title="Root type: ${t}"><i></i>${t}</span>`;
-export const FLAGS = { wrong_requirement: "Wrong requirement", frustration: "Frustration", loop: "Loop", low_confidence: "Low confidence", human_request: "Asked for a human" };
+export const FLAGS = { human_request: "Asked for a human", frustration: "Frustration", wrong_requirement: "Wrong requirement", loop: "Loop", low_confidence: "Low confidence" };
 export const flagChip = (f) => html`<span class="chip ${f === "wrong_requirement" || f === "frustration" ? "harm" : f === "loop" ? "warn" : f === "human_request" ? "info" : ""}">${FLAGS[f] || f}</span>`;
+const FLAG_AT = Object.keys(FLAGS);
+/** A call's flags in one fixed order (FLAGS), so a list of calls scans down a column. */
+export const flagChips = (fs) => [...fs].sort((a, b) => (FLAG_AT.indexOf(a) + 1 || 99) - (FLAG_AT.indexOf(b) + 1 || 99)).map(flagChip);
 export const STAGES = [
   ["listen", "Listen", "Transcribe recordings"], ["judge", "Judge", "Grade every call"], ["improve", "Improve", "Rank causes, write Prompt B"],
   ["gate", "Gate", "Safety checks"], ["replay", "Replay", "Simulated before and after"], ["prove", "Prove", "10% A/B, simulated traffic"],
@@ -100,4 +102,47 @@ export const gradeLegend = () => html`<div class="legend"><span><i class="s-pass
 
 export function seg(options, current, attr = "data-v") {
   return html`<div class="seg" role="group">${options.map(([v, label]) => html`<button type="button" ${raw(attr)}="${v}" aria-pressed="${String(v) === String(current)}">${label}</button>`)}</div>`;
+}
+
+// ------------------------------------------- agreement with IndiaMART's QA auditors, per rubric
+/** Plain words for Cohen's kappa, the same on every page, for a reader who has never met kappa. */
+export const kappaWord = (k) => (k == null ? "not measurable" : k < 0.2 ? "about chance" : k < 0.4 ? "weak"
+  : k < 0.6 ? "moderate" : k < 0.8 ? "good" : "strong");
+/** One rubric's AgreementReport row as words; no row means no QA column, so only the judge grades it. */
+export function agreement(row) {
+  if (!row) return { weak: true, text: "No QA column: only the judge checks this", short: "Judge only" };
+  return { weak: row.kappa == null || row.kappa < 0.4 || row.accuracy < 0.6, short: `${pct(row.accuracy, 0)} · κ ${fix(row.kappa)}`,
+    text: `Matches QA auditors on ${pct(row.accuracy, 0)} of ${int(row.n)} calls · κ ${fix(row.kappa)}, ${kappaWord(row.kappa)}` };
+}
+export const agreeLine = (row) => {
+  const a = agreement(row);
+  return html`<div class="agree-line ${a.weak ? "weak" : "ok"}" title="Cohen's κ discounts agreement by chance: 0 is chance level, 1 is perfect.">${a.text}</div>`;
+};
+
+// ------------------------------------------------ failed loads and confirmations (shell, loop pages)
+/** A load that failed, in the server's own words, with a way on: Retry (app.js re-runs the route on
+ *  [data-retry]) and an optional way back, e.g. ["All experiments", "#/experiments"]. */
+export function failState(err, back = null) {
+  const s = err?.status;
+  const title = s === 404 ? "Not found" : s ? `The platform answered with an error (${s})` : "The platform is not answering";
+  const body = !s ? `${err?.message || err}. Start it with make platform, then retry.`
+    : s >= 500 ? `The platform is running, but this request failed on the server: ${err.message}. Its log has the cause.` : String(err.message || "");
+  return html`<div class="empty" role="alert">${raw(s === 404 ? GLYPH.doc : GLYPH.lock)}<h3>${title}</h3>${body ? html`<p>${body}</p>` : ""}
+    <div class="row" style="justify-content:center">${s === 404 ? "" : html`<button class="btn" type="button" data-retry>Retry</button>`}${back ? html`<a class="btn ${s === 404 ? "" : "ghost"}" href="${back[1]}">${back[0]}</a>` : ""}</div></div>`;
+}
+
+/** Ask before a step that changes real state. Resolves true only on the confirm button; Esc, Cancel
+ *  and a click outside resolve false. `body` is html``. */
+export function confirmDialog({ title, body, ok = "Continue", tone = "primary" }) {
+  const d = document.createElement("dialog");
+  d.className = "confirm";
+  d.setAttribute("aria-labelledby", "confirm-t");
+  mount(d, html`<form method="dialog"><h3 id="confirm-t">${title}</h3><div class="confirm-body">${body}</div>
+    <div class="row confirm-actions"><button class="btn" value="cancel" autofocus>Cancel</button><button class="btn ${tone}" value="ok">${ok}</button></div></form>`);
+  document.body.append(d);
+  return new Promise((done) => {
+    d.addEventListener("close", () => { done(d.returnValue === "ok"); d.remove(); });
+    d.addEventListener("click", (e) => { if (e.target === d) d.close(); });
+    d.showModal();
+  });
 }
