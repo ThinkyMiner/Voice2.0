@@ -11,6 +11,7 @@ import * as experiments from "./pages/experiments.js";
 import * as rubrics from "./pages/rubrics.js";
 import * as prompts from "./pages/prompts.js";
 import * as settings from "./pages/settings.js";
+import * as docs from "./pages/docs.js";
 
 const ROUTES = [  // [pattern, nav key, section label, render]
   [/^$/, "loop", "Loop", home.render],
@@ -25,6 +26,7 @@ const ROUTES = [  // [pattern, nav key, section label, render]
   [/^rubrics$/, "rubrics", "Rubrics", rubrics.renderLibrary],
   [/^rubrics\/(.+)$/, "rubrics", "Rubrics", rubrics.renderStudio],
   [/^prompts$/, "prompts", "Prompts", prompts.render],
+  [/^docs(?:\/[a-z0-9-]+)?$/, "docs", "Docs", docs.render],  // no capture: the crumb stays "Docs"; docs.js reads the section
   [/^settings$/, "settings", "Settings", settings.render],
 ];
 
@@ -98,7 +100,8 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncTheme)
 // ----------------------------------------------------------------------------------- palette
 const pal = $("#palette"), palQ = $("#pal-q"), palList = $("#pal-list");
 const PAGES = [["Loop", "#/"], ["Calls", "#/calls"], ["Audit", "#/audit"], ["Rubrics", "#/rubrics"], ["Rubric studio: new rubric", "#/rubrics/new"],
-  ["Issues", "#/issues"], ["Fixes", "#/fixes"], ["Prompts", "#/prompts"], ["Experiments", "#/experiments"], ["Settings", "#/settings"]];
+  ["Issues", "#/issues"], ["Fixes", "#/fixes"], ["Prompts", "#/prompts"], ["Experiments", "#/experiments"], ["Settings", "#/settings"],
+  ["Docs", "#/docs"]];
 let palItems = null, palSel = 0, palShown = [];
 
 async function loadPalette() {
@@ -109,6 +112,7 @@ async function loadPalette() {
   if (x.status === "fulfilled") items.push(...x.value.items.map((i) => ({ k: "Experiment", t: i.experiment_id, s: i.state, href: `#/experiments/${enc(i.experiment_id)}` })));
   if (f.status === "fulfilled") items.push(...f.value.items.map((i) => ({ k: "Fix", t: i.id, s: i.rationale || "", href: `#/fixes/${enc(i.id)}` })));
   if (r.status === "fulfilled") items.push(...r.value.items.map((i) => ({ k: "Rubric", t: i.name, s: i.category, href: `#/rubrics/${enc(i.id)}` })));
+  items.push(...docs.SECTIONS.map(([id, t]) => ({ k: "Docs", t, href: `#/docs/${id}` })));  // last: typing "docs" lists them all
   return items;
 }
 

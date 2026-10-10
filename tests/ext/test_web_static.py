@@ -15,7 +15,7 @@ from abtest.ext.models import (AgreementReport, CallAudit, Cycle, Fix, PromptVer
                                Transcript)
 
 WEB = Path(__file__).resolve().parents[2] / "src" / "abtest" / "ext" / "web"
-PAGES = ["home", "audit", "calls", "issues", "fixes", "experiments", "rubrics", "prompts", "settings"]
+PAGES = ["home", "audit", "calls", "issues", "fixes", "experiments", "rubrics", "prompts", "settings", "docs"]
 
 
 @pytest.fixture(scope="module")
@@ -97,6 +97,27 @@ def test_demo_calls_are_invented_and_self_consistent(demo):
     assert not re.search(r"(?<!\d)(\+91[\s-]?)?[6-9]\d{9}(?!\d)", blob), "a phone-number-like digit run"
     assert "amazonaws" not in blob and "s3://" not in blob
 
+
+def test_docs_links_land_and_its_copied_facts_match_the_code():
+    """pages/docs.js hard-codes the gate checks, the built-in rubrics and the headline's planned boundaries:
+    a change in the code must show up here. Every #/docs/<id> link must land on a section."""
+    from abtest import boundaries, config, power
+    from abtest.ext import improve, rubrics
+    js = (WEB / "pages" / "docs.js").read_text(encoding="utf-8")
+    ids = re.findall(r'\["([a-z]+)", "[^"]+"\]', re.search(r"SECTIONS = \[(.*?)\n\];", js, re.S)[1])
+    assert ids and sorted(re.findall(r'sec\("([a-z]+)"', js)) == sorted(ids)
+    assert set(re.findall(r"#/docs/([a-z0-9-]+)", js)) <= set(ids)
+    for cid, blocking, question in improve.GATE_CHECKS:
+        assert f'["{cid}", {str(blocking).lower()}, "{question}"]' in js, cid
+    built = rubrics.builtin()
+    assert len(built) == len(re.findall(r'\["[^"]+", "(?:prompt|flow|asr|knowledge|platform)"', js))
+    for r in built:
+        assert f'["{r.name}", "{r.root_type}"' + (", true]" if r.needs_audio else "]") in js, r.name
+    cfg = config.load_experiment("configs/experiments/vani-meeting-v1.yaml")
+    t = power.planned_info_fractions(cfg)
+    plan = {k: [float(x) for x in re.search(rf"{k}: \[([^\]]+)\]", js)[1].split(",")] for k in ("win", "harm")}
+    assert plan["win"] == [round(x, 3) for x in boundaries.win_boundaries(t, cfg.alpha_win)]
+    assert plan["harm"] == [-round(x, 3) for x in boundaries.harm_boundaries(t, cfg.alpha_harm)]
 
 
 CASES = [  # (Prompt A line, Prompt B line): the redline must read as B with deletions hidden, as A with insertions hidden
