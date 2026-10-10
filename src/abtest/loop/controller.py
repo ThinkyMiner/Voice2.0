@@ -230,9 +230,44 @@ def _observe(run: _Run) -> pd.DataFrame:
     return scores
 
 
+STALE_GENERATIONS = 2   # a target attacked without success in this many recent generations is rested
+
+
+def _stale_targets(run: _Run) -> set[str]:
+    """Targets of the candidates of the last STALE_GENERATIONS generations that ended without a
+    promotion. Measured 10 Oct: with an unchanged prompt the diagnosis repeats exactly, and seven
+    generations attacked the same three criteria; resting them lets the loop try the next ones."""
+    ctx, store = run.ctx, loop_module("store_loop")
+    gens = [g for g in store.get_generations(ctx.conn, ctx.loop_id)
+            if g.generation < run.gen.generation and g.state == "GEN_END"][-STALE_GENERATIONS:]
+    if len(gens) < STALE_GENERATIONS or any(g.terminal == "PROMOTED" for g in gens):
+        return set()
+    out: set[str] = set()
+    for g in gens:
+        for c in store.get_candidates(ctx.conn, ctx.loop_id, g.generation):
+            out.update(c.targets)
+    return out
+
+
+def _rotate(diagnosis: pd.DataFrame, stale: set[str], top_k: int) -> pd.DataFrame:
+    """Re-pick the targets: the top_k failing criteria not in `stale`, topped up from `stale` only
+    when too few others are failing at all."""
+    d = diagnosis.copy()
+    fresh = [i for i in d.index if d.at[i, "criterion_id"] not in stale and d.at[i, "n_leads"] > 0
+             and d.at[i, "failure_rate"] > 0]
+    rest = [i for i in d.index if i not in fresh and d.at[i, "n_leads"] > 0 and d.at[i, "failure_rate"] > 0]
+    chosen = (fresh + rest)[:top_k]
+    d["target"] = d.index.isin(chosen)
+    return d
+
+
 def _diagnose(run: _Run, scores: pd.DataFrame) -> dict[str, list[str]]:
     ctx, store, dx = run.ctx, loop_module("store_loop"), loop_module("diagnose")
     run.diagnosis = dx.diagnose(scores, ctx.rubric, ctx.cfg.diagnose.top_k)
+    if stale := _stale_targets(run):
+        run.diagnosis = _rotate(run.diagnosis, stale, ctx.cfg.diagnose.top_k)
+        run.note("DIAGNOSED", f"Rested targets attacked without success in the last {STALE_GENERATIONS} "
+                              f"generations: {', '.join(sorted(stale))}.")
     targets = [str(t) for t in run.diagnosis.loc[run.diagnosis["target"].astype(bool), "criterion_id"]]
     transcripts = store.get_transcripts(ctx.conn, call_ids=scores["call_id"].tolist())
     run.note("DIAGNOSED", f"Targets: {', '.join(targets) or 'none'}.")

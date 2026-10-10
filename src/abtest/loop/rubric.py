@@ -9,7 +9,7 @@ gate only. Pure functions, no model call.
 
 import importlib
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 
 import yaml
@@ -87,11 +87,14 @@ def _resolve_aggregate(path: str) -> Callable[[dict[str, JudgeAnswer], Rubric], 
     return fn
 
 
-def score_from_answers(rubric: Rubric, answers: Mapping[str, JudgeAnswer]) -> tuple[float, float, tuple[str, ...]]:
+def score_from_answers(rubric: Rubric, answers: Mapping[str, JudgeAnswer],
+                       skip: Collection[str] = ()) -> tuple[float, float, tuple[str, ...]]:
     """(rubric_score, rubric_risk, failed criterion ids). Extra answers are ignored; a missing one
     raises ValueError naming it.
 
-    rubric_score = sum(w * g) / sum(w); the `aggregate` hook replaces only this number.
+    rubric_score = sum(w * g) / sum(w) over the criteria not in `skip`; the `aggregate` hook replaces
+                   only this number. A skipped criterion is not applicable to this call (for example
+                   closure on a bot test cut off before the call ended) and is never in `failed`.
     rubric_risk  = 1 - prod(1 - p_i) over rubric.risk, p_i the risk criterion's yes probability;
                    independence is an approximation, as §L2.2 documents.
     """
@@ -99,8 +102,9 @@ def score_from_answers(rubric: Rubric, answers: Mapping[str, JudgeAnswer]) -> tu
         raise ValueError(f"rubric {rubric.id}: no judge answer for {missing}")
     g = {c.id: goodness(c, answers[c.id]) for c in rubric.criteria}
 
+    counted = [c for c in rubric.criteria if c.id not in skip] or list(rubric.criteria)
     if rubric.aggregate == "weighted_mean":
-        score = sum(c.weight * g[c.id] for c in rubric.criteria) / sum(c.weight for c in rubric.criteria)
+        score = sum(c.weight * g[c.id] for c in counted) / sum(c.weight for c in counted)
     else:
         score = float(_resolve_aggregate(rubric.aggregate)(dict(answers), rubric))
         if not math.isfinite(score) or not 0.0 <= score <= 1.0:
@@ -111,5 +115,5 @@ def score_from_answers(rubric: Rubric, answers: Mapping[str, JudgeAnswer]) -> tu
         survive *= 1.0 - _clip01(_finite(answers[cid].value, cid))
     risk = 1.0 - survive
 
-    failed = tuple(c.id for c in rubric.criteria if _fails(c, answers[c.id], g[c.id], rubric))
+    failed = tuple(c.id for c in rubric.criteria if c.id not in skip and _fails(c, answers[c.id], g[c.id], rubric))
     return _clip01(score), _clip01(risk), failed

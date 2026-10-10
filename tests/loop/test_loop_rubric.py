@@ -232,3 +232,15 @@ def test_hook_is_not_called_when_an_answer_is_missing(agg_module):
     with pytest.raises(ValueError, match="no judge answer"):
         score_from_answers(r, answers(a=0.1))
     assert "args" not in agg_module
+
+
+def test_a_skipped_criterion_is_out_of_the_score_and_never_failed():
+    # closure needs the call's end; a bot test cut off at max_turns must not fail it (10 Oct)
+    from abtest.loop.rubric import score_from_answers
+    r = load_rubric(RUBRICS_DIR / "vani-call-quality-v1.yaml")
+    bad_closure = {c.id: JudgeAnswer(criterion_id=c.id, value=(1.0 if c.id == "closure" else
+                   (0.0 if c.kind == "yes_no" else 5.0)), provider="t") for c in r.criteria}
+    full, _, failed = score_from_answers(r, bad_closure)
+    skipped, _, failed_skip = score_from_answers(r, bad_closure, ("closure",))
+    assert "closure" in failed and "closure" not in failed_skip
+    assert skipped == pytest.approx(1.0) and full < 1.0

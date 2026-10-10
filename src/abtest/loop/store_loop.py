@@ -28,7 +28,8 @@ from abtest.contracts import DB_PATH
 from abtest.loop.contracts import (RUBRICS_DIR, Candidate, Criterion, Generation, JudgeAnswer, Rubric,
                                    RubricScore, SpendRow, Transcript, sha256_json)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2   # 2: loop_candidates keyed by (loop_id, candidate_id); 1 keyed by candidate_id
+                     # alone, so a new loop overwrote an older loop's candidates with the same id
 
 LOOP_SCHEMA = """
 CREATE TABLE IF NOT EXISTS loop_schema_version (
@@ -63,10 +64,11 @@ CREATE TABLE IF NOT EXISTS loop_generations (
 );
 
 CREATE TABLE IF NOT EXISTS loop_candidates (
-    candidate_id TEXT PRIMARY KEY,
+    candidate_id TEXT NOT NULL,
     loop_id      TEXT NOT NULL,
     generation   INTEGER NOT NULL,
-    payload      TEXT NOT NULL     -- Candidate.model_dump_json()
+    payload      TEXT NOT NULL,    -- Candidate.model_dump_json()
+    PRIMARY KEY (loop_id, candidate_id)   -- ids like g1-c1 repeat in every loop (schema 2)
 );
 CREATE INDEX IF NOT EXISTS loop_candidates_loop ON loop_candidates(loop_id, generation);
 
@@ -93,10 +95,29 @@ _BASE_SCORE_COLUMNS = ["call_id", "lead_id", "prompt_hash", "rubric_score", "rub
 _IN_CHUNK = 500  # stay well under SQLite's bound-variable limit
 
 
+def _migrate_candidates(conn: sqlite3.Connection) -> None:
+    """Schema 1 -> 2: rebuild loop_candidates with the (loop_id, candidate_id) key, keeping its rows
+    and their order. Rows a newer loop already overwrote in schema 1 cannot be recovered; the
+    generation reports under reports/loop/ keep those candidates."""
+    cols = conn.execute("PRAGMA table_info(loop_candidates)").fetchall()
+    if not cols:
+        return  # fresh database: LOOP_SCHEMA creates the new table
+    pk = [c[1] for c in sorted(cols, key=lambda c: c[5]) if c[5]]
+    if pk == ["loop_id", "candidate_id"]:
+        return
+    conn.execute("ALTER TABLE loop_candidates RENAME TO loop_candidates_v1")
+    conn.execute("DROP INDEX IF EXISTS loop_candidates_loop")
+    conn.executescript(LOOP_SCHEMA)
+    conn.execute("INSERT OR IGNORE INTO loop_candidates (candidate_id, loop_id, generation, payload) "
+                 "SELECT candidate_id, loop_id, generation, payload FROM loop_candidates_v1 ORDER BY rowid")
+    conn.execute("DROP TABLE loop_candidates_v1")
+
+
 def connect_loop(path: str | Path | None = None) -> sqlite3.Connection:
     """store.connect(path or DB_PATH) plus the loop tables (CREATE IF NOT EXISTS, loop_schema_version)."""
     conn = store.connect(path or DB_PATH)
     with conn:
+        _migrate_candidates(conn)
         conn.executescript(LOOP_SCHEMA)
         conn.execute("INSERT OR IGNORE INTO loop_schema_version VALUES (?, ?)",
                      (SCHEMA_VERSION, datetime.now().isoformat(timespec="seconds")))
@@ -228,8 +249,8 @@ def get_scores(conn: sqlite3.Connection, rubric_hash: str, prompt_hash: str | No
         by_id = {a.criterion_id: a for a in s.answers}
         rec = {"call_id": call_id, "lead_id": lead_id, "prompt_hash": p_hash,
                "rubric_score": score, "rubric_risk": risk, "failed": tuple(s.failed)}
-        for c in criteria:
-            rec[c.id] = _goodness(c, by_id[c.id]) if c.id in by_id else float("nan")
+        for c in criteria:  # a criterion skipped for this call (not applicable) has no goodness
+            rec[c.id] = _goodness(c, by_id[c.id]) if c.id in by_id and c.id not in s.skipped else float("nan")
         records.append(rec)
     return pd.DataFrame(records, columns=_BASE_SCORE_COLUMNS + [c.id for c in criteria])
 
@@ -250,11 +271,11 @@ def get_generations(conn: sqlite3.Connection, loop_id: str) -> list[Generation]:
 
 
 def put_candidate(conn: sqlite3.Connection, c: Candidate, loop_id: str) -> None:
-    """Upsert by candidate_id; the row keeps its position when a later stage updates its status."""
+    """Upsert by (loop_id, candidate_id); the row keeps its position when a later stage updates it."""
     with conn:
         conn.execute(
             "INSERT INTO loop_candidates (candidate_id, loop_id, generation, payload) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(candidate_id) DO UPDATE SET loop_id = excluded.loop_id, "
+            "ON CONFLICT(loop_id, candidate_id) DO UPDATE SET "
             "generation = excluded.generation, payload = excluded.payload",
             (c.candidate_id, loop_id, c.generation, c.model_dump_json()))
 

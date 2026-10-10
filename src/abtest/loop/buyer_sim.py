@@ -15,6 +15,7 @@ under a `SCRIPT_LINES:` header, one `- ` line each, which is the block the stub 
 
 from pathlib import Path
 
+import re
 import yaml
 
 from abtest.loop import render
@@ -86,6 +87,14 @@ def _seconds(text: str) -> float:
 
 NO_REPLY = "[the bot gave no reply]"
 
+# A call has ended when the person says goodbye (the bot then gets one last turn to close) or the bot
+# closes it. Bot tests used to stop at a fixed turn count, so no call reached its end and closure was
+# unmeasurable (10 Oct); now a call runs until it ends or hits max_turns, and records which.
+_PERSON_CLOSE = re.compile(r"dhanyava+d|dhanyavad|shukriya|thank(s| you)|\bbye\b|alvida|rakhta hoon|rakhti hoon|"
+                           r"band karo|call (rakh|kaat)|namaste\W*$|dhanyavadalu", re.I)
+_BOT_CLOSE = re.compile(r"dhanyava+d|thank you for (your )?(time|calling)|aapka din|have a (good|nice|great) day|"
+                        r"\bbye\b|alvida|call (end|disconnect|kaat)|shubh din", re.I)
+
 
 def converse(prompt_template: str, card: PersonaCard, provider: Provider, max_turns: int,
              call_id: str) -> Transcript:
@@ -110,6 +119,7 @@ def converse(prompt_template: str, card: PersonaCard, provider: Provider, max_tu
         turns.append(Turn(role=role, start_s=clock, end_s=end, text=text))
         clock = round(end + PAUSE_S, 2)
 
+    ended, closing = False, False
     for _ in range(max_turns):
         try:
             bot_text = provider.chat("bot", bot_msgs).strip()
@@ -124,6 +134,9 @@ def converse(prompt_template: str, card: PersonaCard, provider: Provider, max_tu
             say("bot", NO_REPLY)
             break
         say("bot", bot_text)
+        if closing or (len(turns) > 2 and _BOT_CLOSE.search(bot_text)):
+            ended = True  # the bot closed the call, or answered the person's goodbye
+            break
         bot_msgs.append({"role": "assistant", "content": bot_text})
         person_msgs.append({"role": "user", "content": bot_text})
         person_text = provider.chat("buyer", person_msgs).strip()
@@ -132,7 +145,8 @@ def converse(prompt_template: str, card: PersonaCard, provider: Provider, max_tu
         say("buyer", person_text)
         bot_msgs.append({"role": "user", "content": person_text})
         person_msgs.append({"role": "assistant", "content": person_text})
+        closing = bool(_PERSON_CLOSE.search(person_text))  # the bot gets one last turn to close
 
     return Transcript(call_id=call_id, source="bot_test", language=card.language, turns=tuple(turns),
                       role_confidence=1.0, stt_model="text",
-                      audio_seconds=turns[-1].end_s if turns else 0.0)
+                      audio_seconds=turns[-1].end_s if turns else 0.0, ended=ended)

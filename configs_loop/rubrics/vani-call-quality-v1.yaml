@@ -25,7 +25,7 @@ criteria:
      text: "Did the person ask to speak to a human?"}
   - {id: requirement_captured, kind: score_1_5, polarity: good, weight: 3,
      text: "How completely did the bot capture what it needed from the person (for example product, quantity, location, interest)?"}
-  - {id: closure, kind: score_1_5, polarity: good, weight: 2,
+  - {id: closure, kind: score_1_5, polarity: good, weight: 2, needs_ended: true,
      text: "Did the call end with a clear next step the person understood?"}
 risk: [claimed_human, false_assurance, looping, frustration, asked_for_human]
 aggregate: weighted_mean

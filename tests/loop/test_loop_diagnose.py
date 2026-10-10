@@ -116,8 +116,9 @@ def test_diagnose_rejects_bad_input():
         diagnose(pd.DataFrame({"a": [0.1], "b": [0.1]}), r, 1)
     with pytest.raises(ValueError, match="no scored calls"):
         diagnose(frame([], ["a", "b"]), r, 1)
-    with pytest.raises(ValueError, match="criterion 'b'"):
-        diagnose(frame([["L1", 0.0, np.nan]], ["a", "b"]), r, 1)
+    # a criterion with no applicable call (e.g. closure when no bot test ended) is reported, never a target
+    out = diagnose(frame([["L1", 0.0, np.nan]], ["a", "b"]), r, 2).set_index("criterion_id")
+    assert out.at["b", "n_leads"] == 0 and not out.at["b", "target"] and out.at["a", "target"]
 
 
 def test_diagnose_ignores_extra_columns_and_input_order():

@@ -235,8 +235,11 @@ def stub():
 def test_stub_buyer_replays_the_script_then_closes(stub):
     c = card(script=("line zero", "line one"))
     t = buyer_sim.converse(TEMPLATE, c, stub, max_turns=4, call_id="c")
-    assert [x.text for x in t.turns if x.role == "buyer"] == ["line zero", "line one", "Theek hai, dhanyavaad.",
-                                                              "Theek hai, dhanyavaad."]
+    # the person's goodbye gives the bot one last turn, then the call has ended (no more fixed turns)
+    assert [x.text for x in t.turns if x.role == "buyer"] == ["line zero", "line one", "Theek hai, dhanyavaad."]
+    assert t.turns[-1].role == "bot" and t.ended is True
+    cut = buyer_sim.converse(TEMPLATE, card(script=("a", "b", "c", "d", "e")), stub, max_turns=2, call_id="d")
+    assert cut.ended is False                      # stopped by max_turns before anyone said goodbye
 
 
 def test_stub_bot_is_prompt_sensitive_through_converse(stub):

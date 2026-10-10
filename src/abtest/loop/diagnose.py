@@ -60,17 +60,21 @@ def diagnose(scores: pd.DataFrame, rubric: Rubric, top_k: int) -> pd.DataFrame:
     rows = []
     for c in rubric.criteria:
         goodness_by_lead = by_lead[c.id].dropna()
-        if goodness_by_lead.empty:
-            raise ValueError(f"no scored lead has a value for criterion {c.id!r}")
+        if goodness_by_lead.empty:  # not applicable to any scored call (e.g. closure, no call ended)
+            rows.append({"criterion_id": c.id, "failure_rate": float("nan"), "ci_low": float("nan"),
+                         "ci_high": float("nan"), "weight": c.weight, "weighted_cost": float("nan"),
+                         "n_leads": 0})
+            continue
         rate, lo, hi = mean_ci95(1.0 - goodness_by_lead.to_numpy())
         rate = min(1.0, max(0.0, rate))
         rows.append({"criterion_id": c.id, "failure_rate": rate, "ci_low": lo, "ci_high": hi,
                      "weight": c.weight, "weighted_cost": c.weight * rate, "n_leads": len(goodness_by_lead)})
     out = pd.DataFrame(rows)
-    order = sorted(range(len(out)), key=lambda i: (-out.at[i, "weighted_cost"], i))
+    cost = out["weighted_cost"].fillna(-1.0)  # a criterion with no applicable call ranks last
+    order = sorted(range(len(out)), key=lambda i: (-cost.iat[i], i))
     out = out.iloc[order].reset_index(drop=True)
     out["rank"] = np.arange(1, len(out) + 1)
-    out["target"] = out["rank"] <= top_k
+    out["target"] = (out["rank"] <= top_k) & out["n_leads"].gt(0)
     return out[OUT_COLUMNS]
 
 

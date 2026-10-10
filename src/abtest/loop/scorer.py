@@ -134,9 +134,12 @@ def score_calls(transcripts: Iterable[Transcript], rubric: Rubric, provider) -> 
             failed_ids.append(t.call_id)
             log.warning("score_calls: judge failed on one call (%s); skipped", type(e).__name__)
             continue
-        score, risk, failed = score_from_answers(rubric, {a.criterion_id: a for a in answers})
+        # a criterion that needs the call's end is not applicable when the call was cut off
+        skip = tuple(c.id for c in rubric.criteria if c.needs_ended and t.ended is False)
+        score, risk, failed = score_from_answers(rubric, {a.criterion_id: a for a in answers}, skip)
         scores.append(RubricScore(call_id=t.call_id, rubric_hash=h, judge_model=rubric.judge.model,
-                                  answers=tuple(answers), rubric_score=score, rubric_risk=risk, failed=failed))
+                                  answers=tuple(answers), rubric_score=score, rubric_risk=risk, failed=failed,
+                                  skipped=skip))
     if skipped:
         log.info("score_calls: skipped %d transcript(s) with no bot turn or fewer than 2 turns", skipped)
     if failed_ids:

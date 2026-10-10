@@ -11,7 +11,7 @@ the base only through its public functions (PLAN_LOOP.md §L1.2).
 
 import hashlib
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -67,6 +67,9 @@ class Criterion(_Frozen):
     weight: float = Field(gt=0)        # every weight is positive; polarity carries the direction
     text: str = Field(min_length=1)
     hard: bool = False                 # the dogfood gate requires every call to pass a hard criterion
+    # judged only on a call that reached its end: a bot test cut off at max_turns cannot show closure
+    # (measured 10 Oct: closure failed 77% for every prompt in 3-turn tests, so no patch could move it)
+    needs_ended: bool = False
 
 
 class JudgeSettings(_Frozen):
@@ -144,6 +147,7 @@ class Transcript(_Frozen):
     role_confidence: float = Field(ge=0, le=1)
     stt_model: str
     audio_seconds: float
+    ended: bool | None = None          # did the call reach its natural end? None = unknown (real calls)
 
 
 class RubricScore(_Frozen):
@@ -154,6 +158,7 @@ class RubricScore(_Frozen):
     rubric_score: float = Field(ge=0, le=1)
     rubric_risk: float = Field(ge=0, le=1)
     failed: tuple[str, ...]            # criterion ids failing per pass_thresholds (labels for diagnosis/dogfood only)
+    skipped: tuple[str, ...] = ()      # criteria not applicable to this call (needs_ended on a cut-off call)
 
 
 # --- candidates, bot tests, generations (§L2.5-2.9) ---------------------------------------
@@ -504,8 +509,10 @@ class RubricModule:  # src/abtest/loop/rubric.py — L1 agent B
     def goodness(criterion: Criterion, answer: JudgeAnswer) -> float: ...
 
     @staticmethod
-    def score_from_answers(rubric: Rubric, answers: Mapping[str, JudgeAnswer]) -> tuple[float, float, tuple[str, ...]]:
-        """(rubric_score, rubric_risk, failed criterion ids)."""
+    def score_from_answers(rubric: Rubric, answers: Mapping[str, JudgeAnswer],
+                           skip: Collection[str] = ()) -> tuple[float, float, tuple[str, ...]]:
+        """(rubric_score, rubric_risk, failed criterion ids); criteria in `skip` are left out of the
+        score and of `failed` (not applicable to this call)."""
 
 
 class ScorerModule:  # src/abtest/loop/scorer.py — L1 agent B
