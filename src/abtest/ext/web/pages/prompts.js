@@ -2,7 +2,7 @@
 // loop; the reader opens a candidate on its edits and any version's full text with a find box.
 import { get, text, state } from "../api.js";
 import { $, $$, html, mount, int, pct, words, day, short, stateChip, empty, enc } from "../ui.js";
-import { wordDiff } from "./fixes.js";
+import { wordDiff, causesOf } from "./fixes.js";
 
 const AB = { PROMOTED: "A/B promoted", PENDING_APPROVAL: "A/B waiting for approval", STOPPED_HARM: "A/B stopped for harm", BLOCKED_GUARDRAIL: "A/B blocked by the guardrail",
   INCONCLUSIVE: "A/B inconclusive", HALTED_SRM: "A/B halted, untrusted", REJECTED: "A/B rejected", RUNNING: "A/B running" };
@@ -12,7 +12,7 @@ export async function render(el, { params }) {
     get("/api/fixes").catch(() => ({ items: [] })), get("/api/experiments").catch(() => ({ items: [] }))]);
   if (!pr.items.length) return mount(el, empty({ title: "No prompt versions", body: "The registry starts with the production prompt, v1.", cmd: "make loop", glyph: "doc" }));
   const by = Object.fromEntries(pr.items.map((p) => [p.version, p]));
-  const fixBy = Object.fromEntries(fx.items.map((f) => [f.id, f]));
+  const fixBy = Object.fromEntries(fx.items.map((f) => [f.id, f])), rc = await causesOf(fx.items);
   const cycBy = Object.fromEntries((ov?.cycles || []).filter((c) => c.fix_id).map((c) => [c.fix_id, c]));
   const xBy = Object.fromEntries(xs.items.map((x) => [x.experiment_id, x]));
   const depth = (p, n = 0) => (p.parent && by[p.parent] && n < 64 ? depth(by[p.parent], n + 1) + 1 : 0);
@@ -36,7 +36,7 @@ export async function render(el, { params }) {
       <div class="gen">${g.map((p) => html`<button class="pv ${p.status}" type="button" data-v="${p.version}" aria-pressed="${p.version === sel}">
         <span class="pv-top"><span class="v">${p.version}</span>${stateChip(p.status)}</span>
         <span class="m">${p.parent ? `from ${p.parent}` : "original"} · ${day(p.created_ts)}</span>
-        ${p.fix_id ? html`<span class="m mono" title="${p.fix_id}">fix ${p.fix_id}</span>` : ""}
+        ${p.fix_id ? html`<span class="pv-fix" title="${p.fix_id}">Fixes: ${rc[fixBy[p.fix_id]?.root_cause_id]?.name || p.fix_id}</span>` : ""}
         <span class="w">${where(p)}</span>
         <span class="go">Read ${p.version} →</span></button>`)}</div>`)}</div>
 

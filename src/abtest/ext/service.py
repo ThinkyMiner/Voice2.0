@@ -276,6 +276,8 @@ def overview() -> dict:
             "agreement_overall": agreement.overall_accuracy if agreement else None,
             "agreement_kappa": agreement.overall_kappa if agreement else None,
             "fatal_vs_rest_accuracy": agreement.fatal_vs_rest_accuracy if agreement else None,
+            "agreement_n": agreement.n_calls if agreement else None,
+            "agreement_held_out": agreement.held_out if agreement else None,
             "root_causes": _maybe(lambda: len(_mod("improve").load_root_causes(prod.version))),
             "fixes_tested": sum(f.gate is not None or f.replay is not None for f in fixes),
             "experiments": len(_loop_cycles()), "per_week_gained": gained, "per_week_protected": protected}

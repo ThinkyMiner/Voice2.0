@@ -114,6 +114,13 @@ export function agreement(row) {
   return { weak: row.kappa == null || row.kappa < 0.4 || row.accuracy < 0.6, short: `${pct(row.accuracy, 0)} · κ ${fix(row.kappa)}`,
     text: `Matches QA auditors on ${pct(row.accuracy, 0)} of ${int(row.n)} calls · κ ${fix(row.kappa)}, ${kappaWord(row.kappa)}` };
 }
+/** An AgreementReport's checks a transcript judge can read (audio-only ones left out: `audio` holds their rubric
+ *  ids) and, best first, those in good agreement or better: κ 0.6 or more, kappaWord's "good". */
+export function goodChecks(ag, audio) {
+  const text = (ag?.rows || []).filter((r) => !audio.has(r.rubric_id));
+  return { text, good: text.filter((r) => r.kappa != null && r.kappa >= 0.6).sort((x, y) => y.kappa - x.kappa) };
+}
+export const audioIds = (rubrics) => new Set((rubrics || []).filter((r) => r.needs_audio).map((r) => r.id));
 export const agreeLine = (row) => {
   const a = agreement(row);
   return html`<div class="agree-line ${a.weak ? "weak" : "ok"}" title="Cohen's κ discounts agreement by chance: 0 is chance level, 1 is perfect.">${a.text}</div>`;

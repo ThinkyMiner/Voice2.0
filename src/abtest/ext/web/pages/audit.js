@@ -1,8 +1,8 @@
-// #/audit: can the judge be trusted (agreement with IndiaMART's QA team, beside trivial guesses),
-// the grade split on the same calls, agreement by parameter (worst first), which parameters fail
+// #/audit: can the judge be trusted (the checks it agrees with IndiaMART's QA team on, then the overall grade
+// beside trivial guesses), the grade split on the same calls, agreement by check (closest first), which parameters fail
 // most, and the calls to listen to first.
 import { get, state } from "../api.js";
-import { $, html, mount, int, pct, fix, shares, stack, gradeStack, gradeLegend, grade, flagChips, FLAGS, GRADE, empty, enc, reducedMotion, kappaWord } from "../ui.js";
+import { $, html, mount, int, pct, fix, shares, stack, gradeStack, gradeLegend, grade, flagChips, FLAGS, GRADE, empty, enc, reducedMotion, kappaWord, goodChecks, audioIds } from "../ui.js";
 import { confusion } from "../viz.js";
 import { remember, restoreScroll, modelName, forEngineers } from "./calls.js";
 
@@ -35,7 +35,8 @@ export async function render(el, { params }) {
       ${empty({ title: `${v} doesn't exist`, body: `This platform has prompt version${versions.length === 1 ? "" : "s"} ${versions.join(", ")}: pick one above.`, compact: true, glyph: "doc" })}`);
   }
   const src = params.get("source") || "";  // empty: the server's default, the calls the loop judges
-  const [a, cl] = await Promise.all([get(`/api/audit?version=${enc(v)}${src ? `&source=${enc(src)}` : ""}`).catch((err) => err), callsP]);
+  const [a, cl, rb] = await Promise.all([get(`/api/audit?version=${enc(v)}${src ? `&source=${enc(src)}` : ""}`).catch((err) => err), callsP,
+    get("/api/rubrics").catch(() => ({ items: [] }))]);
   if (a instanceof Error) {
     if (a.status !== 404) throw a;
     return mount(el, html`${head(`Judge · Prompt ${v}`, html`No audit for <em>${v}</em> yet`)}
@@ -50,7 +51,8 @@ export async function render(el, { params }) {
   const scoped = scope ? mine.filter((c) => c.source === scope) : mine;
   const complete = scoped.length > 0 && scoped.length === a.n_calls;  // per-call numbers only when the list holds every call of this audit
   const audited = complete ? scoped.filter((c) => c.human_overall && c.overall) : [];
-  const ag = a.agreement, names = Object.fromEntries((a.by_rubric || []).map((r) => [r.rubric_id, r]));
+  const ag = a.agreement, audio = audioIds(rb.items);
+  const names = Object.fromEntries([...rb.items.map((r) => [r.id, r.name]), ...(a.by_rubric || []).map((r) => [r.rubric_id, r.name])]);
   const rk = riskyCalls(a.risky || []);
   const inCalls = complete && !sim ? (qs) => `#/calls?${qs}${scope ? `&source=${enc(scope)}` : ""}` : null;  // the same calls, in the list
 
@@ -61,9 +63,9 @@ export async function render(el, { params }) {
         "The judge grades every call on IndiaMART's QA checklist, Pass, Non-fatal or Fatal per parameter; a call takes its worst parameter's grade, the QA team's own rule. First check whether the judge can be trusted, then listen to the calls it flags.",
         html`<div class="row head-actions"><button type="button" class="btn sm" data-jump="risky">Calls to listen to ↓</button><a class="btn sm ghost" href="#/issues">Ranked issues →</a></div>`)}
     ${sim ? html`<div class="note sim-note"><b>Simulated conversations.</b> No real customer heard ${v} and IndiaMART QA graded none of these, so there is no agreement to show.</div>`
-      : ag ? trust(a, ag, audited) : html`<div class="card"><div class="eyebrow">Can the judge be trusted yet?</div><p style="margin-top:10px">No agreement report yet. It compares the judge with IndiaMART's auditors on the calls they audited.</p>${forEngineers("make agreement")}</div>`}
+      : ag ? trust(a, ag, names, audio) : html`<div class="card"><div class="eyebrow">Can the judge be trusted yet?</div><p style="margin-top:10px">No agreement report yet. It compares the judge with IndiaMART's auditors on the calls they audited.</p>${forEngineers("make agreement")}</div>`}
     <div class="grid cols-3 audit-top">${coverage(a, mine, scoped, complete, sim)}${split(a, audited, complete)}</div>
-    ${ag?.rows?.length ? byParameter(ag, names) : ""}
+    ${ag?.rows?.length ? byParameter(ag, names, audio) : ""}
     ${failMost(a)}
     ${risky(rk, inCalls)}`);
 
@@ -81,27 +83,42 @@ export async function render(el, { params }) {
   restoreScroll();
 }
 
-function trust(a, ag, audited) {
-  const qa = a.human_split, qaN = sum(qa), k = ag.overall_kappa;
-  const [word, tone] = band(k);
-  const matches = Math.round(ag.overall_accuracy * ag.n_calls);
+/** Can the judge be trusted: what it gets right first (the checks in good agreement), then its overall grade and
+ *  why that lags. The trivial-guess baselines are on the same calls when the report keeps the overall confusion;
+ *  an older report has only QA's own overall grade of every call it graded, and the tiles name that base. */
+function trust(a, ag, names, audio) {
+  const k = ag.overall_kappa, n = ag.n_calls, matches = Math.round(ag.overall_accuracy * n);
+  const base = plural(n, ag.held_out ? "held-out call" : "call"), nm = (r) => names[r.rubric_id] || r.rubric_id;
+  const { text, good } = goodChecks(ag, audio);
+  const fair = text.filter((r) => r.kappa != null && r.kappa >= 0.4 && r.kappa < 0.6).length;
+  const deaf = ag.rows.filter((r) => audio.has(r.rubric_id)).map(nm);
+  const oc = ag.overall_confusion || {}, same = Object.keys(oc).length > 0;
+  const qa = same ? Object.fromEntries(["pass", "non_fatal", "fatal"].map((g) => [g, sum(oc[g])])) : a.human_split, qaN = sum(qa);
   const top = qaN ? ["pass", "non_fatal", "fatal"].reduce((x, y) => (qa[y] > qa[x] ? y : x)) : null;
-  const qaFatal = audited.filter((c) => c.human_overall === "fatal"), caught = qaFatal.filter((c) => c.overall === "fatal").length;
+  const byCheck = k != null && k < 0.4 && good.length > 0;
+  const [word, kTone] = band(k), tone = byCheck ? "warn" : kTone;
   const verdict = k == null ? "Agreement can't be measured yet." : k < 0.4 ? "Not reliable yet." : k < 0.6 ? "Use with care." : "Reliable on the overall grade.";
-  const held = ag.calibrated ? `Measured on ${plural(ag.n_calls, "audited call")} held out from tuning; the judge's grades were calibrated on ${plural(ag.n_tuning || 0, "other audited call")}.`
-    : ag.held_out ? `Measured on ${plural(ag.n_calls, "audited call")} that were not used to tune the rubrics.`
+  const held = ag.calibrated ? `Measured on ${plural(n, "audited call")} held out from tuning; the judge's grades were calibrated on ${plural(ag.n_tuning || 0, "other audited call")}.`
+    : ag.held_out ? `Measured on ${plural(n, "audited call")} that were not used to tune the rubrics.`
       : "Caution: the rubrics were tuned on these same calls, which flatters the judge.";
+  const kRange = good.length ? `Cohen's κ ${fix(good.at(-1).kappa)}${good.length > 1 ? ` to ${fix(good[0].kappa)}` : ""}` : "";
+  const chips = good.length ? html`<ul class="trust-checks">${good.map((r) => html`<li class="chip win">${nm(r)}<span class="mono">κ ${fix(r.kappa)}</span></li>`)}</ul>` : "";
+  const why = k != null && k < 0.4 ? html`<p class="trust-why"><b>Why not the overall grade yet:</b> a call takes its worst check's grade, so a miss on any one of its ${plural(text.length, "check")} can change it, and QA's grade also covers the lead record the bot saved, which the judge cannot see. On the overall grade it matches QA on ${int(matches)} of ${base}, ${k < 0.2 ? "no better than chance" : `${word} agreement`} (Cohen's κ ${fix(k)}).</p>` : "";
+  const qaBase = same ? `on the same ${base}` : `on QA's own grade of all ${plural(qaN, "call")} it graded`;
   return html`<section class="trust t-${tone || "none"}" aria-labelledby="trust-h">
     <div class="trust-say"><div class="eyebrow">Can the judge be trusted yet?</div>
-      <h2 id="trust-h"><b>${verdict}</b> It matches IndiaMART QA's overall grade on ${int(matches)} of ${plural(ag.n_calls, "call")}.</h2>
-      <p>${k != null ? `${k < 0.2 ? "That is no better than chance" : `Agreement beyond chance is ${word}`} (Cohen's κ ${fix(k)}; 0 is guessing, 1 is perfect). ` : ""}${top ? `Answering “${GRADE[top]}” on every call would match ${pct(qa[top] / qaN)} of QA's grades. ` : ""}${qaFatal.length ? `Of the ${plural(qaFatal.length, "call")} QA marked Fatal, the judge also called ${int(caught)} Fatal.` : ""}</p></div>
+      ${byCheck ? html`<h2 id="trust-h"><b>Reliable on ${good.length} of ${text.length} checks.</b> Not yet on a call's overall grade.</h2>
+        <p>On these ${good.length === 1 ? "one" : int(good.length)} its grades agree with IndiaMART QA's well beyond chance (${kRange}; 0 is guessing, 1 is perfect), on the same ${base}:</p>${chips}${why}`
+      : html`<h2 id="trust-h"><b>${verdict}</b> It matches IndiaMART QA's overall grade on ${int(matches)} of ${plural(n, "call")}.</h2>
+        <p>${k != null ? `${k < 0.2 ? "That is no better than chance" : `Agreement beyond chance is ${word}`} (Cohen's κ ${fix(k)}; 0 is guessing, 1 is perfect). ` : ""}${top ? `Answering “${GRADE[top]}” on every call would match ${pct(qa[top] / qaN)} of QA's grades, ${same ? `on the same ${base}` : `on all ${plural(qaN, "call")} it graded`}.` : ""}</p>
+        ${good.length ? html`<p>Check by check, it agrees well (κ 0.6 or more) on ${good.length} of ${text.length}:</p>${chips}` : ""}${why}`}</div>
     <dl class="trust-stats">
-      <div><dt>Overall grade matches</dt><dd>${pct(ag.overall_accuracy)}</dd><small>${int(matches)} of ${plural(ag.n_calls, "call")}</small></div>
-      ${top ? html`<div><dt>Always “${GRADE[top]}”</dt><dd>${pct(qa[top] / qaN)}</dd><small>a trivial guess, for scale</small></div>` : ""}
-      ${qaFatal.length ? html`<div><dt>QA-fatal calls caught</dt><dd>${int(caught)}<small> of ${int(qaFatal.length)}</small></dd><small>on all ${plural(audited.length, "audited call")}</small></div>` : ""}
-      <div><dt>Fatal vs not fatal</dt><dd>${pct(ag.fatal_vs_rest_accuracy)}</dd><small>${qaN ? `always “not fatal” gives ${pct(1 - qa.fatal / qaN)}` : "accuracy on that split"}</small></div>
+      ${text.length ? html`<div><dt>Checks in good agreement</dt><dd>${int(good.length)}<small> of ${int(text.length)}</small></dd><small>κ 0.6 or more${fair ? `; ${fair} more moderate` : ""}, on the ${base}</small></div>` : ""}
+      <div><dt>Overall grade matches</dt><dd>${pct(ag.overall_accuracy)}</dd><small>${int(matches)} of ${base} · κ ${fix(k)}</small></div>
+      ${top ? html`<div><dt>Always “${GRADE[top]}”</dt><dd>${pct(qa[top] / qaN)}</dd><small>a trivial guess, ${qaBase}</small></div>` : ""}
+      <div><dt>Fatal vs not fatal</dt><dd>${pct(ag.fatal_vs_rest_accuracy)}</dd><small>on the ${base}${qaN ? `; always “not fatal” gives ${pct(1 - qa.fatal / qaN)}${same ? "" : ` on QA's ${int(qaN)}`}` : ""}</small></div>
     </dl>
-    <p class="trust-foot">${held} Judge: ${modelName(ag.model)}.</p>
+    <p class="trust-foot">${held}${deaf.length ? ` ${deaf.length > 1 ? `${deaf.slice(0, -1).join(", ")} and ${deaf.at(-1)} are` : `${deaf[0]} is`} left out: ${deaf.length > 1 ? "they need" : "it needs"} the audio.` : ""} Judge: ${modelName(ag.model)}.</p>
   </section>`;
 }
 
@@ -130,10 +147,11 @@ function split(a, audited, complete) {
   if (complete && audited.length) {
     const count = (k) => shares(Object.fromEntries(["pass", "non_fatal", "fatal"].map((g) => [g, audited.filter((c) => c[k] === g).length])));
     const j = count("overall"), q = count("human_overall"), n = audited.length;
+    const qf = audited.filter((c) => c.human_overall === "fatal"), cf = qf.filter((c) => c.overall === "fatal").length;
     const say = Math.abs(j.pass - q.pass) < 0.05 && Math.abs(j.fatal - q.fatal) < 0.05 ? "On the same calls the judge is about as strict as QA."
       : `On the same calls the judge is ${j.pass < q.pass ? "harsher" : "more lenient"} than QA: it passes ${int(j.pass * n)} where QA passes ${int(q.pass * n)}, and calls ${int(j.fatal * n)} Fatal where QA marks ${int(q.fatal * n)}.`;
     return html`<div class="card span-2"><div class="card-head"><h3>Judge vs IndiaMART QA, same ${plural(n, "audited call")}</h3>${gradeLegend()}</div>
-      ${row("Judge", "", j)}${row("IndiaMART QA", "", q)}<p class="split-say">${say}</p>
+      ${row("Judge", "", j)}${row("IndiaMART QA", "", q)}<p class="split-say">${say}${qf.length ? ` Of the ${plural(qf.length, "call")} QA marked Fatal, the judge also called ${int(cf)} Fatal.` : ""}</p>
       ${a.n_audited > n ? html`<div class="split-all">${row("Judge", `all ${int(a.n_audited)} calls`, all)}</div>` : ""}</div>`;
   }
   const human = shares(a.human_split);
@@ -143,26 +161,26 @@ function split(a, audited, complete) {
       : html`<p class="muted" style="font-size:12.5px;margin-top:12px">IndiaMART QA graded none of ${a.version}'s calls.</p>`}</div>`;
 }
 
-function byParameter(ag, names) {
-  const rows = ag.rows.map((r, i) => ({ r, i })).sort((x, y) => (x.r.kappa ?? 9) - (y.r.kappa ?? 9));
+function byParameter(ag, names, audio) {  // closest agreement first; the audio-only checks, which the judge cannot read, last
+  const rows = ag.rows.map((r, i) => ({ r, i })).sort((x, y) => audio.has(x.r.rubric_id) - audio.has(y.r.rubric_id) || (y.r.kappa ?? -9) - (x.r.kappa ?? -9));
   return html`<section class="section" id="by-param">
-    <div class="section-head"><h2>Where the judge and QA <em>differ</em></h2><p>Per parameter, worst agreement first, on the ${plural(ag.n_calls, "call")} both graded. Click a row for the full grid.</p></div>
+    <div class="section-head"><h2>Check by check: where the judge <em>agrees</em> with QA</h2><p>Closest agreement first, on the ${plural(ag.n_calls, "call")} both graded. Click a row for the full grid.</p></div>
     <p class="sec-note">“Matches QA” flatters rare failures: where QA almost always says Pass, a judge that always says Pass matches nearly every call. Agreement beyond chance (Cohen's κ) corrects for that: 0 is guessing, 1 is perfect. N/A, a parameter that did not apply, counts as its own grade.</p>
     <div class="card ag-card"><table class="table ag-table" id="agree">
       <thead><tr><th>Parameter</th><th>Agreement beyond chance</th><th class="r">Matches QA</th><th class="r">QA-fatal caught</th><th>Biggest mismatch</th></tr></thead>
-      ${rows.map(({ r, i }) => paramRow(r, i, names[r.rubric_id]?.name || r.rubric_id))}
+      ${rows.map(({ r, i }) => paramRow(r, i, names[r.rubric_id] || r.rubric_id, audio.has(r.rubric_id)))}
     </table></div></section>`;
 }
 
-function paramRow(r, i, nm) {
-  const [word, tone] = band(r.kappa), cm = r.confusion || {};
+function paramRow(r, i, nm, deaf) {  // deaf: an audio-only check, graded N/A from a transcript, so not compared
+  const [word, tone] = deaf ? ["needs audio, not graded", ""] : band(r.kappa), cm = r.confusion || {};
   const qaF = sum(cm.fatal), usual = CLS.reduce((x, y) => (sum(cm[y]) > sum(cm[x]) ? y : x));
   let miss = null;
   for (const q of CLS) for (const j of CLS) if (q !== j && (cm[q]?.[j] || 0) > (miss?.n || 0)) miss = { q, j, n: cm[q][j] };
   return html`<tbody class="ag-p t-${tone || "none"}">
     <tr class="link">
       <td class="ag-name"><button type="button" class="ag-toggle" aria-expanded="false" aria-controls="cm-${i}"><i aria-hidden="true">›</i>${nm}</button></td>
-      <td class="ag-band"><span class="chip ${tone}">${word}</span> <span class="mono muted">κ ${fix(r.kappa)}</span></td>
+      <td class="ag-band"><span class="chip ${tone}">${word}</span>${deaf ? "" : html` <span class="mono muted">κ ${fix(r.kappa)}</span>`}</td>
       <td class="r ag-acc"><span class="mono">${pct(r.accuracy)}</span><small>always “${GRADE[usual]}”: ${pct(r.n ? sum(cm[usual]) / r.n : null)}</small></td>
       <td class="r ag-fatal">${qaF ? html`<span class="mono">${int(cm.fatal.fatal || 0)} of ${int(qaF)}</span>` : html`<span class="muted">QA marked none</span>`}</td>
       <td class="ag-miss">${miss ? html`Judge says <b>${GRADE[miss.j]}</b> on ${plural(miss.n, "call")} QA ${miss.q === "na" ? "marked N/A" : `graded ${GRADE[miss.q]}`}` : html`<span class="muted">none</span>`}</td>

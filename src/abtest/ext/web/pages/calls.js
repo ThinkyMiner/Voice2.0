@@ -2,7 +2,7 @@
 // here. #/calls/<id>: why the judge graded the call so, the recording, the transcript with the
 // judge's margin notes, and the scorecard beside IndiaMART's human QA grades.
 import { get, state } from "../api.js";
-import { $, $$, html, raw, esc, mount, int, pct, clock, mmss, cap, grade, flagChips, FLAGS, GRADE, empty, enc, toast, reducedMotion } from "../ui.js";
+import { $, $$, html, raw, esc, mount, int, pct, clock, mmss, cap, grade, flagChips, FLAGS, GRADE, empty, enc, toast, reducedMotion, kappaWord } from "../ui.js";
 import { decodePeaks, drawWave } from "../viz.js";
 
 const PAGE = 25;
@@ -84,7 +84,7 @@ const callRow = (c) => html`<tr class="link" data-id="${c.call_id}">
   <td class="c-judge"><span class="lbl">Judge</span>${c.overall ? grade(c.overall) : html`<span class="muted">not judged</span>`}${c.n_fatal + c.n_non_fatal ? html`<div class="sub">${paramsLine(c)}</div>` : ""}</td>
   <td class="c-qa${c.human_overall ? "" : " none"}"><span class="lbl">QA</span>${c.human_overall ? grade(c.human_overall) : html`<span class="muted">not audited</span>`}</td>
   <td class="c-vs">${vsMark(c)}</td>
-  <td class="c-sum">${c.disposition ? html`<span class="disp">${c.disposition}</span>` : ""}<div class="sum">${c.summary || ""}</div>${c.risk_flags.length ? html`<div class="flags">${flagChips(c.risk_flags)}</div>` : ""}</td></tr>`;
+  <td class="c-sum"><div class="sum">${c.summary || ""}</div>${c.disposition ? html`<span class="disp">${c.disposition}</span>` : ""}${c.risk_flags.length ? html`<div class="flags">${flagChips(c.risk_flags)}</div>` : ""}</td></tr>`;
 const sortTh = (f, key, label) => html`<th aria-sort="${f.sort === key ? (key === "id" ? "ascending" : "descending") : "none"}"><button type="button" class="th-sort" data-sort="${key}" title="Sort: ${SORTS[key][0]}">${label}<span aria-hidden="true">${f.sort === key ? " ↓" : ""}</span></button></th>`;
 const pager = (p, n) => html`<nav class="pager" aria-label="Pages"><button type="button" class="btn sm" data-page="${p - 1}" ${p <= 1 ? raw("disabled") : ""}>‹ Previous</button>
   <span>Page ${p} of ${n}</span><button type="button" class="btn sm" data-page="${p + 1}" ${p >= n ? raw("disabled") : ""}>Next ›</button></nav>`;
@@ -117,7 +117,7 @@ export async function renderList(el, { params }) {
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Listen</div><h1 class="title">Calls</h1>
       <p class="lede">Every call with a transcript, worst first: the judge's grade and, where IndiaMART's QA team audited the call, their grade beside it.${kp?.agreement_overall != null
-        ? html` The judge matches QA on ${pct(kp.agreement_overall, 0)} of audited calls${kp.agreement_kappa != null && kp.agreement_kappa < 0.4 ? ", about chance, so treat its grades as a first pass" : ""} (<a href="#/audit">Audit</a>).` : ""}</p>
+        ? html` On the overall grade the judge matches QA on ${pct(kp.agreement_overall, 0)} of ${kp.agreement_n != null ? int(kp.agreement_n) : "the"} ${kp.agreement_held_out ? "held-out " : ""}audited calls${kp.agreement_kappa != null && kp.agreement_kappa < 0.4 ? `, ${kappaWord(kp.agreement_kappa)}: a call takes its worst check's grade, so read the Judge column as a first pass and open a call for its check-by-check grades` : ""} (<a href="#/audit">where they agree</a>).` : ""}</p>
       <p class="calls-start">Start with the <a href="#/calls?overall=fatal">fatal calls</a>, the <a href="#/calls?vs=disagree">calls where the judge and QA disagree</a> or the <a href="#/calls?flag=human_request">callers who asked for a human</a>.</p></div></div>
     <div class="calls-tools">
       <label class="search"><span class="sr-only">Search calls</span><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.5 10.5L14 14"/></svg>
@@ -269,12 +269,13 @@ export async function renderCall(el, { id }) {
     ${at >= 0 ? html`<nav class="queue" aria-label="Your list"><a class="btn sm ghost" href="${m.hash}">← ${m.label || "Back"}</a>
       <span class="muted">${int(at + 1)} of ${int(m.ids.length)}</span>${step(prev, "‹ Previous")}${step(next, "Next ›")}</nav>` : ""}
     <div class="call-head">
-      <div class="eyebrow">${SRC_LONG[t.source] || t.source}${t.vendor ? ` · ${VENDOR[t.vendor] || t.vendor}` : ""}${t.language ? ` · ${LANG[t.language] || t.language}` : ""}</div>
-      <h1 class="title">${a?.disposition || (sim ? "Simulated conversation" : "Call")} <span class="mono">${t.call_id}</span></h1>
-      ${a?.summary ? html`<p class="call-sum">${a.summary}</p>` : ""}
+      <div class="eyebrow">${SRC_LONG[t.source] || t.source}${t.vendor ? ` · ${VENDOR[t.vendor] || t.vendor}` : ""}${t.language ? ` · ${LANG[t.language] || t.language}` : ""} · ${t.call_id}</div>
+      <h1 class="title${a?.summary ? " sum" : ""}">${a?.summary || a?.disposition || (sim ? "Simulated conversation" : "Call")}</h1>
       <div class="meta">${t.duration_s || tEnd ? html`<span id="call-len">${t.duration_s ? html`<b>${mmss(t.duration_s)}</b> recording` : html`<b>${mmss(tEnd)}</b> of transcript`}</span>` : ""}
+        ${a?.disposition ? html`<span>Disposition <b>${a.disposition}</b></span>` : ""}
         <span>Prompt <b class="mono">${t.prompt_version}</b>${t.variant ? ` · variant ${t.variant}` : ""}</span>
-        ${t.provider ? html`<span>${sim ? "Buyer simulated by" : "Transcribed by"} <b>${modelName(t.provider)}</b></span>` : ""}${a ? html`<span>Judged by <b>${modelName(a.model)}</b></span>` : ""}
+        ${t.provider === "fixture" ? html`<span>Transcript <b>${state.demo ? "invented for the demo" : "a test fixture"}</b></span>`
+          : t.provider ? html`<span>${sim ? "Buyer simulated by" : "Transcribed by"} <b>${modelName(t.provider)}</b></span>` : ""}${a ? html`<span>Judged by <b>${modelName(a.model)}</b></span>` : ""}
         ${Object.entries(t.meta || {}).filter(([k]) => !SIM_META.test(k)).map(([k, v]) => html`<span>${META_KEY[k] || cap(spaced(k))} <b>${META_KEY[k] ? cap(spaced(v)) : v}</b></span>`)}
         <details class="more"><summary>Details</summary><dl>
           <dt>Transcriber</dt><dd class="mono">${t.provider || "—"}</dd>${a ? html`<dt>Judge model</dt><dd class="mono">${a.model}</dd><dt>Rubric set</dt><dd class="mono">${a.rubric_set_hash}</dd>${a.cost_usd != null ? html`<dt>Judging cost</dt><dd class="mono">$${a.cost_usd.toFixed(3)}</dd>` : ""}` : ""}

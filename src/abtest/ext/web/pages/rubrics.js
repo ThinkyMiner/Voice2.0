@@ -2,7 +2,7 @@
 // how far the judge agrees with IndiaMART's QA auditors on each) and #/rubrics/<id|new>: the Rubric Studio, a
 // form with a live preview of what the judge reads.
 import { get, send, state } from "../api.js";
-import { $, $$, html, mount, int, pct, fix, typeChip, weight, gradeStack, gradeLegend, grade, empty, toast, enc, esc, seg, agreement, kappaWord, confirmDialog } from "../ui.js";
+import { $, $$, html, mount, int, pct, fix, typeChip, weight, gradeStack, gradeLegend, grade, empty, toast, enc, esc, seg, agreement, kappaWord, confirmDialog, reducedMotion, goodChecks, audioIds } from "../ui.js";
 
 const CATEGORIES = ["Outcome", "Quantity", "Specs", "Details", "Conversation", "Speech", "Catalog", "Compliance", "Custom"];
 const ROOTS = ["prompt", "asr", "knowledge", "flow", "platform"];
@@ -31,10 +31,12 @@ export async function renderLibrary(el) {
   const other = active.filter((r) => !CATEGORIES.includes(r.category));
   if (other.length) groups.push(["Other", other]);
   if (archived.length) groups.push(["Archived", archived]);
-  const qa = active.filter((r) => r.qa_column), weak = qa.filter((r) => gr.agRow[r.id] && agreement(gr.agRow[r.id]).weak);
+  const audio = audioIds(items), { text, good } = goodChecks(gr.ag, audio);  // the same counts as the Audit page's
+  const weak = text.filter((r) => r.kappa == null || r.kappa < 0.4), deaf = (gr.ag?.rows || []).length - text.length;
   const judgeOnly = active.filter((r) => !r.qa_column);
   const agCell = (r) => {
     if (!r.qa_column) return html`<div class="ag none"><b>Judge only</b><small>${r.builtin ? "prompt rule" : "custom"}: no QA column</small></div>`;
+    if (r.needs_audio) return html`<div class="ag none"><b>Needs audio</b><small>heard, not read: not compared</small></div>`;
     const x = gr.agRow[r.id];
     if (!x) return html`<div class="ag none"><b>—</b><small>${gr.ag ? "not compared" : "not measured yet"}</small></div>`;
     const a = agreement(x);
@@ -58,7 +60,7 @@ export async function renderLibrary(el) {
     ${gr.err ? html`<div class="note rb-err" role="alert"><b>Grades could not load.</b> ${gr.err.message || gr.err}. The rubrics below are current; their grades and agreement are missing.</div>` : ""}
     ${items.length ? html`<div class="rb-sum">
       <p>${gr.v ? html`Grades are the judge's, on the <b>${int(gr.n)}</b> calls judged on ${gr.v}.` : "No calls are graded yet."}
-        ${gr.ag ? html`Agreement compares the judge with IndiaMART's QA auditors on ${int(gr.ag.n_calls)} ${gr.ag.held_out ? "held-out " : ""}calls: it is weak (κ under 0.4) on <b>${int(weak.length)} of ${int(qa.length)}</b> QA-matrix rubrics.` : ""}
+        ${gr.ag ? html`Agreement compares the judge with IndiaMART's QA auditors on ${int(gr.ag.n_calls)} ${gr.ag.held_out ? "held-out " : ""}calls. It agrees well (κ 0.6 or more) on <b>${int(good.length)} of ${int(text.length)}</b> checks it can read from a transcript and is weak (κ under 0.4) on <b>${int(weak.length)}</b>${deaf ? `; ${int(deaf)} need audio, so they are not compared` : ""}.` : ""}
         ${judgeOnly.length ? html`<b>${int(judgeOnly.length)}</b> ${judgeOnly.length === 1 ? "rubric has" : "rubrics have"} no QA column, so only the judge checks ${judgeOnly.length === 1 ? "it" : "them"}.` : ""}
         ${gr.ag ? html`<a href="#/audit">Agreement on the Audit page</a>` : ""}</p>
       <div class="rb-legends">${gradeLegend()}<div class="legend" aria-label="Root type: where a failure gets fixed"><span class="muted">Fixed in:</span>${ROOT_WORDS.map(([t, w]) => html`<span>${typeChip(t)} ${w}</span>`)}</div></div>
@@ -128,7 +130,7 @@ export async function renderStudio(el, { id }) {
             <div class="row" style="flex-wrap:nowrap"><select class="select" id="call" aria-label="Call to grade">${calls.map((c) => html`<option value="${c.call_id}">${c.call_id} · ${(c.summary || "").slice(0, 46)}</option>`)}</select>
             <button class="btn" id="run" type="button">Grade</button></div><div id="verdict"></div></div>`
           : html`<div class="card try off"><div class="card-head"><h3>Try it on a call</h3><span class="chip">off here</span></div>
-            <p class="muted">${hiddenReal ? `Real buyer calls are never sent to the model from the web page, and all ${int(hiddenReal)} calls here are real. A saved rubric is graded the next time the judge runs.` : "There are no transcripts to try it on yet."}</p></div>`}
+            <p class="muted">${hiddenReal ? `Off for real calls: a test sends the call's transcript to the model provider, so it runs only when the platform is started with LOOP_ALLOW_REAL=1. All ${int(hiddenReal)} calls here are real. A saved rubric is graded the next time the judge runs.` : "There are no transcripts to try it on yet."}</p></div>`}
         ${cur ? html`<div class="card"><div class="card-head"><h3>Version history</h3><span class="eyebrow">${archived ? "archived" : "active"}</span></div>
           <div class="history">${(history || [cur]).slice().reverse().map((r) => html`<div class="h"><b>v${r.version}</b><span>${r.author || "—"}${r.version === cur.version ? " · current" : ""}</span><span class="muted">${r.active === false ? "archived" : ""}</span></div>`)}
           ${!history && cur.version > 1 ? html`<p class="muted" style="font-size:12px;padding-top:8px">Versions 1 to ${cur.version - 1} are kept on the platform; audits cite the version they used.</p>` : ""}</div>
@@ -258,10 +260,11 @@ export async function renderStudio(el, { id }) {
     try {
       const { version, builtin, ...rubric } = d;
       const v = await send("POST", "/api/rubrics/test", { rubric: { ...rubric, id: d.id || "draft", version: cur ? cur.version + 1 : 1, builtin: false }, call_id: cid });
-      mount(out, html`<div class="verdict" role="status"><div class="row between">${grade(v.grade, "boxed")}<span class="mono muted" style="font-size:11px">confidence ${(v.confidence ?? 0).toFixed(2)}</span></div>
+      mount(out, html`<div class="verdict" role="status"><div class="row between">${grade(v.grade, "boxed")}${v.confidence != null ? html`<span class="mono muted" style="font-size:11px">confidence ${v.confidence.toFixed(2)}</span>` : ""}</div>
         <p style="font-size:13px">${v.reason}</p>
-        ${(v.evidence || []).map((e) => html`<blockquote>“${e.quote}”<small>line ${e.turn + 1}</small></blockquote>`)}
+        ${(v.evidence || []).map((e) => html`<blockquote>“${e.quote}”<small>turn ${e.turn + 1}</small></blockquote>`)}
         <a class="btn sm" href="#/calls/${enc(cid)}" style="justify-self:start">Open the call</a></div>`);
+      out.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });  // the verdict lands on screen
     } catch (err) { mount(out, html`<p style="color:var(--harm);font-size:13px">${err.message}</p>`); }
     btn.disabled = false;
   });

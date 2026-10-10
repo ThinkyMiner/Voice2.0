@@ -144,6 +144,17 @@ def test_redline_word_diff_reads_as_both_prompts():
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_redline_keeps_a_variable_both_prompts_share():
+    """A's "{x} ;" loses the space before the ";" in clean(): the variable must stay plain, only the ";" struck."""
+    a = "Use a unit from ﻿@ unit_options﻿ ; never ask without one."
+    b = "Use a unit from ﻿@ unit_options﻿ in every question; never ask without one."
+    script = "const { wordDiff } = await import(process.argv[1]); console.log(String(wordDiff(process.argv[2], process.argv[3])));"
+    red = subprocess.run(["node", "--input-type=module", "-e", script, (WEB / "pages" / "fixes.js").as_uri(), a, b],
+                         capture_output=True, text=True, timeout=30, check=True).stdout
+    assert re.sub(r"<(del|ins)>.*?</\1>", "", red).count('<span class="tok">@unit_options</span>') == 1, red
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_demo_prompt_versions_rebuild_to_their_registry_hash(demo):
     """Demo mode shows v2+ as Prompt A plus the fix's edits (api.applyEdits, mirroring improve._apply)."""
     script = """

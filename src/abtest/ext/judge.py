@@ -473,7 +473,8 @@ def agreement(audits: list[CallAudit], human: dict[str, dict], rubrics: list[Rub
         n_calls=len(pairs), overall_accuracy=sum(h == j for h, j in pairs) / len(pairs),
         overall_kappa=_kappa(pairs),
         fatal_vs_rest_accuracy=sum((h == "fatal") == (j == "fatal") for h, j in pairs) / len(pairs),
-        rows=tuple(rows), model=", ".join(sorted({a.model for a in matched})), held_out=held_out)
+        rows=tuple(rows), model=", ".join(sorted({a.model for a in matched})), held_out=held_out,
+        overall_confusion={h: {j: sum(p == (h, j) for p in pairs) for j in models.SEVERITY} for h in models.SEVERITY})
 
 
 def _pct(x: float | None) -> str:

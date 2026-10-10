@@ -62,11 +62,16 @@ function noFixes(c) {
   });
 }
 
+/** Root causes by id, from the issues of every base version the fixes were written on. */
+export async function causesOf(fixes) {
+  const bases = [...new Set(fixes.map((f) => f.base_version))];
+  const iss = await Promise.allSettled(bases.map((v) => get(`/api/issues?version=${enc(v)}`)));
+  return Object.fromEntries(iss.flatMap((r) => (r.status === "fulfilled" ? r.value.items.map((i) => [i.id, i]) : [])));
+}
+
 export async function renderList(el) {
   const [fx, pr, ov] = await Promise.all([get("/api/fixes"), get("/api/prompts").catch(() => ({ items: [] })), get("/api/overview").catch(() => state.overview)]);
-  const bases = [...new Set(fx.items.map((f) => f.base_version))];
-  const iss = await Promise.allSettled(bases.map((v) => get(`/api/issues?version=${enc(v)}`)));
-  const rc = Object.fromEntries(iss.flatMap((r) => (r.status === "fulfilled" ? r.value.items.map((i) => [i.id, i]) : [])));
+  const rc = await causesOf(fx.items);
   const cand = Object.fromEntries(pr.items.filter((p) => p.fix_id).map((p) => [p.fix_id, p]));
   const cycles = ov?.cycles || [];
   mount(el, html`
@@ -98,7 +103,8 @@ function parseDiff(diff) {
 }
 
 export function wordDiff(a, b) {  // LCS over words and spaces: equal runs plain, deletions struck, insertions underlined
-  const A = clean(a).split(/(\s+)/), B = clean(b).split(/(\s+)/);
+  const toks = (x) => clean(x).split(/(\s+|(?<=⁣)[,.;:!?])/).filter(Boolean);  // "{x};" is two words, so a variable is never struck and re-added
+  const A = toks(a), B = toks(b);
   const n = A.length, m = B.length;
   if (n * m > 4e6) return html`<del>${prose(a)}</del> <ins>${prose(b)}</ins>`;
   const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
@@ -186,6 +192,7 @@ export async function renderFix(el, { id }) {
   const cand = pr.items.find((p) => p.fix_id === f.id);
   const cycle = ov?.cycles?.find((c) => c.fix_id === f.id) || null;
   const st = fixSteps(f, cycle);
+  if (f.replay) st[2].note = `${pct(f.replay.fail_rate_a, 0)} → ${pct(f.replay.fail_rate_b, 0)} failing, simulated`;  // the header carries the result
   const names = Object.fromEntries(rb.items.map((r) => [r.id, r.name]));
   const rn = (rid) => names[rid] || rid;
   const ts = f.created_ts || cand?.created_ts;

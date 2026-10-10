@@ -31,6 +31,12 @@ const changeOf = (x, prompts) => {
   return c ? { kind: "replace", title: `“${c.find}” becomes “${c.replace}”`, verb: "Changes one line", a: c.a, b: c.b } : change(x?.config, prompts);
 };
 
+/** A loop run's fix ({fix, root_cause}, from /api/fixes/<id>) when its B is a whole prompt version written by a fix. */
+function fixFor(x, d, prompts) {
+  const ch = x.cycle != null ? change(d?.config, prompts) : null;
+  return ch?.kind === "full" && ch.v?.fix_id ? get(`/api/fixes/${enc(ch.v.fix_id)}`).catch(() => null) : null;
+}
+
 /** The guardrail at the last checkpoint: its change, its limit, and whether its interval crossed it. */
 function guard(g, sec) {
   if (!g || !sec || !g.rci) return null;
@@ -66,7 +72,11 @@ function outcome(x, s) {
 }
 
 function verdict(x, s, dayOf) {
-  const L = s.L, g = s.g;
+  const L = s.L, g = s.g, a = x.live?.arms;
+  if (!L && a) {  // a live run before its first checkpoint: how the router split the leads, and the calls so far
+    const calls = a.A.called + a.B.called, conn = a.A.connected + a.B.connected;
+    return `Our router sent ${int(a.A.assigned)} lead${a.A.assigned === 1 ? "" : "s"} to A (agent version ${a.A.version ?? "—"}) and ${int(a.B.assigned)} to B (version ${a.B.version ?? "—"}); Sarvam placed ${int(calls)} call${calls === 1 ? "" : "s"} and ${int(conn)} connected. No checkpoint yet: the engine decides only once enough B leads mature (up to ${int(x.n_b_max)} planned), so these calls show the routing, not a result.`;
+  }
   if (!L) return "No checkpoint yet: the first one comes once enough B leads have matured.";
   const live = x.simulated === false, on = live ? "on real calls" : "on simulated traffic";  // vani-live-*: Sarvam calls
   const d = dayOf(L.ts_sim), at = `checkpoint ${L.look}${d != null ? ` (${live ? "" : "simulated "}day ${d})` : ""}`;
@@ -92,7 +102,8 @@ export async function renderList(el) {
   const [r, lp, pr] = await Promise.all([get("/api/experiments"), get("/api/loop").catch(() => null), get("/api/prompts").catch(() => ({ items: [] }))]);
   // ponytail: one detail request per run, for its change and deciding numbers; add them to the list route if runs reach the hundreds
   const det = await Promise.all(r.items.map((x) => get(`/api/experiments/${enc(x.experiment_id)}`).catch(() => null)));
-  const rows = r.items.map((x, i) => ({ x, d: det[i], s: det[i] ? story(det[i]) : null }));
+  const fixOf = await Promise.all(r.items.map((x, i) => fixFor(x, det[i], pr.items)));  // a loop run's B: the fix behind it
+  const rows = r.items.map((x, i) => ({ x, d: det[i], s: det[i] ? story(det[i]) : null, fx: fixOf[i] }));
   const fromLoop = rows.filter((o) => o.x.cycle != null), live = rows.filter((o) => o.x.simulated === false);
   const engine = rows.filter((o) => o.x.cycle == null && o.x.simulated !== false);
   const groups = [];
@@ -104,23 +115,23 @@ export async function renderList(el) {
   }
   const c = lp?.cycle;
   const row = (o, name) => {
-    const { x, s } = o, lift = x.lift_rel;
+    const { x, s } = o, lift = x.lift_rel, wk = o.d?.impact?.per_week, showWk = wk != null && x.state !== "HALTED_SRM" && (s?.tone === "win" || s?.primaryHarm);
     return html`<a class="xrow" href="#/experiments/${enc(x.experiment_id)}">
       <div class="c-what"><div class="nm">${name}</div><div class="sub">${x.simulated === false ? "Real calls through Sarvam" : `Assumed for B: ${assumed(x) || "—"}`}</div></div>
       <div class="c-out">${stateChip(x.state)}<div class="sub">${s ? outcome(x, s) : ""}</div></div>
       <div class="c-looks">${dots(x.looks_done, x.n_looks)}<span class="sub">${x.looks_done} of ${x.n_looks}</span></div>
-      <div class="c-lift"><div class="v ${s?.tone || "muted"}">${lift == null ? "—" : spct(lift)}</div><div class="sub">${s?.prim || "primary"}${x.state === "HALTED_SRM" ? ", untrusted" : ""}</div></div>
+      <div class="c-lift"><div class="v ${s?.tone || "muted"}">${lift == null ? "—" : spct(lift)}</div><div class="sub">${s?.prim || "primary"}${showWk ? ` · ${sint(wk)} a week` : ""}${x.state === "HALTED_SRM" ? ", untrusted" : ""}</div></div>
     </a>`;
   };
   const head = html`<div class="xrow xhead-row" aria-hidden="true"><span>Run</span><span>Outcome</span><span>Checkpoints</span><span>Lift</span></div>`;
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Prove</div><h1 class="title">A/B <em>experiments</em></h1>
-      <p class="lede">Prompt B gets 10% of leads while a sequential test checks the evidence at each checkpoint: promote, stop for harm, block on the guardrail, or call it inconclusive.
-        The traffic is simulated: the engine replays real call history with an effect assumed for B, which it never sees. A live experiment (vani-live-…) is the exception: real calls through Sarvam, to consenting team members only.</p></div></div>
+      <p class="lede">Test a prompt change on a share of leads before it reaches every caller. Prompt B gets its share (10% in the loop and the scenarios) while a sequential test checks the evidence at each checkpoint: promote, stop for harm, block on the guardrail, or call it inconclusive.</p>
+      <p class="muted small" style="margin-top:8px;max-width:78ch">Loop runs and engine scenarios replay real call history with an effect assumed for B, which the engine never sees. Live calls are the exception: real calls through Sarvam, to consenting team members only.</p></div></div>
 
     <section class="section" style="margin-top:0">
       <div class="section-head"><h2>From the <em>loop</em></h2><p>A cycle's Prompt B against the production prompt.</p></div>
-      ${fromLoop.length ? html`<div class="card xlist">${head}${fromLoop.map((o) => row(o, html`Cycle ${o.x.cycle}: ${change(o.d?.config, pr.items).title}`))}</div>`
+      ${fromLoop.length ? html`<div class="card xlist">${head}${fromLoop.map((o) => row(o, html`Cycle ${o.x.cycle}: ${o.fx?.root_cause?.name || change(o.d?.config, pr.items).title}`))}</div>`
         : empty({ compact: true, glyph: "flask", title: "No cycle has reached its A/B test yet",
           body: c ? `Cycle ${c.n} is at ${cap(c.stage)}. A test starts once a fix passes the safety gate and the replay.` : "The loop has not started. A test starts once a cycle's fix passes the safety gate and the replay.",
           action: html`<a class="btn sm" href="#/">Open the Loop page</a>` })}
@@ -189,6 +200,7 @@ export async function renderExperiment(el, { id }) {
       action: html`<a class="btn" href="#/experiments">All experiments</a>` }));
   }
   const pr = await get("/api/prompts").catch(() => ({ items: [] }));
+  const fx = await fixFor(x, x, pr.items);  // a loop run's B is a whole prompt version: show its fix's edits
   const cfg = x.config || {}, looks = x.looks || [], s = story(x), L = s.L, g = s.g;
   const started = x.decisions?.find((d) => d.ts_sim)?.ts_sim || looks[0]?.ts_sim;
   const dayOf = (ts) => (started && ts ? Math.round((new Date(ts) - new Date(started)) / 864e5) : null);
@@ -199,11 +211,12 @@ export async function renderExperiment(el, { id }) {
   try { actor = localStorage.getItem("vani-actor") || ""; } catch { /* none */ }
   const impact = untrusted ? null : x.impact?.per_week;
   const iTone = impact == null ? "" : s.tone === "win" && impact > 0 ? "win" : s.primaryHarm ? "harm" : "muted";
+  const early = Boolean(lv && !L);  // a live run before its first checkpoint: no lift, guardrail or impact to show yet
 
   mount(el, html`
     <div class="page-head xhead"><div>
       <div class="eyebrow">${x.simulated === false ? "Live experiment · real calls through Sarvam" : x.cycle != null ? `Loop experiment · cycle ${x.cycle}` : `Engine scenario${scenario(x.experiment_id) ? ` · ${scenario(x.experiment_id)}` : ""}`}${x.decisions?.[0]?.ts_wall ? ` · run ${when(x.decisions[0].ts_wall)}` : ""}</div>
-      <h1 class="title xtitle">${ch.kind === "append" ? html`“${ch.title}”` : ch.title}</h1>
+      <h1 class="title xtitle">${fx?.root_cause ? html`Prompt ${ch.v.version}, for “${fx.root_cause.name}”` : ch.kind === "append" ? html`“${ch.title}”` : ch.title}</h1>
       <div class="row xchips">${stateChip(x.state)}${s.human ? html`<span class="chip">${s.human.to_state === "PROMOTED" ? "Approved" : "Rejected"} by ${s.human.actor}${dayOf(s.human.ts_sim) != null ? ` · day ${dayOf(s.human.ts_sim)}` : ""}</span>` : ""}
         <span class="mono muted xid">${x.experiment_id}</span></div>
       <p class="xverdict">${verdict(x, s, dayOf)}</p>
@@ -214,6 +227,7 @@ export async function renderExperiment(el, { id }) {
     ${pending ? html`<div class="decide-panel" id="decide">
       <div><div class="eyebrow" style="color:var(--accent-2-ink)">Waiting for a human</div>
         <div class="decide-q">B crossed the win line. <em>Promote it to all traffic?</em></div>
+        ${impact > 0 ? html`<p style="margin-top:8px">Worth about <b>${sint(impact)} ${x.impact.unit} a week</b> at full rollout, by the engine's estimate${x.simulated === false ? "" : " on simulated traffic, where B's effect is assumed"}.${x.cycle != null && ch.v?.fix_id ? html` Weigh <a href="#/fixes/${enc(ch.v.fix_id)}">the fix itself</a> too: its redline, gate and replay.` : ""}</p>` : ""}
         <p class="muted" style="font-size:12.5px;margin-top:6px">Your name goes on the decision log with the choice.${x.cycle == null ? " This is an engine scenario: production does not change." : ""}</p></div>
       <div class="row"><label class="field"><span>Your name</span><input class="input" id="actor" value="${actor}" placeholder="e.g. kartik" autocomplete="name"></label>
         <button class="btn" id="reject" type="button">Reject</button><button class="btn accent" id="approve" type="button">Approve B</button></div>
@@ -223,11 +237,12 @@ export async function renderExperiment(el, { id }) {
       <div class="card-head"><h3>The change</h3><span class="eyebrow">${lv ? `A is agent version ${lv.arms.A.version ?? "—"}, B is version ${lv.arms.B.version ?? "—"}` : `A is ${baseV ? `prompt ${baseV.version}` : cfg.variants?.A?.base || "the base prompt"}`}</span></div>
       ${ch.kind === "replace" ? html`<p class="redline-line">${wordDiff(ch.a, ch.b)}</p><p class="muted small">B is A with this one line changed.</p>`
         : ch.kind === "append" ? html`<p class="redline-line"><ins>${ch.b}</ins></p><p class="muted small">B is A with this sentence added at the end.</p>`
-        : ch.kind === "full" ? html`<p>B is ${ch.v ? html`<a href="#/prompts?v=${enc(ch.v.version)}">prompt ${ch.v.version}</a>` : "a full prompt"}.${ch.v?.fix_id ? html` <a href="#/fixes/${enc(ch.v.fix_id)}">Read its fix as a redline</a>.` : ""}</p>`
+        : ch.kind === "full" ? html`${fx ? fx.fix.edits.map((e) => html`<p class="redline-line">${e.mode === "append" ? html`<ins>${e.text}</ins>` : wordDiff(e.find, e.replace)}</p>${e.why ? html`<p class="muted small">${e.why}</p>` : ""}`) : ""}
+          <p${fx ? html` class="muted small"` : ""}>${fx ? `B is A with ${fx.fix.edits.length === 1 ? "this edit" : "these edits"}: ` : "B is "}${ch.v ? html`<a href="#/prompts?v=${enc(ch.v.version)}">prompt ${ch.v.version}</a>` : "a full prompt"}${ch.v?.fix_id ? html`, from fix ${ch.v.fix_id}. <a href="#/fixes/${enc(ch.v.fix_id)}">Read it with its context, gate and replay</a>.` : "."}</p>`
         : html`<p class="muted">${ch.title}.</p>`}
     </section>
 
-    <section class="kpis xkpis" aria-label="What decided it">
+    ${early ? "" : html`<section class="kpis xkpis" aria-label="What decided it">
       <div class="kpi"><div class="eyebrow">Lift in ${s.prim}</div><div class="big ${untrusted ? "muted" : s.tone}">${spct(L?.lift_rel)}</div>
         <div class="sub">${untrusted ? "untrusted: the split failed its check" : L?.ci95 ? `95% CI ${spct(L.ci95[0])} to ${spct(L.ci95[1])}` : "no checkpoint yet"}</div></div>
       <div class="kpi"><div class="eyebrow">Guardrail · ${g?.name || label(sec.name)}</div>
@@ -236,32 +251,36 @@ export async function renderExperiment(el, { id }) {
           : html`<div class="big muted">—</div><div class="sub">no checkpoint yet</div>`}</div>
       <div class="kpi"><div class="eyebrow" title="The engine checks the evidence at planned checkpoints; it can stop early at any of them.">Checkpoints</div><div class="big">${looks.length}<small>of ${cfg.window?.looks ?? "—"}</small></div>
         <div class="sub">${L ? `${x.simulated === false ? "" : "simulated "}day ${dayOf(L.ts_sim)}; planned over ${cfg.window?.days ?? "—"} days` : "none yet"}</div></div>
-      ${lv && !L ? html`<div class="kpi"><div class="eyebrow">Leads assigned</div><div class="big">${int(lv.arms.A.assigned + lv.arms.B.assigned)}</div><div class="sub">A ${int(lv.arms.A.assigned)} · B ${int(lv.arms.B.assigned)} · counted at the first checkpoint</div></div>`
-        : html`<div class="kpi"><div class="eyebrow">Leads counted</div><div class="big">${int((L?.n_a || 0) + (L?.n_b || 0))}</div><div class="sub">A ${int(L?.n_a)} · B ${int(L?.n_b)} of ${int(x.n_b_max)} planned for B</div></div>`}
+      <div class="kpi"><div class="eyebrow">Leads counted</div><div class="big">${int((L?.n_a || 0) + (L?.n_b || 0))}</div><div class="sub">A ${int(L?.n_a)} · B ${int(L?.n_b)} of ${int(x.n_b_max)} planned for B</div></div>
       <div class="kpi"><div class="eyebrow">Impact a week</div><div class="big ${iTone}">${impact == null ? "—" : sint(impact)}</div>
-        <div class="sub">${untrusted ? "no estimate: the split failed its check" : impact == null ? "after the first checkpoint" : `${x.impact.unit} if B took all traffic${s.tone === "win" ? "" : "; not taken"}`}</div></div>
-      <div class="kpi"><div class="eyebrow">Split at the end</div><div style="margin-top:12px">${splitBar(x.allocation || cfg.allocation || { A: 1, B: 0 })}</div>
+        <div class="sub">${untrusted ? "no estimate: the split failed its check" : impact == null ? "after the first checkpoint"
+          : pending ? `${x.impact.unit} a week if approved, at full rollout`
+          : x.state === "PROMOTED" ? `${x.impact.unit} a week at full rollout`
+          : s.primaryHarm ? `${x.impact.unit} a week B would have cost at full rollout; the stop kept it out`
+          : g && (g.crossed || x.state === "BLOCKED_GUARDRAIL") ? `${x.impact.unit} a week B would add, with ${lc(g.name)} ${g.f(g.delta)} against a ${g.f(g.lim)} limit; not taken`
+          : `${x.impact.unit} a week at full rollout; not taken`}</div></div>
+      <div class="kpi"><div class="eyebrow">${x.state === "RUNNING" ? "Planned split" : "Split at the end"}</div><div style="margin-top:12px">${splitBar(x.allocation || cfg.allocation || { A: 1, B: 0 })}</div>
         <div class="sub">${pending ? "B keeps its share until someone decides" : x.state === "PROMOTED" ? `B serves all ${x.simulated === false ? "new calls" : "simulated traffic"}` : x.state === "RUNNING" ? "the planned split" : `all ${x.simulated === false ? "new calls" : "simulated traffic"} back on A`}</div></div>
-    </section>
+    </section>`}
 
     ${lv ? html`<section class="section">
-      <div class="card flush"><div class="card-head" style="padding:16px 18px 0"><h3>Calls per arm</h3><span class="eyebrow">Sarvam agent <span class="mono" style="text-transform:none">${lv.agent || "—"}</span></span></div>
+      <div class="card flush"><div class="card-head" style="padding:16px 18px 0"><h3>Calls per arm</h3><span class="eyebrow">Sarvam agent <span class="mono" style="text-transform:none">${lv.agent || "—"}</span>${x.allocation ? ` · planned split A ${pct(x.allocation.A, 0)} / B ${pct(x.allocation.B, 0)}` : ""}</span></div>
         <div class="table-wrap"><table class="table">
           <thead><tr><th>Arm</th><th class="r">Agent version</th><th class="r">Leads assigned</th><th class="r">Called</th><th class="r">Connected</th><th>Outcomes back</th></tr></thead>
           <tbody>${["A", "B"].map((v) => { const a = lv.arms[v], d = Object.entries(a.dispositions || {});
             return html`<tr><td><b>${v}</b></td><td class="r mono">${a.version ?? "—"}</td><td class="r mono">${int(a.assigned)}</td><td class="r mono">${int(a.called)}</td><td class="r mono">${int(a.connected)}</td>
               <td>${d.length ? d.map(([k, n]) => `${k} ${n}`).join(" · ") : "—"}${a.provisional ? ` (${a.provisional} provisional)` : ""}</td></tr>`; })}</tbody></table></div>
-        <p class="muted small" style="padding:0 18px 16px">Our router hashed each lead to its arm and logged the exposure before Sarvam dialled it on that arm's agent version. The engine takes its first checkpoint once enough B leads have matured, so a handful of calls never decides anything.</p></div>
+        <p class="muted small" style="padding:0 18px 16px">Our router hashed each lead to its arm and logged the exposure before Sarvam dialled it on that arm's agent version. Each lead's arm comes from a hash of its id, so a handful of leads can land unevenly (here A ${int(lv.arms.A.assigned)}, B ${int(lv.arms.B.assigned)}); the split check runs at every checkpoint. The engine takes its first checkpoint once enough B leads have matured, so a handful of calls never decides anything.</p></div>
     </section>` : ""}
 
-    <section class="section">
+    ${looks.length ? html`<section class="section">
       <div class="card">
         <div class="card-head"><div><div class="eyebrow">${looks.length} checkpoint${looks.length === 1 ? "" : "s"}</div><h3 class="serif" style="margin-top:6px">The evidence for B, <em>against its lines</em></h3></div>
           <div class="legend"><span><i style="background:var(--ink);height:2px;width:14px"></i>Evidence for B (z)</span><span><i style="background:var(--win)"></i>Win line</span><span><i style="background:var(--harm)"></i>Harm line</span></div></div>
         <div id="z" style="min-height:300px"></div>
         <p class="muted" style="font-size:12px;margin-top:6px">Each dot is a checkpoint. Above zero, B is ahead on ${lc(s.prim)}. Above the green line the engine promotes B (if the guardrail clears); below the red line it stops B. The lines start strict and loosen as leads come in.</p>
       </div>
-    </section>
+    </section>` : ""}
 
     <section class="section">
       <div class="section-head"><h2>Decision <em>log</em></h2><p>Append-only: the engine writes a reason at every checkpoint and state change; a human decision carries the name.</p></div>
@@ -288,15 +307,17 @@ export async function renderExperiment(el, { id }) {
       <p class="muted small" style="margin-top:14px"><b>z</b>: how many standard errors B is ahead of A. <b>Win line</b> (O'Brien-Fleming) and <b>harm line</b> (Pocock): the boundaries z must cross. <b>RCI</b>: the guardrail's confidence interval, valid at every checkpoint. <b>SRM</b>: sample-ratio mismatch, the check that B got its planned share of leads.</p>
     </details>`);
 
-  const z = $("#z", el);
+  const z = $("#z", el);  // no chart before the first checkpoint
   const draw = () => {
     const svg = zChart(looks, { width: Math.max(300, z.clientWidth), state: x.state, started });
     mount(z, svg ? raw(svg) : empty({ title: "No checkpoint to plot yet", body: "The line starts at the first checkpoint, once enough B leads have matured.", compact: true, glyph: "flask" }));
   };
-  draw();
-  let w = z.clientWidth;
-  const ro = new ResizeObserver(() => { if (Math.abs(z.clientWidth - w) > 8) { w = z.clientWidth; draw(); z.querySelector(".zpath")?.classList.remove("draw"); } });
-  ro.observe(z);
+  let w = z?.clientWidth, ro = null;
+  if (z) {
+    draw();
+    ro = new ResizeObserver(() => { if (Math.abs(z.clientWidth - w) > 8) { w = z.clientWidth; draw(); z.querySelector(".zpath")?.classList.remove("draw"); } });
+    ro.observe(z);
+  }
 
   if (pending) {
     const decide = async (approved) => {
@@ -322,5 +343,5 @@ export async function renderExperiment(el, { id }) {
     $("#approve", el).addEventListener("click", () => decide(true));
     $("#reject", el).addEventListener("click", () => decide(false));
   }
-  return () => ro.disconnect();
+  return () => ro?.disconnect();
 }

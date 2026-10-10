@@ -154,6 +154,7 @@ class AgreementReport(_Frozen):
     held_out: bool                          # True when no call here was used to tune the rubrics
     calibrated: bool = False                # grades softened by judge.calibrate (learned on other calls)
     n_tuning: int = 0                       # calls the calibration was learned on (excluded from n_calls)
+    overall_confusion: dict[str, dict[str, int]] = {}  # like-for-like overall, human -> judge -> count ({} before it was kept)
 
 
 # --- Improve ---------------------------------------------------------------------------

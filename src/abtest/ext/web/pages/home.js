@@ -1,7 +1,7 @@
 // #/ The loop: where the current cycle stands and its one next step, the key numbers with their n,
 // the cycle's five stations (eight steps), its root cause, fix and A/B test, and the closed cycles.
 import { get, send, state } from "../api.js";
-import { $, html, raw, esc, mount, int, pct, fix, sint, when, short, cap, stateChip, gradeStack, shares, toast, enc, kappaWord, confirmDialog } from "../ui.js";
+import { $, html, raw, esc, mount, int, pct, fix, sint, when, short, cap, stateChip, gradeStack, shares, toast, enc, kappaWord, confirmDialog, goodChecks, audioIds } from "../ui.js";
 import { mountRing } from "../viz.js";
 
 // The ring's five stations and the loop's eight steps under them (loop.STAGES).
@@ -110,13 +110,15 @@ export async function render(el) {
   state.overviewFresh = false;
   const prodV = ov.production?.version;
   const versions = [...new Set([prodV, ...(ov.cycles || []).map((c) => c.production_version)].filter(Boolean))];
-  const [lp, pr, fx, xs, iss, settings] = await Promise.all([
+  const [lp, pr, fx, xs, iss, settings, au, rb] = await Promise.all([
     get("/api/loop"),
     get("/api/prompts").catch(() => ({ items: [] })),
     get("/api/fixes").catch(() => ({ items: [] })),
     get("/api/experiments").catch(() => ({ items: [] })),
     Promise.allSettled(versions.map((v) => get(`/api/issues?version=${enc(v)}`))),
     get("/api/settings").catch(() => null),
+    get("/api/audit?version=v1").catch(() => null),  // up front, so the Judge vs QA tile never changes on screen
+    get("/api/rubrics").catch(() => ({ items: [] })),
   ]);
   const rcBy = Object.fromEntries(iss.flatMap((r) => (r.status === "fulfilled" ? r.value.items.map((i) => [i.id, i]) : [])));
   const fixBy = Object.fromEntries(fx.items.map((f) => [f.id, f]));
@@ -133,15 +135,22 @@ export async function render(el) {
   const engineX = xs.items.length - loopX.length - liveX, scen = (n) => `${n} engine scenario${n === 1 ? "" : "s"}`;
   const liveNote = liveX ? ` · ${liveX} live experiment${liveX === 1 ? "" : "s"} on real calls` : "";
   const finished = loopX.filter((x) => !["RUNNING", "DRAFT", "PENDING_APPROVAL"].includes(x.state));
+  const promoted = finished.filter((x) => x.state === "PROMOTED"), stopped = finished.filter((x) => x.state === "STOPPED_HARM").length;
+  const units = await Promise.all(promoted.map((x) => get(`/api/experiments/${enc(x.experiment_id)}`).then((d) => d.impact?.unit, () => null)));
+  const unit = units.length && units.every((u) => u && u === units[0]) ? units[0] : "successes";  // the engine's own unit, e.g. Meeting Fixed
   const latest = fx.items[0];
   const acc = k.agreement_overall, kap = k.agreement_kappa;
   const agreeTone = acc == null ? "" : kap != null ? (kap < 0.2 ? "harm" : kap < 0.6 ? "warn" : "win") : acc < 0.6 ? "harm" : acc < 0.8 ? "warn" : "win";
+  const ag = au?.agreement, { text: checks, good } = goodChecks(ag, audioIds(rb.items));  // what the judge gets right, first
+  const qaN = au?.human_split ? au.human_split.pass + au.human_split.non_fatal + au.human_split.fatal : 0;
+  const qaLine = qaN && !verBy[prodV]?.fix_id ? (qaN === k.calls_audited ? "all also audited by IndiaMART QA" : `${int(qaN)} also audited by IndiaMART QA`) : "";
   const st = station(cur);
   const closed = (ov.cycles || []).filter((c) => c.n !== cur?.n);
 
   mount(el, html`
     <section class="status">
       <div class="status-main">
+        <p class="status-intro">Vani, IndiaMART's AI voice agent, talks to buyers and turns what they need into a lead for sellers. Today a change to its prompt goes live on judgement alone. Vani Lab grades every call against IndiaMART's QA checklist, writes a prompt fix for the costliest failure a prompt can fix, and tests it on simulated traffic before a person approves it.</p>
         <div class="eyebrow accent">The loop · ${cur ? html`cycle ${cur.n} · ${GROUPS[st.station][0]}${st.detail ? ` ${st.detail}` : ""}` : "not started yet"}</div>
         <h1 class="status-title ${p.tone || ""}">${figs(p.title)}</h1>
         <p class="status-body">${p.body}</p>
@@ -154,27 +163,28 @@ export async function render(el) {
           ${lp.busy ? html`<button class="btn" id="adv" type="button" disabled><span>Running…</span></button>` : ""}
         </div>
         <details class="runlog" id="runlog" ${lp.busy ? "open" : ""} ${lp.log?.length ? "" : "hidden"}><summary><span class="eyebrow">Run log</span><span class="last-line" id="lastline"></span></summary><pre class="log" id="log"></pre></details>
-        <p class="status-intro">Vani Lab listens to Vani's buyer calls, grades each one against IndiaMART's QA checklist, writes a prompt fix for the costliest failure and tests it on simulated traffic before it ships.</p>
       </div>
       <div class="ring-wrap" id="ring"></div>
     </section>
 
     <section class="kpis home-kpis" aria-label="Key numbers">
       ${kpi("#/calls", `${int(k.calls_audited)} calls graded by the judge. Open the calls.`, html`<div class="eyebrow">Calls graded</div><div class="big">${int(k.calls_audited)}</div>
-        <div class="sub">by the judge, on ${prodV || "—"}${k.calls_total != null && k.calls_total !== k.calls_audited ? ` (of ${int(k.calls_total)})` : ""}<span class="sub-line" id="qa-n"></span></div>`)}
+        <div class="sub">by the judge, on ${prodV || "—"}${k.calls_total != null && k.calls_total !== k.calls_audited ? ` (of ${int(k.calls_total)})` : ""}${qaLine ? html`<span class="sub-line">${qaLine}</span>` : ""}</div>`)}
       ${kpi("#/audit", `Fatal rate ${pct(k.fatal_rate)}, judge's grade. Open the audit.`, html`<div class="eyebrow">Fatal rate <span class="tag">judge</span></div><div class="big harm">${pct(k.fatal_rate)}</div>
         <div class="sub">of ${int(k.calls_audited)} graded calls · non‑fatal ${pct(k.non_fatal_rate, 0)} · pass ${pct(k.pass_rate, 0)}</div><div aria-hidden="true">${sp ? gradeStack(sp, "minibar") : ""}</div>`)}
-      ${kpi("#/audit", `Judge versus IndiaMART QA: ${pct(acc, 0)} agreement. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big ${agreeTone}">${pct(acc, 0)}<small>agree</small></div>
-        <div class="sub">with IndiaMART QA on the overall grade<span id="agree-n"></span> · κ ${fix(kap)}, ${kappaWord(kap)} · fatal vs rest ${pct(k.fatal_vs_rest_accuracy, 0)}</div>`)}
+      ${checks.length ? kpi("#/audit", `${good.length} of ${checks.length} checks agree well with IndiaMART QA. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big">${int(good.length)}<small>of ${int(checks.length)} checks</small></div>
+        <div class="sub">agree well with IndiaMART QA (κ 0.6 or more) on ${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls · overall grade ${pct(acc, 0)}, κ ${fix(kap)}, ${kappaWord(kap)}</div>`)
+        : kpi("#/audit", `Judge versus IndiaMART QA: ${pct(acc, 0)} agreement. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big ${agreeTone}">${pct(acc, 0)}<small>agree</small></div>
+        <div class="sub">with IndiaMART QA on the overall grade · κ ${fix(kap)}, ${kappaWord(kap)} · fatal vs rest ${pct(k.fatal_vs_rest_accuracy, 0)}</div>`)}
       ${kpi("#/issues", `${int(k.root_causes)} root causes. Open the issues.`, html`<div class="eyebrow">Root causes <span class="tag">judge</span></div><div class="big ${k.root_causes ? "" : "none"}">${k.root_causes ? int(k.root_causes) : "—"}</div>
         <div class="sub">${k.root_causes ? "ranked by priority; the loop fixes the top one a prompt can fix" : "not ranked yet: Improve ranks them after the judge"}</div>`)}
       ${kpi("#/fixes", `${fx.items.length} prompt fixes. Open the fixes.`, html`<div class="eyebrow">Prompt fixes</div><div class="big ${fx.items.length ? "" : "none"}">${fx.items.length ? int(fx.items.length) : "—"}</div>
         <div class="sub">${latest ? `latest: ${fixStatus(latest, xBy[(ov.cycles || []).find((c) => c.fix_id === latest.id)?.experiment_id])}` : "none written yet: the fixer writes one for the top root cause"}</div>`)}
       ${kpi("#/experiments", "Weekly impact from loop experiments. Open the experiments.", html`<div class="eyebrow">Weekly impact</div>
-        ${finished.length ? html`<div class="big ${k.per_week_gained > 0 ? "win" : ""}">${sint(k.per_week_gained)}</div><div class="sub">simulated successes a week gained · ${int(k.per_week_protected)} protected · from ${finished.length} loop A/B test${finished.length === 1 ? "" : "s"}${engineX ? `, plus ${scen(engineX)}` : ""}${liveNote}</div>`
-          : html`<div class="big none">—</div><div class="sub">no loop A/B test has finished yet${engineX ? ` · ${scen(engineX)} ran, changing nothing` : ""}${liveNote}</div>`}`)}
+        ${finished.length ? html`<div class="big ${k.per_week_gained > 0 ? "win" : ""}">${sint(k.per_week_gained)}</div><div class="sub">simulated ${unit} a week gained · ${int(promoted.length)} of ${int(finished.length)} finished loop A/B test${finished.length === 1 ? "" : "s"} promoted${stopped ? `, ${stopped} stopped for harm before roll-out` : ""}${k.per_week_protected ? ` · ${int(k.per_week_protected)} a week protected` : ""}${liveNote}</div>`
+          : html`<div class="big none">—</div><div class="sub">no loop A/B test has finished yet${engineX ? ` · the ${scen(engineX)} are separate and not counted` : ""}${liveNote}</div>`}`)}
     </section>
-    ${acc != null && (kap != null ? kap <= 0.4 : acc < 0.7) ? html`<p class="kpi-note"><i class="dot demo" aria-hidden="true"></i><span>Judge grades are directional until they agree better with IndiaMART QA (${pct(acc, 0)} today). <a href="#/audit">Compare them call by call</a></span></p>` : ""}
+    ${acc != null && (kap != null ? kap <= 0.4 : acc < 0.7) ? html`<p class="kpi-note"><i class="dot demo" aria-hidden="true"></i><span>The judge's overall grade, and the fatal rate built on it, are directional for now: a call takes its worst check's grade, so one miss on any check can change it, and QA also sees the lead record the bot saved, which the judge cannot. <a href="#/audit">See which checks it gets right</a></span></p>` : ""}
 
     <section class="section" id="current"></section>
 
@@ -247,15 +257,6 @@ export async function render(el) {
   drawRing(cur, lp.busy);
   drawCurrent(cur);
   drawLog(lp.log);
-
-  // The judge's agreement with QA, with its n, and the QA-audited share: /api/audit is heavier, so it fills in after.
-  get("/api/audit?version=v1").then((a) => {
-    if (!el.isConnected) return;
-    const g = a.agreement, h = a.human_split;
-    if (g) $("#agree-n", el).textContent = `, ${int(g.n_calls)} ${g.held_out ? "held-out " : ""}calls${g.calibrated && g.n_tuning ? ` (calibrated on ${int(g.n_tuning)} others)` : ""}`;
-    const qa = h ? h.pass + h.non_fatal + h.fatal : 0;
-    if (qa && !verBy[prodV]?.fix_id) $("#qa-n", el).textContent = qa === k.calls_audited ? "all also audited by IndiaMART QA" : `${int(qa)} also audited by IndiaMART QA`;
-  }).catch(() => { /* the tiles stand without it */ });
 
   // --- one step at a time, confirmed first, with live progress from GET /api/loop
   const btn = $("#adv", el);
