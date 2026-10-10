@@ -1,5 +1,5 @@
 """Films each scene of video/script.yaml into video/out/clips/<id>.webm (1920x1080, 30 fps, its narration plus
-0.6 s), with the narration burned in as captions. Card scenes load video/cards/<id>.html; page scenes open the
+1.7 s), with the narration burned in as captions. Card scenes load video/cards/<id>.html; page scenes open the
 platform, wait until it has rendered, then play the scene's beats: smooth scrolls, a soft accent spotlight on
 what the narration names, and the clicks the scene needs. Frames come from Chrome's screencast (lossless
 enough to read), so nothing before the page is ready is ever filmed.
@@ -11,6 +11,8 @@ enough to read), so nothing before the page is ready is ever filmed.
 Sources: VIDEO_PLATFORM_URL (default http://127.0.0.1:8660) for platform scenes, VIDEO_DEMO_URL (default
 http://127.0.0.1:8661) for the demo copy's invented calls (06-call, 08-rubric), and VIDEO_LOOP_URL (default
 VIDEO_PLATFORM_URL) for the loop scenes. VIDEO_ACTOR (default kartik) is the name 13-approve types.
+VIDEO_CLEAN=1 films the ad cut's clean takes instead (video/out/clips_clean/: no captions), each with <id>.beats.json:
+where the spotlight was ([t, x, y, w, h, on] in 1920x1080 px, 20 times a second) and when each beat ran.
 Call lists on platform and loop scenes are blurred before the first frame (BLUR).
 """
 import base64
@@ -35,7 +37,9 @@ PLATFORM = os.environ.get("VIDEO_PLATFORM_URL", "http://127.0.0.1:8660").rstrip(
 DEMO = os.environ.get("VIDEO_DEMO_URL", "http://127.0.0.1:8661").rstrip("/")
 LOOP = os.environ.get("VIDEO_LOOP_URL", PLATFORM).rstrip("/")
 ACTOR = os.environ.get("VIDEO_ACTOR", "kartik")
-FPS, TAIL = 30, 0.6
+FPS, TAIL = 30, 1.7  # each scene holds 1.7 s past its narration (the film runs past 5 minutes)
+CLEAN = os.environ.get("VIDEO_CLEAN") == "1"
+CLIPS = OUT / ("clips_clean" if CLEAN else "clips")
 # Everything on the real platform that shows a call id, a call summary or call text (docs/demo_script.md,
 # "Customer calls on camera"): the Audit page's calls to listen to first, Issues' example calls, Fixes' example
 # calls and "Cases that changed", the search palette, the call list, a call page and the rubric test's picker.
@@ -248,7 +252,9 @@ PAGES = {
         (("So, reject.", 0.55), "click", "dialog.confirm button[value=ok]"),  # the click lands on "reject"
         ("Version one stays", "spot", ".xchips"),
     ]),
-    "14-live": dict(src="platform", path="#/experiments/vani-live-c1", ready=".card.change", beats=[
+    "14-live": dict(src="platform", path="#/experiments/vani-live-c1", ready=".card.change", pre=[
+        ("badge", os.environ.get("VIDEO_LIVE_BADGE", "Offline rehearsal · simulated Sarvam · invented calls")),
+    ], beats=[
         (0.3, "spot", ".xtitle"),
         ("Here, Vani runs as a Sarvam voice agent", "spot", ".xsim"),
         ("Each lead is hashed", "scroll", "section.section > .card.flush", "center", 1300),
@@ -363,6 +369,8 @@ def setup(page, act: str, *a):
         page.press(a[0], "Enter")
     elif act == "scroll":
         page.evaluate("([s, b]) => vl.scroll(s, b, 0)", [a[0], a[1]])
+    elif act == "badge" and a[0]:  # VIDEO_LIVE_BADGE= (empty) once the live scene films real team calls
+        page.evaluate("(t) => vl.badge(t)", a[0])
     page.wait_for_timeout(80)
 
 
@@ -400,20 +408,30 @@ def film(browser, sid: str, clock: Clock, overlay: str):
             setup(page, *step)
         page.wait_for_timeout(900)
     page.evaluate("vl.raise()")
+    page.evaluate("""() => { window.__spotlog = []; setInterval(() => { const el = document.querySelector('.vl-spot');
+        if (!el) return; const r = el.getBoundingClientRect();
+        window.__spotlog.push([performance.now(), r.x, r.y, r.width, r.height, el.classList.contains('on') ? 1 : 0]); }, 50); }""")
     f = Film(ctx, page)
     f.start()
     page.wait_for_timeout(250)
     t0 = time.time()
-    page.evaluate("([caps, times]) => { vl.start(caps); if (times) window.play(times); }", [clock.captions(), times if card else None])
+    p0 = page.evaluate("([caps, times]) => { vl.start(caps); if (times) window.play(times); return performance.now(); }",
+                       [[] if CLEAN else clock.captions(), times if card else None])
+    events = []
     for when, *act in sorted(spec["beats"] if spec else [], key=lambda b: clock.at(b[0])):
         at = clock.at(when)
         page.wait_for_timeout(max(0, (t0 + at - time.time()) * 1000))
+        events.append([round(at, 3), act[0], act[1] if len(act) > 1 and isinstance(act[1], str) else None])
         run(page, *act)
     page.wait_for_timeout(max(0, (t0 + seconds + 0.3 - time.time()) * 1000))
+    spot = page.evaluate("window.__spotlog || []")
     f.stop()
     ctx.close()
-    (OUT / "clips").mkdir(parents=True, exist_ok=True)
-    f.write(t0, seconds, OUT / "clips" / f"{sid}.webm")
+    CLIPS.mkdir(parents=True, exist_ok=True)
+    f.write(t0, seconds, CLIPS / f"{sid}.webm")
+    k = 1920 / (1440 if not card else 1920)  # CSS px to frame px
+    (CLIPS / f"{sid}.beats.json").write_text(json.dumps({"events": events, "spot": [
+        [round((t - p0) / 1000, 3), *(round(v * k, 1) for v in r), on] for t, *r, on in spot if 0 <= (t - p0) / 1000 <= seconds]}))
     print(f"  {sid}: {seconds:.2f} s, {len(f.frames)} frames from the screencast")
 
 

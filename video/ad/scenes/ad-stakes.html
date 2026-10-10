@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · ad · stakes</title>
+<link rel="stylesheet" href="ad.css">
+<style>
+  #bar { left: 560px; width: 800px; top: 232px; height: 60px; }
+  #bar .lab { position: absolute; left: 0; top: 0; }
+  #bar .neg { position: absolute; right: 0; top: 0; color: var(--harm); }
+  #bar .track { position: absolute; left: 0; right: 0; top: 40px; height: 2px; background: var(--hair); }
+  #bar .fill { position: absolute; left: 0; top: 40px; height: 2px; width: 800px; background: var(--amber); transform-origin: 0 50%;
+    box-shadow: 0 0 14px rgba(217, 145, 43, .45); }
+  #bar .gone { position: absolute; left: 560px; top: 40px; height: 2px; width: 240px; background: var(--harm); transform-origin: 0 50%; }
+  #big { top: 318px; font-size: 330px; line-height: 1; font-weight: 160; color: var(--amber-hi);
+    text-shadow: 0 0 80px rgba(217, 145, 43, .28); }
+  #b30 { top: 318px; font-size: 330px; line-height: 1; font-weight: 160; color: var(--ink); }
+  #b30 small { font-size: .5em; font-weight: 200; color: var(--harm); margin-left: .04em; }
+  #of { top: 700px; font-size: 64px; line-height: 1; color: var(--ink-2); }
+  #per { top: 700px; font-size: 64px; line-height: 1; color: var(--ink-2); }
+  #per > * { display: inline-block; }
+  #per em { color: var(--ink); }
+  #l1 { top: 300px; font-size: 92px; line-height: 1; color: var(--ink-2); }
+  #l1 > * { display: inline-block; }
+  #l1 em { color: var(--ink); }
+  #flip { left: 810px; top: 470px; width: 300px; height: 150px; perspective: 900px; }
+  #flip .card { position: absolute; inset: 0; border-radius: 14px; background: #151615; border: 1px solid rgba(237, 234, 226, .10);
+    display: grid; place-items: center; backface-visibility: hidden; transform-origin: 50% 50%; z-index: 2;
+    box-shadow: 0 30px 60px -30px rgba(0, 0, 0, .8); }
+  #flip::before, #flip::after { content: ""; position: absolute; left: 10px; right: 10px; height: 150px; border-radius: 14px;
+    background: #121312; border: 1px solid rgba(237, 234, 226, .06); }
+  #flip::before { top: 16px; left: 22px; right: 22px; opacity: .5; }
+  #flip::after { top: 8px; opacity: .8; }
+  #flip .card b { font: 400 46px var(--f-mono); letter-spacing: .14em; color: #75736C; }
+  #flip .card i { position: absolute; left: 22px; right: 22px; top: 50%; height: 1px; background: rgba(0, 0, 0, .55); }
+</style>
+</head>
+<body>
+<div id="world">
+  <div id="bar"><span class="mono lab">Meetings fixed</span><span class="mono neg">−30%</span><div class="track"></div><div class="fill"></div><div class="gone"></div></div>
+  <h1 id="b30" class="fig center-x">30<small>%</small></h1>
+  <p id="of" class="serif center-x"><em>of meetings, gone.</em></p>
+  <h1 id="big" class="fig center-x">0</h1>
+  <p id="per" class="serif center-x"><span id="per-a">meetings,</span>&nbsp;<em id="per-b">every week.</em></p>
+  <p id="l1" class="serif center-x"><span id="l1-a">If it hurts,</span>&nbsp;<em id="l1-b">nobody notices.</em></p>
+  <div id="flip"><div class="card" id="fa"><b></b><i></i></div><div class="card" id="fb"><b></b><i></i></div></div>
+</div>
+<script src="../runtime.js"></script>
+<script src="ad-kit.js"></script>
+<script>
+// The prompt line from the open; "Politely" is struck and retyped "Quickly". The camera tilts down to a plane of
+// 30,000 points (every buyer); a drop of light falls from the edited word and a shockwave turns every point amber.
+// "Lose thirty percent": 30% of the points go red and wink out, a bar drains 30%; "250" counts up huge in amber
+// on "two hundred and fifty", "every week." on "Every week". "If it hurts, nobody notices." over a grey flip
+// calendar of weeks; "If it helps, nobody can prove it." which then dissolves into drifting noise.
+const ROWS = 100, COLS = 300, N = ROWS * COLS, LOST = 0.3;
+const F = 900, HCAM = 300, CX = 960;
+const OLD = "Politely", NEW = "Quickly", REST = " ask the buyer for the quantity, with a unit.", PFONT = '400 44px "Geist Mono"';
+const L2A = "If it helps,", L2B = "nobody can prove it.", L2FA = '400 92px "Instrument Serif"', L2FB = 'italic 400 92px "Instrument Serif"', L2Y = 592;
+let ctx, PX, PZ, PH, NL, X, Y, S, A, cw, x0, dust, l2;
+let tc, tb, to, tl, t250, twk, th, tn, th2, tpv, dur;
+let el = {};
+
+function init(AD) {
+  dur = AD.dur;
+  tc = cue("Change that prompt"); tb = cue("every buyer"); to = cue("at once"); tl = cue("Lose thirty percent");
+  t250 = cue("two hundred and fifty"); twk = cue("Every week"); th = cue("If it hurts"); tn = cue("nobody notices");
+  th2 = cue("If it helps"); tpv = cue("prove it");
+  const world = K.stage();
+  ctx = K.canvas(world); world.prepend(ctx.canvas);
+  for (const id of ["bar", "b30", "of", "big", "per-a", "per-b", "l1-a", "l1-b", "flip", "fa", "fb"]) el[id] = document.getElementById(id);
+  el.fill = el.bar.querySelector(".fill"); el.gone = el.bar.querySelector(".gone"); el.neg = el.bar.querySelector(".neg"); el.lab = el.bar.querySelector(".lab");
+
+  // the plane: rows spaced geometrically in depth, each spanning the frame; the lost 30% first, so they draw as one
+  const r = rng(250), dots = [];
+  for (let k = 0; k < ROWS; k++) for (let j = 0; j < COLS; j++) {
+    const z = 240 * (6400 / 240) ** (k / (ROWS - 1));
+    const xs = (j + 0.5 * (k % 2) + (r() - 0.5) * 0.35) / COLS - 0.5;
+    dots.push([xs * 2.9 * z * (960 / F), z, r(), r() < LOST]);
+  }
+  dots.sort((a, b) => b[3] - a[3]);
+  NL = dots.filter((d) => d[3]).length;
+  PX = Float32Array.from(dots, (d) => d[0]); PZ = Float32Array.from(dots, (d) => d[1]); PH = Float32Array.from(dots, (d) => d[2]);
+  X = new Float32Array(N); Y = new Float32Array(N); S = new Float32Array(N); A = new Float32Array(N);
+
+  ctx.font = PFONT; cw = ctx.measureText("M").width;
+  x0 = CX - ((OLD + REST).length * cw) / 2;
+
+  // the last line, as points, for the dissolve
+  ctx.font = L2FA; const wa = ctx.measureText(L2A + " ").width; ctx.font = L2FB; const wb = ctx.measureText(L2B).width;
+  l2 = { xa: CX - (wa + wb) / 2, xb: CX - (wa + wb) / 2 + wa };
+  const pa = K.textPts(L2A, L2FA, l2.xa, L2Y, { align: "left", step: 2, seed: 3 }), pb = K.textPts(L2B, L2FB, l2.xb, L2Y, { align: "left", step: 2, seed: 4 });
+  dust = { p: new Float32Array([...pa, ...pb]), na: pa.length / 2 };
+  dust.n = dust.p.length / 2;
+  dust.h = Float32Array.from({ length: dust.n }, (_, i) => hash(i * 1.618));
+  dust.X = new Float32Array(dust.n); dust.Y = new Float32Array(dust.n); dust.S = new Float32Array(dust.n); dust.A = new Float32Array(dust.n);
+}
+
+function render(t) {
+  K.frame(t, dur);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, K.W, K.H);
+
+  // the camera tilts down from the line of text to the plane
+  const tilt = prog(t, tc + 0.95, 0.95, E.inOutCubic);
+  const zoom = lerp(1.06, 1, tilt), py = lerp(556, 300, tilt);
+  const yh = lerp(1250, 470, tilt) + 40 * prog(t, th - 0.4, 2.5, E.inOutCubic), dolly = 70 * t;
+  plane(t, yh, dolly, tilt, py);
+  prompt(t, py, zoom);
+  type(t);
+  dissolve(t);
+  K.bloom(ctx, 0.5, 0.6);
+}
+
+function plane(t, yh, dolly, tilt, py) {
+  const tw0 = tb + 0.22, dt = t - tw0;
+  const r = dt > 0 ? 500 * dt + 4200 * dt * dt : -1;
+  const oz = 1500 + 70 * (tb + 0.22), ox = (x0 + 3.5 * cw - CX) * (oz - 70 * (tb + 0.22)) / F;
+  const dimNum = 1 - 0.5 * prog(t, tl + 0.3, 1.2), dimLate = 1 - 0.72 * prog(t, th - 0.3, 1.4), out = 1 - prog(t, tpv + 0.1, 1.2, E.inOutCubic);
+  const vis = tilt * dimNum * dimLate * out;
+  for (let i = 0; i < N; i++) {
+    const z = PZ[i] - dolly;
+    if (z < 60) { A[i] = 0; continue; }
+    const d = Math.hypot(PX[i] - ox, z + dolly - oz), w = 240 + 0.1 * r, e = (d - r) / w;
+    const crest = r > 0 ? Math.exp(-e * e) * (1 - clamp(r / 11000)) : 0;
+    const lit = r > 0 ? K.smooth(0.6, -0.6, e) : 0;
+    const lift = 46 * crest;
+    X[i] = CX + (PX[i] * F) / z;
+    Y[i] = yh + (F * (HCAM - lift)) / z;
+    S[i] = clamp(2300 / z, 0.9, 3.1) + 1.4 * crest;
+    const fog = clamp(1.3 - z / 5200) * K.smooth(60, 300, z);
+    let a = (0.14 + (0.46 + 0.12 * PH[i]) * lit + 0.9 * crest) * fog * vis;
+    if (i < NL) a *= 1 - prog(t, tl + 0.35 + 1.1 * PH[i], 0.5, E.inOutCubic);  // the lost wink out, scattered
+    A[i] = a * (0.85 + 0.15 * Math.sin(t * 2.1 + PH[i] * 40));
+  }
+  // colour: grey before the wave, amber behind it; the lost flash red; all of it greys out when nobody notices
+  const grey = prog(t, th - 0.2, 1.4), red = prog(t, tl, 0.35) * (1 - prog(t, tl + 1.6, 0.6));
+  const amber = r > 0 ? K.mix("#B9B5AC", K.C.amberHi, clamp(r / 1800)) : "#B9B5AC";
+  const keep = K.mix(amber, "#8A877F", grey);
+  ctx.globalCompositeOperation = "lighter";
+  K.dots(ctx, X, Y, S, A, 0, NL, K.mix(keep, K.C.harm, red));
+  K.dots(ctx, X, Y, S, A, NL, N, keep);
+  ctx.globalCompositeOperation = "source-over";
+
+  // the drop: a thin falling light from the edited word to the plane, and its splash
+  const fall = prog(t, tw0 - 0.32, 0.32, E.inCubic);
+  if (fall > 0 && t < tw0 + 0.8) {
+    const sx = x0 + 3.5 * cw, top = py + 14, bot = yh + (F * HCAM) / (oz - dolly);
+    const yb = lerp(top, bot, fall), ya = lerp(top, bot, Math.max(0, fall - 0.35)), fade = 1 - prog(t, tw0, 0.5);
+    const g = ctx.createLinearGradient(0, ya, 0, yb);
+    g.addColorStop(0, "rgba(240,180,85,0)"); g.addColorStop(1, `rgba(255,214,150,${0.95 * fade})`);
+    ctx.fillStyle = g; ctx.fillRect(sx - 1, ya, 2, yb - ya);
+    if (t > tw0) {
+      const k = prog(t, tw0, 0.7);
+      ctx.globalAlpha = 0.9 * (1 - k); ctx.strokeStyle = "#FFD696"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(sx, bot, 10 + 160 * k, (10 + 160 * k) * 0.16, 0, 0, K.TAU); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// the line: struck, deleted, retyped; then it lifts away
+function prompt(t, py, zoom) {
+  const vis = 1 - prog(t, tl - 0.35, 0.6, E.inOutCubic);
+  if (vis <= 0) return;
+  ctx.save();
+  ctx.setTransform(zoom, 0, 0, zoom, CX * (1 - zoom), 540 * (1 - zoom));
+  ctx.globalAlpha = vis;
+  ctx.translate(0, py - 556 - 26 * (1 - vis));
+  ctx.font = PFONT; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+  const strike = prog(t, tc + 0.05, 0.4, E.inOutCubic);
+  const del = Math.floor(clamp((t - (tc + 0.5)) / 0.42) * OLD.length), typed = Math.floor(clamp((t - (tc + 0.98)) / 0.5) * NEW.length + 1e-6);
+  const word = typed > 0 ? NEW.slice(0, typed) : OLD.slice(0, OLD.length - del);
+  const Y0 = 556;
+  ctx.fillStyle = typed > 0 ? K.C.amberHi : K.C.ink;
+  ctx.fillText(word, x0, Y0);
+  ctx.fillStyle = K.C.ink;
+  // the rest closes up behind the word as it is deleted and retyped
+  const restX = x0 + cw * word.length;
+  ctx.fillText(REST, restX, Y0);
+  if (strike > 0 && del < OLD.length && typed === 0) {
+    ctx.fillStyle = K.C.harm; ctx.fillRect(x0 - 4, Y0 - 15, (cw * (OLD.length - del) + 8) * strike, 2.5);
+  }
+  // the caret: steady while editing, blinking at rest
+  const editing = t > tc + 0.45 && t < tc + 1.6;
+  const caretX = editing ? restX + 2 : restX + cw * REST.length + 10;
+  ctx.globalAlpha = vis * (editing || Math.floor(t * 1.8) % 2 ? 0.95 : 0.15);
+  ctx.fillStyle = K.C.tealHi; ctx.fillRect(caretX, Y0 - 38, 3, 48);
+  ctx.globalAlpha = vis * K.smooth(0, 0.4, t) * 0.9;
+  ctx.font = '400 15px "Geist Mono"'; ctx.letterSpacing = "4px"; ctx.fillStyle = K.C.teal; ctx.textAlign = "center";
+  ctx.fillText(typed > 0 ? "THE PROMPT · EDITED" : "THE PROMPT", CX, Y0 - 92);
+  ctx.letterSpacing = "0px";
+  ctx.restore();
+}
+
+function type(t) {
+  // the bar drains 30%, the figure counts to 250
+  const outA = prog(t, th - 0.45, 0.55, E.inOutCubic);
+  const barIn = prog(t, tl - 0.15, 0.7), drain = prog(t, tl + 0.25, 0.9, E.inOutCubic);
+  K.rise(el.bar, barIn * (1 - outA), { y: 14 - 40 * outA, blur: 6 });
+  el.fill.style.transform = `scaleX(${(1 - 0.3 * drain) * prog(t, tl - 0.15, 0.7, E.inOutCubic)})`;
+  el.gone.style.transform = `scaleX(${drain})`; el.gone.style.opacity = (1 - prog(t, tl + 1.0, 0.8)) * 0.9;
+  el.neg.style.opacity = drain;
+  const swap = prog(t, t250 - 0.55, 0.5, E.inOutCubic);
+  K.rise(el.b30, prog(t, tl - 0.05, 0.9) * (1 - swap), { y: 40 - 90 * swap, blur: 14 });
+  K.rise(el.of, prog(t, tl + 0.5, 0.8) * (1 - swap), { y: 16 - 40 * swap, blur: 8 });
+  const n = prog(t, t250 - 0.1, 1.05, E.outExpo);
+  el.big.textContent = K.fmt(250 * n);
+  K.rise(el.big, prog(t, t250 - 0.25, 0.7) * (1 - outA), { y: 40 - 80 * outA, blur: 14 });
+  K.rise(el["per-a"], prog(t, t250 + 0.35, 0.8) * (1 - outA), { y: 16 - 40 * outA, blur: 8 });
+  K.rise(el["per-b"], prog(t, twk - 0.1, 0.8) * (1 - outA), { y: 16 - 40 * outA, blur: 8 });
+
+  // nobody notices: the weeks flip by in grey
+  const outB = prog(t, th2 - 0.35, 0.6, E.inOutCubic);
+  K.rise(el["l1-a"], prog(t, th - 0.1, 0.8) * (1 - outB), { y: 18 - 50 * outB, blur: 8 });
+  K.rise(el["l1-b"], prog(t, tn - 0.1, 0.8) * (1 - outB), { y: 18 - 50 * outB, blur: 8 });
+  K.rise(el.flip, prog(t, tn + 0.1, 0.7) * (1 - outB), { y: 24 - 50 * outB, blur: 6 });
+  // flips come faster: flip k starts at f0 + 0.42 k^0.8
+  const f0 = tn + 0.55, span = (k) => f0 + 0.46 * k ** 0.8;
+  let k = 0; while (k < 30 && t >= span(k + 1)) k++;
+  const p = t >= f0 ? clamp((t - span(k)) / 0.26) : 0, wk = (n) => `WEEK ${String(n).padStart(2, "0")}`;
+  const flipping = t >= f0 && p < 1;
+  el.fa.querySelector("b").textContent = wk(k + 1);
+  el.fb.querySelector("b").textContent = wk(k + 2);
+  const e = E.inOutCubic(p);
+  el.fa.style.transform = flipping ? `rotateX(${e * 180}deg)` : "none";
+  el.fb.style.transform = flipping ? `rotateX(${-180 + e * 180}deg)` : "rotateX(180deg)";
+  if (!flipping && t >= f0) { el.fa.querySelector("b").textContent = wk(k + 2); }
+}
+
+// "If it helps, nobody can prove it." and then the type itself turns to noise and drifts off
+function dissolve(t) {
+  const inA = prog(t, th2 - 0.05, 0.8), inB = prog(t, tpv - 0.75, 0.8);
+  if (inA <= 0) return;
+  const d0 = tpv - 0.02, go = (i) => clamp((t - d0 - 0.25 * ((dust.p[2 * i] - 300) / 1320) - 0.1 * dust.h[i]) / 0.62);
+  const crisp = 1 - prog(t, d0 - 0.05, 0.3);
+  if (crisp > 0) {
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.globalAlpha = inA * crisp; ctx.font = L2FA; ctx.fillStyle = "rgba(237,234,226,.64)";
+    ctx.fillText(L2A, l2.xa, L2Y + 18 * (1 - inA));
+    ctx.globalAlpha = inB * crisp; ctx.font = L2FB; ctx.fillStyle = K.C.ink;
+    ctx.fillText(L2B, l2.xb, L2Y + 18 * (1 - inB));
+    ctx.globalAlpha = 1;
+  }
+  if (t < d0 - 0.1) return;
+  const f = Math.floor(t * 30);
+  for (let i = 0; i < dust.n; i++) {
+    const k = go(i), h = dust.h[i], e = k * k;
+    const jx = (hash(i + f * 0.731) - 0.5) * 7 * k, jy = (hash(i * 1.3 + f * 0.517) - 0.5) * 7 * k;
+    dust.X[i] = dust.p[2 * i] + e * (240 + 520 * h) + 120 * k * (noise(i * 0.013 + t * 0.8, 1) - 0.5) + jx;
+    dust.Y[i] = dust.p[2 * i + 1] - e * (60 + 200 * hash(i * 2.7)) + 140 * k * (noise(i * 0.017 + t * 0.6, 2) - 0.5) + jy;
+    dust.S[i] = 1.4;
+    dust.A[i] = (i < dust.na ? 0.32 : 0.5) * (1 - crisp * 0.8) * (1 - E.inOutCubic(clamp((k - 0.2) / 0.8)));
+  }
+  ctx.globalCompositeOperation = "lighter";
+  K.dots(ctx, dust.X, dust.Y, dust.S, dust.A, 0, dust.n, K.C.ink);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+scene({
+  init, render,
+  sfx: () => {
+    const tc = cue("Change that prompt"), tn = cue("nobody notices"), flips = [...Array(7)].map((_, k) => [tn + 0.55 + 0.46 * k ** 0.8, "click", 0.22]);
+    return [[tc + 0.05, "tick", 0.6], ...[...Array(7)].map((_, i) => [tc + 0.98 + i * 0.072, "click", 0.18]),
+      [cue("every buyer", -0.1), "swoosh", 0.4], [cue("every buyer", 0.22), "boom", 0.4], [cue("Lose thirty percent"), "hit", 0.35],
+      [cue("two hundred and fifty", -0.05), "hit", 0.65], [cue("Every week"), "hit", 0.28], ...flips.filter((f) => f[0] < cue("If it helps")),
+      [cue("prove it"), "whoosh", 0.35]];
+  },
+});
+</script>
+</body>
+</html>

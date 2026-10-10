@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · walk</title>
+<!-- Every kind: walk scene of video/ad/timeline.yaml: the platform capture of AD.clip in a floating browser window on
+     the dark stage, a camera that follows the spotlight (AD.beats), the chapter and headline, and the captions.
+     Frames: AD.frameDir + %05d.jpg (render.py), else a <video> of out/clips_clean/<clip>.webm or out/clips/<clip>.webm.
+     Preview: http://127.0.0.1:<port>/ad/scenes/walk.html?id=walk-fix&t=6 (served from video/); ?beats=<url> tries a
+     beats.json before the clean clips have one. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<style>
+  :root {
+    --stage: #0B0B0C; --ink: #EDEAE2; --muted: #9C978C; --accent: #3FB8A9; --amber: #D9912B;
+    --f-display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+    --f-ui: "Geist", ui-sans-serif, system-ui, sans-serif;
+    --f-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.92 0 0 0 0 0.89 0 0 0 1.3 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.07'/></svg>");
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--stage); }
+  body { color: var(--ink); font: 400 24px/1.4 var(--f-ui); -webkit-font-smoothing: antialiased; }
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+
+  /* the light the window brings with it (fades with the window, so every cut lands on the plain stage) */
+  #light { opacity: 0; background: radial-gradient(1300px 760px at 50% 58%, rgba(63, 184, 169, .085), transparent 70%),
+    radial-gradient(900px 620px at 84% 6%, rgba(217, 145, 43, .055), transparent 65%); }
+  #glow { position: absolute; left: 160px; top: 40px; width: 1600px; height: 1000px; opacity: 0;
+    background: radial-gradient(closest-side, rgba(63, 184, 169, .16), rgba(63, 184, 169, .05) 55%, transparent); }
+
+  #cam { perspective: 2300px; perspective-origin: 50% 46%; }
+  #win { position: absolute; left: 264px; top: 133px; width: 1392px; height: 817px; border-radius: 14px; overflow: hidden;
+    transform-origin: 50% 50%; opacity: 0; background: #F5F2EA;
+    box-shadow: 0 80px 140px -50px rgba(0, 0, 0, .9), 0 34px 70px -34px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .07); }
+  .bar { position: relative; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 15px;
+    background: linear-gradient(#232426, #1A1B1D); border-bottom: 1px solid rgba(0, 0, 0, .55); }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; background: rgba(237, 234, 226, .17); }
+  .url { position: absolute; left: 50%; top: 6px; transform: translateX(-50%); height: 22px; min-width: 400px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 7px; background: rgba(255, 255, 255, .06);
+    font: 450 12.5px/1 var(--f-mono); letter-spacing: .01em; color: rgba(237, 234, 226, .6); white-space: nowrap; }
+  .url svg { width: 10px; height: 11px; opacity: .7; }
+  .url b { font-weight: 450; color: rgba(237, 234, 226, .38); }
+  .view { position: relative; width: 1392px; height: 783px; overflow: hidden; }
+  .view img, .view video { display: block; width: 1392px; height: 783px; }
+  /* the side turned away from us goes a little darker, so a tilt reads as depth */
+  .shade { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+  #shx { background: linear-gradient(90deg, transparent 25%, rgba(8, 8, 9, .42)); }
+  #shy { background: linear-gradient(180deg, rgba(8, 8, 9, .4), transparent 65%); }
+  #win::after { content: ""; position: absolute; inset: 0; border-radius: 14px; pointer-events: none;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), inset 0 1px 0 rgba(255, 255, 255, .1); }
+
+  /* the chapter and the headline: big on the stage at first, then a quiet lockup top left */
+  #lock > * { position: absolute; left: 0; top: 0; transform-origin: 0 0; white-space: nowrap; }
+  .eb { font: 500 14px/1 var(--f-mono); letter-spacing: .22em; text-transform: uppercase; color: var(--accent); opacity: 0; }
+  .hd { font: 400 42px/1.06 var(--f-display); letter-spacing: -.012em; color: var(--ink);
+    text-shadow: 0 2px 30px rgba(0, 0, 0, .55); }
+  .hd .w { display: inline-block; overflow: hidden; vertical-align: top; padding: .02em .07em .16em .02em; margin: 0 -.05em -.16em 0; }
+  .hd .w + .w { margin-left: .2em; }
+  .hd .w > span { display: inline-block; opacity: 0; }
+  .hd em { font-style: italic; }
+
+  /* captions: small, off-white, a dark glass under them only where the window is behind */
+  #cap { position: absolute; left: 50%; bottom: 36px; width: max-content; max-width: 1180px; padding: 11px 30px 13px;
+    transform: translateX(-50%); opacity: 0; }
+  #cap .glass { position: absolute; inset: 0; border-radius: 16px; opacity: 0; background: rgba(13, 13, 14, .72); box-shadow: 0 0 0 1px rgba(255, 255, 255, .06), 0 18px 40px -18px rgba(0, 0, 0, .6); }
+  #cap p { position: relative; margin: 0; text-align: center; text-wrap: balance; font: 430 31px/1.32 var(--f-ui);
+    letter-spacing: -.004em; color: var(--ink); text-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 0 22px rgba(0, 0, 0, .45); }
+
+  #vig { background: radial-gradient(ellipse 120% 105% at 50% 46%, transparent 58%, rgba(0, 0, 0, .42)); }
+  #grain { position: absolute; left: -240px; top: -240px; width: 2400px; height: 1560px; background: var(--grain); will-change: transform; }
+</style>
+</head>
+<body>
+<div class="layer" id="light"></div>
+<div class="layer" id="cam">
+  <div id="glow"></div>
+  <div id="win">
+    <div class="bar"><i></i><i></i><i></i>
+      <div class="url"><svg viewBox="0 0 10 11" aria-hidden="true"><rect x="1" y="4.6" width="8" height="6" rx="1.3" fill="currentColor"/><path d="M3 4.8V3.3a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg><span><b>vanilab.app/</b><span id="route"></span></span></div>
+    </div>
+    <div class="view" id="view"></div>
+    <div class="shade" id="shx"></div><div class="shade" id="shy"></div>
+  </div>
+</div>
+<div class="layer" id="lock"><div class="eb" id="eb"></div><h1 class="hd" id="hd" style="margin:0;font-weight:400"></h1></div>
+<div id="cap"><div class="glass"></div><p></p></div>
+<div class="layer" id="vig"></div>
+<div class="layer" style="overflow:hidden"><div id="grain"></div></div>
+<script src="../runtime.js"></script>
+<script>
+const ROUTES = { "05-home": "#/", "06-call": "#/calls/sample-0001", "07-audit": "#/audit", "08-rubric": "#/rubrics/new",
+  "09-issues": "#/issues", "10-fix": "#/fixes", "11-engine": "#/experiments", "13-approve": "#/experiments", "14-live": "#/experiments/vani-live-c1" };
+// the window at rest: 1392x783 of content (the 1920x1080 frame at K) under a 34 px bar, centred at (960, 542)
+const W = 1392, H = 783, BAR = 34, K = W / 1920, HW = W / 2, HH = (H + BAR) / 2, CY = 542;
+const ZMAX = 1.68, FILL = 0.64, MARGIN = 90, DT = 1 / 30;
+// how the window arrives, by scene: [dx, dy, rotateX, rotateY, scale] it starts from
+const ENTRIES = [[0, 470, 34, 0, 0.92], [-320, 300, 20, 24, 0.9], [320, 300, 20, -24, 0.9], [0, 80, 9, 0, 0.62]];
+const T_HEAD = 0.16, T_MOVE = 1.12, T_WIN = 1.35;  // words rise, the headline settles to its lockup, the window arrives
+const $ = (s) => document.querySelector(s);
+let A, seed, entry, track, gotos, media, big, small, words;
+
+/** The spotlight at clip time c: the last [t, x, y, w, h, on] sample at or before c (samples are 20 a second). */
+function spotAt(S, c) {
+  let lo = 0, hi = S.length - 1, k = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (S[m][0] <= c) { k = m; lo = m + 1; } else hi = m - 1; }
+  return k < 0 ? null : S[k];
+}
+
+/** Where the camera wants to be for a spot: [fx, fy, log zoom], fx/fy the window point (from its centre) to frame. */
+function aim(s) {
+  if (!s || !s[5]) return [0, 0, 0];
+  const x0 = Math.max(0, s[1]), y0 = Math.max(0, s[2]), x1 = Math.min(1920, s[1] + s[3]), y1 = Math.min(1080, s[2] + s[4]);
+  if (x1 - x0 < 40 || y1 - y0 < 30) return [0, 0, 0];
+  const Z = clamp(Math.min(FILL * 1920 / ((x1 - x0) * K), FILL * 1080 / ((y1 - y0) * K)), 1, ZMAX);
+  // the spot's centre lands a little above the screen's, clear of the captions
+  let fx = ((x0 + x1) / 2 - 960) * K, fy = BAR / 2 + ((y0 + y1) / 2 - 540) * K + 30 / Z;
+  // never show more than MARGIN of stage past the window's edge
+  const ex = Math.max(0, HW + MARGIN - 960 / Z), ey = Math.max(0, HH + MARGIN - 540 / Z);
+  return [clamp(fx, -ex, ex), clamp(fy, -ey, ey), Math.log(Z)];
+}
+
+/** The camera for the whole scene at 30 Hz: aims, smoothed by a Gaussian (a little behind the spotlight, so the
+ * camera eases in and out of every move), then pulled back a touch while it pans fast, like a dolly. */
+function camera(S) {
+  const n = Math.ceil(A.dur / DT) + 2;
+  const raw = Array.from({ length: n }, (_, i) => {
+    const T = i * DT;
+    return T < T_WIN + 1.4 || T > A.dur - 1.9 ? [0, 0, 0] : aim(spotAt(S, T - A.lead));
+  });
+  const sig = 0.42, R = Math.ceil(3 * sig / DT), L = Math.round(0.3 / DT);
+  const g = Array.from({ length: 2 * R + 1 }, (_, j) => Math.exp(-0.5 * (((j - R) * DT) / sig) ** 2));
+  const gs = g.reduce((a, b) => a + b);
+  const sm = raw.map((_, i) => {
+    const o = [0, 0, 0];
+    g.forEach((w, j) => { const r = raw[clamp(i - L + j - R, 0, n - 1)]; for (let d = 0; d < 3; d++) o[d] += (r[d] * w) / gs; });
+    return o;
+  });
+  return sm.map((s, i) => {
+    const a = sm[Math.max(0, i - 1)], b = sm[Math.min(n - 1, i + 1)];
+    const v = (Math.exp(s[2]) * Math.hypot(b[0] - a[0], b[1] - a[1])) / (2 * DT);  // screen px a second
+    return [s[0], s[1], s[2] - Math.min(0.18, 0.00028 * v)];
+  });
+}
+
+async function setMedia() {
+  const view = $("#view");
+  if (A.frameDir) {
+    const img = new Image(W, H);
+    view.append(img);
+    const dir = "../../" + A.frameDir.replace(/\/?$/, "/");
+    return async (c) => {
+      const k = clamp(Math.round(c * 30) + 1, 1, A.nframes || 1);
+      if (img.dataset.k == k) return;
+      img.dataset.k = k;
+      img.src = `${dir}${String(k).padStart(5, "0")}.jpg`;
+      await img.decode().catch(() => console.warn(`no frame ${img.src}`));
+    };
+  }
+  const v = document.createElement("video");
+  Object.assign(v, { muted: true, playsInline: true, preload: "auto" });
+  view.append(v);
+  for (const d of ["clips_clean", "clips"]) {
+    const r = await fetch(`../../out/${d}/${A.clip}.webm`).catch(() => null);
+    if (r?.ok) {  // as a blob: python's http.server answers no range requests, so a plain src could not seek
+      v.src = URL.createObjectURL(await r.blob());
+      await new Promise((r) => { v.onloadeddata = r; v.onerror = r; });
+      break;
+    }
+  }
+  return async (c) => {
+    if (!v.readyState) return;
+    const ct = clamp(c, 0, (isFinite(v.duration) ? v.duration : 1e9) - 0.04);
+    if (Math.abs(v.currentTime - ct) < 0.01) return;
+    v.currentTime = ct;
+    await Promise.race([new Promise((r) => v.addEventListener("seeked", r, { once: true })), new Promise((r) => setTimeout(r, 1500))]);
+  };
+}
+
+scene({
+  async init(AD) {
+    A = AD;
+    const P = new URLSearchParams(location.search);
+    if (P.get("beats")) A.beats = await (await fetch(P.get("beats"))).json();
+    const B = Array.isArray(A.beats) || !A.beats ? { events: [], spot: [] } : A.beats;
+    await Promise.all(['42px "Instrument Serif"', 'italic 42px "Instrument Serif"', '500 14px "Geist Mono"', '450 12.5px "Geist Mono"', '430 31px "Geist"']
+      .map((f) => document.fonts.load(f)));
+    seed = parseInt(A.clip, 10) || [...A.id].reduce((a, c) => a + c.charCodeAt(0), 0);
+    entry = ENTRIES[seed % ENTRIES.length];
+    track = camera(B.spot || []);
+    gotos = (B.events || []).filter((e) => e[1] === "goto" && e[2]).map(([t, , h]) => [A.lead + t + 0.35, h]);
+    $("#route").textContent = ROUTES[A.clip] || "#/";
+    media = await setMedia();
+
+    // the headline, word by word, the last word in italics; then measure its two states
+    const ws = (A.head || "").split(/\s+/).filter(Boolean);
+    $("#hd").innerHTML = ws.map((w, i) => `<span class="w"><span>${i === ws.length - 1 && ws.length > 1 ? `<em>${w}</em>` : w}</span></span>`).join("");
+    $("#eb").textContent = A.chapter || "";
+    words = [...document.querySelectorAll(".hd .w > span")];
+    const eb = $("#eb").getBoundingClientRect(), hd = $("#hd").getBoundingClientRect();
+    const S = Math.min(2.9, 1560 / hd.width), Se = 1.5;
+    small = { eb: [264, 52, 1], hd: [262, 72, 1] };
+    const hy = 520 - (hd.height * S) / 2;
+    big = { eb: [960 - (eb.width * Se) / 2, hy - 14 * Se - 34, Se], hd: [960 - (hd.width * S) / 2, hy, S] };
+  },
+
+  async render(t) {
+    const out = prog(t, A.dur - 0.62, 0.56, E.inOutCubic);
+    // ---- the camera: the track, a slow push, a gentle drift that flattens as it zooms in
+    const i = clamp(t / DT, 0, track.length - 1), i0 = Math.floor(i), f = i - i0, a = track[i0], b = track[Math.min(track.length - 1, i0 + 1)];
+    const fx = lerp(a[0], b[0], f), fy = lerp(a[1], b[1], f);
+    const still = !A.beats?.spot?.length;
+    const ph = seed * 1.7, sg = seed % 2 ? 1 : -1;
+    let Z = Math.exp(lerp(a[2], b[2], f)) * (1 + (still ? 0.045 : 0.02) * prog(t, T_WIN, A.dur - T_WIN, E.inOutCubic))
+      * (1 + 0.012 * Math.sin(0.21 * t + ph));  // it breathes, even on a long hold
+    const q = clamp((Z - 1) / 0.3);
+    let rx = (1 - q) * (1.5 + 1.2 * Math.sin(0.19 * t + ph * 0.7));
+    let ry = (1 - q) * sg * (2.4 * Math.sin(0.23 * t + ph) + 1.1 * Math.sin(0.11 * t + 2 * ph));
+    let tx = -Z * fx + 10 * Math.sin(0.13 * t + ph), ty = -Z * fy + 6 * Math.sin(0.17 * t + ph + 1), tz = 0;
+    // ---- the entry (from below, a side, or depth) and the exit (back into the dark)
+    const e = prog(t, T_WIN, 1.9, E.outQuint), er = prog(t, T_WIN, 2.3, E.outQuint);
+    tx += entry[0] * (1 - e); ty += entry[1] * (1 - e); rx += entry[2] * (1 - er); ry += entry[3] * (1 - er);
+    Z *= lerp(entry[4], 1, e);
+    tz -= 240 * out; ty += 26 * out;
+    const op = prog(t, T_WIN, 0.8, E.inOutCubic) * (1 - out);
+    const win = $("#win");
+    win.style.transform = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, ${tz.toFixed(1)}px) rotateX(${rx.toFixed(3)}deg) rotateY(${ry.toFixed(3)}deg) scale(${Z.toFixed(4)})`;
+    win.style.opacity = op;
+    $("#shx").style.opacity = clamp(Math.abs(ry) / 24).toFixed(3);
+    $("#shx").style.transform = ry < 0 ? "scaleX(-1)" : "";
+    $("#shy").style.opacity = clamp(rx / 34).toFixed(3);
+    $("#glow").style.transform = `translate(${(tx * 0.4).toFixed(1)}px, ${(ty * 0.4).toFixed(1)}px) scale(${(1 + (Z - 1) * 0.35).toFixed(3)})`;
+    $("#glow").style.opacity = op * (0.85 + 0.15 * Math.sin(0.6 * t + ph));
+    const lit = prog(t, 0.1, 1.6, E.inOutCubic) * (1 - prog(t, A.dur - 0.9, 0.85, E.inOutCubic));
+    $("#light").style.opacity = $("#vig").style.opacity = lit;  // both gone at the cuts: the plain stage
+    let route = ROUTES[A.clip] || "#/";
+    for (const [at, h] of gotos) if (t >= at) route = h;
+    if ($("#route").textContent !== route) $("#route").textContent = route;
+
+    // ---- the headline: the eyebrow, the words rising through their masks, then the move to the lockup
+    const m = prog(t, T_MOVE, 0.86, E.inOutCubic);
+    const top = CY + ty - Z * HH, bottom = CY + ty + Z * HH;  // the window's edges on screen (rotation aside)
+    const quiet = m < 1 ? 1 : clamp((top - 100) / 26);      // the lockup steps aside when the window rises over it
+    const lockOp = quiet * (1 - prog(t, A.dur - 0.8, 0.5, E.inOutCubic));
+    for (const k of ["eb", "hd"]) {
+      const [x0, y0, s0] = big[k], [x1, y1, s1] = small[k];
+      const el = $(`#${k}`);
+      el.style.transform = `translate(${lerp(x0, x1, m).toFixed(2)}px, ${lerp(y0, y1, m).toFixed(2)}px) scale(${lerp(s0, s1, m).toFixed(4)})`;
+      el.style.opacity = k === "hd" ? lockOp : lockOp * prog(t, 0.1, 0.7, E.outCubic) * lerp(1, 0.9, m);
+    }
+    $("#eb").style.translate = `0 ${(10 * (1 - prog(t, 0.1, 0.8, E.outQuint))).toFixed(2)}px`;
+    words.forEach((w, j) => {
+      const k = prog(t, T_HEAD + 0.06 * j, 0.72, E.outQuint);
+      w.style.transform = `translateY(${(108 * (1 - k)).toFixed(2)}%)`;
+      w.style.opacity = Math.min(1, k * 1.6);
+    });
+
+    // ---- the caption for now, fading between lines
+    const c = A.caps.find(([a, b]) => t >= a && t < b);
+    const cap = $("#cap"), p = cap.querySelector("p");
+    if (c) {
+      if (p.textContent !== c[2]) p.textContent = c[2];
+      const k = Math.min(prog(t, c[0], 0.24, E.outCubic), 1 - prog(t, c[1] - 0.18, 0.18, E.inOutCubic));
+      cap.style.opacity = k * (1 - out);
+      cap.style.transform = `translateX(-50%) translateY(${(6 * (1 - prog(t, c[0], 0.4, E.outCubic))).toFixed(2)}px)`;
+    } else cap.style.opacity = 0;
+    const glass = clamp((bottom - 950) / 40) * op;
+    cap.querySelector(".glass").style.opacity = glass;
+    cap.querySelector(".glass").style.display = glass > 0.01 ? "" : "none";
+
+    // ---- grain, at film's 24 a second
+    const g = Math.floor(t * 24);
+    $("#grain").style.transform = `translate(${Math.floor(hash(g) * 220)}px, ${Math.floor(hash(g + 0.37) * 220)}px)`;
+
+    await media(t - A.lead);
+  },
+
+  sfx(AD) {
+    const B = Array.isArray(AD.beats) || !AD.beats ? { events: [] } : AD.beats;
+    const out = [[T_WIN + 0.02, "whoosh", 0.45]];
+    for (const [t, act] of B.events || []) {
+      if (["click", "type", "select"].includes(act)) out.push([AD.lead + t + 0.54, "click", 0.5]);  // after the cursor's 0.5 s glide
+      else if (act === "goto") out.push([AD.lead + t + 0.1, "swoosh", 0.32]);
+    }
+    return out;
+  },
+});
+</script>
+</body>
+</html>

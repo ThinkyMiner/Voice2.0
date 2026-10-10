@@ -1,0 +1,125 @@
+# The ad cut of the demo: a premium-product film wrapped around the same platform walkthrough.
+# kind motion: a motion-graphics scene, video/ad/scenes/<id>.html, spoken from `say` (video/tts.py with
+#   VIDEO_SCRIPT=video/ad/timeline.yaml writes video/out/audio/<id>.wav).
+# kind walk: a platform scene, composited by video/ad/scenes/walk.html from the clean capture of script.yaml scene
+#   `clip` (video/out/clips_clean/<clip>.webm and its .beats.json), spoken with that scene's narration.
+# kind motion with `clip`: a motion scene spoken with that script.yaml scene's narration (12-split).
+# lead: seconds of picture before the voice starts; pad: seconds after it ends (music only).
+# head / chapter: the kinetic headline and its eyebrow, for walk scenes. show: the art direction.
+pace: 0.88  # the ad's own lines, a touch slower than the walkthrough's
+scenes:
+  - id: ad-open
+    kind: motion
+    lead: 2.4
+    pad: 0.5
+    say: >-
+      Thirty thousand conversations. Every week. One voice. And one prompt, deciding every word it says.
+    show: "Black. A field of 30,000 tiny points of light drifting like a starfield; the count '30,000' rises in huge
+      thin type and the points answer it. 'Every week' as a calendar-like sweep. 'One voice': the points stream into
+      one living waveform line. 'One prompt': the waveform resolves into a single glowing line of prompt text, the
+      camera pushing slowly in."
+
+  - id: ad-stakes
+    kind: motion
+    lead: 0.3
+    pad: 0.6
+    say: >-
+      Change that prompt, and every buyer hears it, at once. Lose thirty percent of meetings, and it costs two
+      hundred and fifty of them. Every week. If it hurts, nobody notices for weeks. If it helps, nobody can prove it.
+    show: "The prompt line: one word is struck and retyped. A shockwave ripples from it through every point at once
+      (all turn amber). '250 meetings / week' counts up huge in amber, a thin bar of 30% draining. 'nobody notices':
+      the points dim, a calendar of grey weeks flips by. 'nobody can prove it': the type itself dissolves into noise."
+
+  - id: ad-reveal
+    kind: motion
+    lead: 0.9
+    pad: 1.6
+    say: >-
+      Until now. This is Vani Lab.
+    show: "Silence and black on 'Until now.' Then a light sweep, the platform's ring glyph draws itself in one
+      stroke with a warm comet head, 'Vani Lab' (serif, italic Lab) resolves from blur, then the line 'Every prompt
+      change, proven before it ships.' and 'by Hare & Tortoise' in mono."
+
+  - id: ad-loop
+    kind: motion
+    lead: 0.3
+    pad: 0.7
+    say: >-
+      A loop that never sleeps. It listens to every call, and judges it on IndiaMART's own checklist. It finds the
+      root cause, and writes the fix. It checks the fix is safe, and replays it. It proves it on ten percent of
+      traffic. And it ships only when a person says yes.
+    show: "The ring, large and luminous, in slight 3D tilt, rotating slowly; a comet travels it; seven stations light
+      one by one as they are named (Listen, Judge, Improve, Safety gate, Replay, Prove on 10%, Approve), each label
+      flying in; at 'a person says yes' the ring completes and pulses."
+
+  - id: walk-home
+    kind: walk
+    clip: 05-home
+    chapter: "The platform"
+    head: "One loop. Always running."
+  - id: walk-call
+    kind: walk
+    clip: 06-call
+    chapter: "01 · Listen"
+    head: "Every call, heard."
+  - id: walk-audit
+    kind: walk
+    clip: 07-audit
+    chapter: "02 · Judge"
+    head: "A judge that knows its limits."
+  - id: walk-rubric
+    kind: walk
+    clip: 08-rubric
+    chapter: "02 · Judge"
+    head: "Your checks, in plain English."
+  - id: walk-issues
+    kind: walk
+    clip: 09-issues
+    chapter: "03 · Improve"
+    head: "Failures become causes."
+  - id: walk-fix
+    kind: walk
+    clip: 10-fix
+    chapter: "04 · Gate and replay"
+    head: "Minimal. Safe. Replayed."
+  - id: walk-engine
+    kind: walk
+    clip: 11-engine
+    chapter: "05 · Prove"
+    head: "Proof, not opinion."
+  - id: ad-split
+    kind: motion
+    clip: 12-split
+    show: "10,000 points in a calm grid; one in ten turns teal, in a hash-like scatter, not a block. Big figures land as
+      they are said: 10% configured, 9.91% achieved, SRM p 0.68, 0 leads in both arms. At 'halts the test' a thin red
+      line draws across and the grid freezes."
+  - id: walk-approve
+    kind: walk
+    clip: 13-approve
+    chapter: "06 · Approve"
+    head: "A person decides."
+  - id: walk-live
+    kind: walk
+    clip: 14-live
+    chapter: "Live on Sarvam"
+    head: "Real calls. Real split."
+
+  - id: ad-outcome
+    kind: motion
+    lead: 0.4
+    pad: 0.8
+    say: >-
+      Every change, proven on a tenth, before it reaches the rest. Harm, caught in days, not quarters. Every rollout
+      signed by a person, and logged. And every call, teaching the next prompt.
+    show: "Four statements as kinetic type, one per beat, each with a tiny precise motion: a 10% slice of a circle
+      filling before the whole; a red line caught and stopped early on a z-path; a signature stroke and a log line
+      appending; the ring turning once more."
+
+  - id: ad-close
+    kind: motion
+    lead: 0.4
+    pad: 2.8
+    say: >-
+      The hare ships a prompt change on a hunch. The tortoise ships it on evidence. Vani Lab. By Hare and Tortoise.
+    show: "'on a hunch': a fast streak of light that flickers out. 'on evidence': a slow, steady line that keeps going
+      and becomes the ring. The logo lockup, the tagline, and 'Team Hare & Tortoise'; a last warm glow, fade to black."

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · ad split</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="ad-b.css">
+<style>
+  /* Figures from reports/split_win.md (as in cards/12-split.html). */
+  .hd { left: 140px; top: 132px; }
+  .hd h1 { margin-top: 18px; font: 400 104px/.96 var(--f-display); letter-spacing: -.03em; }
+  .figs { position: absolute; left: 140px; top: 418px; width: 760px; display: grid; grid-template-columns: 1fr 1fr; row-gap: 54px; column-gap: 56px; }
+  .f { position: relative; padding-top: 22px; }
+  .f .rule { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: rgba(237, 234, 226, .2); transform-origin: 0 50%; }
+  .f .l { font: 500 15px/1.3 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  .f b { display: block; margin-top: 14px; font: 300 132px/.9 var(--f-ui); letter-spacing: -.05em; font-variant-numeric: tabular-nums lining-nums; }
+  .f b small { font-size: .5em; letter-spacing: -.02em; margin-left: 4px; color: var(--muted); }
+  .f b.teal { color: #5FD0C1; }
+  .key { left: 1090px; top: 1000px; width: 620px; text-align: center; font: 500 14px var(--f-mono); letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
+  .key i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--teal); margin: 0 10px 0 6px; vertical-align: 0; box-shadow: 0 0 10px rgba(63, 184, 169, .8); }
+  .halt { left: 0; top: 0; font: 500 15px var(--f-mono); letter-spacing: .2em; text-transform: uppercase; color: var(--harm); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="fx">
+  <canvas id="c"></canvas>
+  <div class="hd abs" id="hd"><div class="eyebrow teal">The split</div><h1>The split is <em>real</em>.</h1></div>
+  <div class="figs">
+    <div class="f" id="f0"><i class="rule"></i><div class="l">B's share, configured</div><b id="v0">10%</b></div>
+    <div class="f" id="f1"><i class="rule"></i><div class="l">Achieved</div><b class="teal" id="v1">9.91%</b></div>
+    <div class="f" id="f2"><i class="rule"></i><div class="l">Leads in both arms</div><b id="v2">0</b></div>
+    <div class="f" id="f3"><i class="rule"></i><div class="l">Sample ratio check, SRM p</div><b id="v3">0.68</b></div>
+  </div>
+  <div class="key abs" id="key">Each point, a lead <i></i> Prompt B</div>
+  <div class="halt abs" id="halt">Halts the test</div>
+</div>
+<div class="grain"></div>
+<script src="../runtime.js"></script>
+<script src="ad-b.js"></script>
+<script>
+const COLS = 100, ROWS = 100, SP = 7.6, F = 1250, OX = 1400, OY = 515;
+let g, P, T, sprite, spriteT, figs, vals, dust;
+
+function dot(rgb) {  // a soft round point, drawn once
+  const c = document.createElement("canvas"); c.width = c.height = 32;
+  const x = c.getContext("2d"), gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(0.38, `rgba(${rgb},.85)`); gr.addColorStop(1, `rgba(${rgb},0)`);
+  x.fillStyle = gr; x.fillRect(0, 0, 32, 32); return c;
+}
+
+function init() {
+  g = ctx2d("c");
+  dust = makeDust(23, 60);
+  sprite = dot(RGB.ink); spriteT = dot(RGB.tealHi);
+  // 10,000 leads; exactly 991 of them hear B (9.91%), picked by a hash so they scatter, not a block
+  P = Array.from({ length: COLS * ROWS }, (_, i) => ({ u: ((i % COLS) - (COLS - 1) / 2) * SP, v: (Math.floor(i / COLS) - (ROWS - 1) / 2) * SP,
+    h: hash(i * 1.618 + 0.31), o: hash(i * 0.731 + 9.2), b: false, ph: hash(i * 3.3) * TAU }));
+  [...P].sort((a, b) => a.h - b.h).slice(0, 991).forEach((p, k) => { p.b = true; p.k = k / 991; });
+  T = { real: cue("The split is real"), cfg: cue("ten percent configured"), ach: cue("nine point nine one achieved"),
+    both: cue("not one lead heard both prompts"), srm: cue("a sample ratio check"), halt: cue("halts the test") };
+  figs = [0, 1, 2, 3].map((i) => document.getElementById(`f${i}`));
+  vals = [0, 1, 2, 3].map((i) => document.getElementById(`v${i}`));
+}
+
+function render(t) {
+  stage(t);
+  const dur = AD.dur;
+  const tg = Math.min(t, T.halt + 0.25);         // the grid's own clock: it freezes when the test halts
+  const frz = prog(t, T.halt + 0.1, 0.7, E.inOutCubic);
+  // the plane: turned towards the type, tilted back, drifting slowly
+  const ry = -0.36 + 0.1 * sine(tg / dur), rx = -0.8 + 0.1 * sine(tg / dur), rz = 0.0;
+  const cy = Math.cos(ry), sy = Math.sin(ry), cx = Math.cos(rx), sx = Math.sin(rx), cz = Math.cos(rz), sz = Math.sin(rz);
+  const push = lerp(0.9, 1.0, prog(t, 0, dur, E.inOutCubic));
+  const proj = (u, v, w = 0) => {
+    const x1 = u * cz - v * sz, y1 = u * sz + v * cz;          // spin
+    const y2 = y1 * cx - w * sx, z2 = y1 * sx + w * cx;         // tilt back
+    const x3 = x1 * cy + z2 * sy, z3 = -x1 * sy + z2 * cy;      // turn
+    const s = (F / (F + z3)) * push;
+    return [OX + x3 * s, OY + y2 * s, z3, s];
+  };
+
+  g.clearRect(0, 0, 1920, 1080);
+  drawDust(g, dust, tg, ry * 200, 0, 0.8);
+  bloom(g, OX, OY, 640, RGB.teal, 0.05 + 0.03 * prog(t, T.cfg, 2));
+
+  const scanU = lerp(-420, 420, prog(t, T.both + 0.1, 1.5, E.inOutCubic)), scanOn = life(t, T.both + 0.1, 0.25, T.both + 1.35, 0.3);
+  g.fillStyle = `rgb(${RGB.ink})`;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    // it builds in from the centre outward, rising out of the dark
+    const rr = Math.hypot(p.u, p.v) / 520, bi = prog(t, 0.15 + rr * 0.9 + p.o * 0.35, 0.9, E.outCubic);
+    if (bi <= 0) continue;
+    const on = p.b ? prog(t, T.cfg + 0.1 + p.k * 1.4, 0.55, E.outCubic) : 0;
+    const lift = p.b ? -Math.sin(Math.PI * on) * 18 : 0;
+    const [x, y, z, s] = proj(p.u, p.v, (1 - bi) * 120 + lift);
+    // depth of field: in focus near the middle, softer and dimmer towards the near and far edges
+    const dz = Math.abs(z) / 300, size = (2.0 + 2.2 * dz * dz) * s * (p.b ? 1 + 0.6 * on : 1);
+    const shimmer = 0.82 + 0.18 * Math.sin(tg * 1.7 + p.ph);
+    const scan = scanOn * Math.exp(-(((p.u - scanU) / 14) ** 2));
+    let a = bi * shimmer / (1 + 1.1 * dz * dz) * (1 - 0.2 * frz);
+    if (p.b && on > 0) {
+      const flash = Math.exp(-(((on - 0.25) / 0.2) ** 2));
+      g.globalAlpha = clamp(a * (0.12 * on + 0.5 * flash) * (1 - 0.4 * frz));
+      g.drawImage(spriteT, x - size * 1.6, y - size * 1.6, size * 3.2, size * 3.2);
+      g.globalAlpha = clamp(a * (0.3 + 0.7 * on) + 0.5 * scan);
+      g.drawImage(on > 0.5 ? spriteT : sprite, x - size / 2, y - size / 2, size, size);
+    } else {
+      g.globalAlpha = clamp(a * 0.42 + 0.55 * scan);
+      if (size < 3.2) { const q = size * 0.62; g.fillRect(x - q / 2, y - q / 2, q, q); }  // small: a square is cheaper and reads the same
+      else g.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+    }
+  }
+  g.globalAlpha = 1;
+
+  // not one lead in both: a line of light reads the grid
+  if (scanOn > 0.01) glow(g, poly([proj(scanU, -380), proj(scanU, 380)]), RGB.tealHi, 0.7 * scanOn, 1.2, 0.6);
+  // the halt: a thin red line drawn across
+  const hk = prog(t, T.halt, 0.75, E.inOutCubic);
+  if (hk > 0) {
+    const n = 40, pts = Array.from({ length: n + 1 }, (_, i) => proj(lerp(-372, 372, (i / n) * hk), 22));
+    glow(g, poly(pts), RGB.harm, 1, 1.6, 0.7);
+    const [hx, hy] = pts[n];
+    bloom(g, hx, hy, 26, RGB.harm, 0.6 * (1 - prog(t, T.halt + 0.75, 0.6)));
+  }
+  const [lx, ly] = proj(372, 22), hl = document.getElementById("halt");
+  hl.style.left = `${(lx + 20).toFixed(1)}px`; hl.style.top = `${(ly - 10).toFixed(1)}px`;
+  show(hl, t, T.halt + 0.55, Infinity, { dy: 0, dx: -14, blur: 6, d: 0.7 });
+
+  // the type: the headline, then each figure as it is said
+  show(document.getElementById("hd"), t, T.real - 0.15, Infinity, { dy: 30, blur: 14, d: 1.2 });
+  show(document.getElementById("key"), t, T.cfg + 1.0, Infinity, { dy: 10, blur: 6 });
+  const at = [T.cfg, T.ach, T.both, T.srm];
+  figs.forEach((el, i) => {
+    show(el, t, at[i] - 0.1, Infinity, { dy: 34, blur: 12, d: 1.1 });
+    el.querySelector(".rule").style.transform = `scaleX(${prog(t, at[i] - 0.2, 1.2, E.inOutCubic).toFixed(4)})`;
+  });
+  // the numbers count to their value as they land
+  const c = (i, d) => prog(t, at[i] - 0.05, d, E.outQuint);
+  vals[0].textContent = `${Math.round(10 * c(0, 0.9))}%`;
+  vals[1].textContent = `${(9.91 * c(1, 1.3)).toFixed(2)}%`;
+  vals[3].textContent = (0.68 * c(3, 1.2)).toFixed(2);
+}
+
+scene({ init, render, sfx: () => [[T.cfg, "tick", 0.45], [T.ach, "tick", 0.45], [T.both, "tick", 0.45], [T.srm, "tick", 0.45], [T.halt, "hit", 0.55]] });
+</script>
+</body>
+</html>

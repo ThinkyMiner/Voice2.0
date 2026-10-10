@@ -1,5 +1,6 @@
 // Injected into every page video/capture.py films (before the page's own scripts): the blur list, burned-in
-// captions, a soft accent spotlight, a fake cursor, a paper curtain for page changes and a terminal card.
+// captions, a soft accent spotlight, a fake cursor, a paper curtain for page changes, a terminal card and a badge
+// that labels what is on screen (e.g. an offline rehearsal).
 // capture.py prepends `window.VL_CFG = {blur: "<selectors>"}`. Everything lives in one manual popover so it
 // stays above the page's own dialogs (vl.raise() re-shows it after a dialog opens).
 (() => {
@@ -43,6 +44,10 @@
     .vl-term pre b { color: #3FB8A9; font-weight: 500; }
     .vl-term pre .caret { display: inline-block; width: .6em; height: 1.1em; vertical-align: -.2em; background: #F0B455; animation: vl-blink 1s steps(1) infinite; }
     @keyframes vl-blink { 50% { opacity: 0; } }
+    .vl-badge { position: fixed; right: 24px; top: 84px; padding: 9px 16px 10px; border-radius: 999px; background: #F3D9AE; color: #5E3D08;
+      border: 1px solid rgba(149, 96, 15, .35); font: 600 14px/1 "Geist", ui-sans-serif, system-ui, sans-serif; letter-spacing: .01em;
+      box-shadow: 0 6px 18px -8px rgba(22, 20, 15, .35); }
+    .vl-badge:empty { display: none; }
   `;
   const addCss = () => {
     if (document.getElementById("vl-css")) return;
@@ -65,7 +70,7 @@
     top.setAttribute("popover", "manual");
     top.innerHTML = '<div class="vl-spot"></div>'
       + '<svg class="vl-cursor" viewBox="0 0 26 26"><path d="M5 3l15.5 9.2-6.6 1.4 3.9 7.3-3.1 1.6-3.9-7.3L5.6 20z" fill="#fff" stroke="#16140F" stroke-width="1.6" stroke-linejoin="round"/></svg>'
-      + '<div class="vl-curtain"></div><div class="vl-scrim"></div><div class="vl-term"></div><div class="vl-cap"></div>';
+      + '<div class="vl-curtain"></div><div class="vl-scrim"></div><div class="vl-term"></div><div class="vl-cap"></div><div class="vl-badge"></div>';
     document.body.append(top);
     top.style.setProperty("--u", String(1 / devicePixelRatio));
     [curtain, scrim, term, spot, cursor, cap] = ["curtain", "scrim", "term", "spot", "cursor", "cap"].map((k) => top.querySelector(`.vl-${k}`));
@@ -124,6 +129,7 @@
   // ---- captions: [[from, to, text], ...] in seconds from start()
   function captions(list) {
     host();
+    if (!list.length) return;  // a clean take (VIDEO_CLEAN=1)
     const s0 = performance.now();
     let shown = -1;
     const tick = () => {
@@ -183,6 +189,7 @@
       hideT = setTimeout(() => cursor.classList.remove("on"), 1600);  // a cursor that stopped working fades away
     },
     curtain: (on) => { host(); curtain.classList.toggle("on", on); },
+    badge: (text) => { host(); top.querySelector(".vl-badge").textContent = text; },
     raise: () => { host(); top.hidePopover(); top.showPopover(); },
     stickyBanner: () => {  // keep "Demo data: invented calls" on screen while the page scrolls
       const b = document.getElementById("demo-banner"), bar = document.querySelector(".topbar");

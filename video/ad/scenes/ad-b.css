@@ -1,0 +1,34 @@
+/* The dark stage for ad-loop, ad-split, ad-outcome and ad-close (until ad.css exists): a near-black stage with a
+   faint warm and teal light, a vignette and film grain; off-white ink, the platform's dark-mode teal, amber, a muted red. */
+:root {
+  --stage: #0B0B0C;
+  --ink: #EDEAE2; --muted: #9C978C; --faint: #6C685F; --hair: rgba(237, 234, 226, .12);
+  --teal: #3FB8A9; --amber: #D9912B; --amber-hi: #F0B455; --harm: #C4553D;
+  --f-display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --f-ui: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --f-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+body {
+  background:
+    radial-gradient(1300px 900px at 76% 12%, rgba(217, 145, 43, .05), transparent 62%),
+    radial-gradient(1200px 1000px at 12% 96%, rgba(63, 184, 169, .045), transparent 60%),
+    radial-gradient(ellipse 120% 100% at 50% 46%, transparent 52%, rgba(0, 0, 0, .45) 100%),
+    var(--stage);
+  color: var(--ink); font: 400 24px/1.4 var(--f-ui); -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+h1, h2, h3, p { margin: 0; font-weight: 400; }
+em { font-style: italic; }
+canvas { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+#fx { position: absolute; inset: 0; opacity: 0; }  /* everything but the stage: ad-b.js fades it in and out */
+.abs { position: absolute; will-change: transform, opacity; }
+.serif { font-family: var(--f-display); letter-spacing: -.02em; }
+.fig { font-family: var(--f-ui); font-weight: 300; letter-spacing: -.045em; font-variant-numeric: lining-nums tabular-nums; }
+.eyebrow { font: 500 16px/1.3 var(--f-mono); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.teal { color: var(--teal); } .amber { color: var(--amber-hi); } .harm { color: var(--harm); } .muted { color: var(--muted); }
+/* film grain over everything, moved every frame */
+.grain { position: absolute; inset: 0; pointer-events: none; z-index: 50;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.92 0 0 0 0 0.89 0 0 0 1.4 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.05'/></svg>"); }
