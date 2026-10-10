@@ -65,13 +65,13 @@ dashboard:  ## http://localhost:8501 (reads the store; auto-refreshes while make
 slide:  ## slide/one_slide.pptx, plus its chart PNG in reports/
 	$(RUN) python slide/build_slide.py
 
-# --- Vani Loop (docs/loop_api.md). SOURCE = production | audited. ARGS passes flags through, e.g.
+# --- The loop (docs/loop_api.md). SOURCE = production | audited. ARGS passes flags through, e.g.
 # make listen ARGS=--yes-send-real-audio, make loop ARGS="--until judge --yes-send-real-transcripts".
 # The --yes-* flags send real customer calls to the model provider: only on the user's go-ahead.
 .PHONY: platform listen judge agreement loop loop-status
 SOURCE ?= production
 
-platform:  ## the Vani Loop platform (API + web): http://127.0.0.1:8600
+platform:  ## the Slow & Steady platform (API + web): http://127.0.0.1:8600
 	$(RUN) uvicorn abtest.ext.service:app --host 127.0.0.1 --port 8600
 
 listen:  ## make listen SOURCE=production|audited ARGS=--yes-send-real-audio  (recordings -> transcripts)

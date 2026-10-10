@@ -1,4 +1,4 @@
-"""The Vani Loop driver: the prompt registry and one cycle per production prompt version.
+"""The loop driver: the prompt registry and one cycle per production prompt version.
 
 Each stage persists the cycle to CYCLES before the next one runs, and runs only while the cycle is
 at it, so re-running a finished stage does nothing:
@@ -15,8 +15,9 @@ at it, so re-running a finished stage does nothing:
             tries the next root cause
 A try that fails before the engine (GATE_BLOCKED, REPLAY_NO_GAIN, FIX_INVALID when the fixer's edits do
 not apply, REPLAY_FAILED when the replay cannot run) rejects its candidate and tries the next root
-cause, at most MAX_TRIES per cycle. Stages that send real call content to the model provider wait for
-allow_real (CLI --yes-send-real-transcripts: the user's decision); the web server never sets it.
+cause, at most MAX_TRIES per cycle. Stages that send real call content to the model provider (real calls,
+and replays built from them: models.is_real) wait for allow_real: the user's decision, given on the CLI
+(--yes-send-real-transcripts) or by starting the platform with LOOP_ALLOW_REAL=1.
 
 CLI: python -m abtest.ext.loop advance [--until STAGE] [--yes-send-real-transcripts]
      python -m abtest.ext.loop status
@@ -51,11 +52,12 @@ EXPERIMENTS_DIR = models.LOOP_DIR / "experiments"  # vani-loop-c<n>.yaml (config
 REPLAY_AUDITS = models.LOOP_DIR / "replay_audits"  # <version>.json: the judge stage's grades of a later version's calls
 LOCK = models.LOOP_DIR / "loop.lock"
 DB_PATH = contracts.DB_PATH  # read per call, so tests (and the service) can point it elsewhere
-REAL = ("production", "audited")  # Transcript sources that are real customer calls
+REAL = models.REAL_SOURCES  # Transcript sources that are real calls (models.is_real also counts replays of them)
 FIXABLE = ("prompt", "flow")      # root-cause types a prompt change can address
 STAGES: tuple[Stage, ...] = ("listen", "judge", "improve", "gate", "replay", "prove", "approval", "rollout")
 GO_AHEAD = ("waiting for the go-ahead to send real transcripts: this stage sends real call content to the "
-            "model provider; once the user approves, run: make loop ARGS=--yes-send-real-transcripts")
+            "model provider; once the user approves, run: make loop ARGS=--yes-send-real-transcripts "
+            "(or start the platform with LOOP_ALLOW_REAL=1)")
 FAILED_TRY = re.compile(r"^try \d+: (\S+) -> ")  # the note a failed try leaves; _tried() reads it back
 LOG: deque[str] = deque(maxlen=200)  # recent progress lines, for GET /api/loop
 
@@ -289,7 +291,7 @@ def _open(n: int, production_version: str) -> Cycle:
 
 
 def _real(c: Cycle) -> bool:
-    return any(t.source in REAL for t in calls(c.production_version))
+    return any(models.is_real(t) for t in calls(c.production_version))
 
 
 def _tried(name: str) -> set[str]:
@@ -385,7 +387,7 @@ def _listen(c: Cycle, allow_real: bool) -> Cycle | None:
 
 def _judge_stage(c: Cycle, allow_real: bool) -> Cycle | None:
     found = calls(c.production_version)
-    if any(t.source in REAL for t in found) and not allow_real:
+    if any(models.is_real(t) for t in found) and not allow_real:
         return _wait(c, GO_AHEAD)
     graded = _judge(found, allow_real)
     if not graded:
@@ -459,7 +461,7 @@ def _prove(c: Cycle, allow_real: bool) -> Cycle:
                variants={"A": {"base": base.path}, "B": {"patch": {"mode": "full", "path": cand.path}}})
     path = EXPERIMENTS_DIR / f"{eid}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"# Vani Loop cycle {c.n}: A = {base.version} (production), B = {cand.version} ({c.fix_id}).\n"
+    path.write_text(f"# Slow & Steady loop, cycle {c.n}: A = {base.version} (production), B = {cand.version} ({c.fix_id}).\n"
                     f"# Written by abtest.ext.loop from {TEMPLATE}.\n"
                     + yaml.safe_dump(raw, sort_keys=False, allow_unicode=True), encoding="utf-8")
     sim = os.environ.get("LOOP_DEMO_SIM", DEFAULT_SIM)

@@ -1,5 +1,5 @@
 # Simulator ground truth: the engine must never read this file.
-# buyer_win (Vani Loop prove stage): BL success +20% for B (2x the 10% MDE), abrupt disconnects
+# buyer_win (the loop's prove stage): BL success +20% for B (2x the 10% MDE), abrupt disconnects
 # -4 pp. The disconnect drop is no extra assumption: the +20% injection converts failed calls, and
 # that alone removes 4.3 pp of disconnects in this pool; -4 pp is the total. Held flat instead,
 # the 2 pp guardrail rarely clears at n_B,max (+15% with flat disconnects: 27 of 40 seeds BLOCKED_GUARDRAIL).

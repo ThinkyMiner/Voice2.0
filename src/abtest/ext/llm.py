@@ -139,7 +139,7 @@ def chat(model: str, messages: list[dict], *, schema: dict | None = None, schema
         raise BudgetExceeded(f"LLM spend {spent_usd():.2f} USD reached the cap {budget:.2f} (LLM_BUDGET_USD)")
 
     headers = {"Authorization": f"Bearer {_env_key()}", "Content-Type": "application/json",
-               "X-Title": "Vani Loop"}
+               "X-Title": "Slow & Steady"}
     delay = 2.0
     for attempt in range(5):
         try:
