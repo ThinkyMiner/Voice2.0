@@ -64,16 +64,13 @@ def gain(path: Path, target: float) -> float:
 
 def narration(scenes: list[dict], out: Path) -> float:
     """Every scene's wav at its first frame + lead, as one wav as long as the picture; returns that length."""
-    with wave.open(str(VIDEO / scenes[0]["wav"])) as w:
-        fmt = (w.getframerate(), w.getnchannels(), w.getsampwidth())
-    sr, ch = fmt[0], fmt[1]
+    sr, ch = 48000, 1  # every voice resampled to one format (Sarvam speaks 22.05 kHz, ElevenLabs 44.1 kHz)
     total = sum(s["frames"] for s in scenes) / FPS
     buf, f0 = np.zeros((round(total * sr), ch), np.int16), 0
     for s in scenes:
-        with wave.open(str(VIDEO / s["wav"])) as w:
-            if (w.getframerate(), w.getnchannels(), w.getsampwidth()) != fmt:
-                sys.exit(f"{s['wav']}: not {sr} Hz, {ch} channel(s), 16-bit like the others")
-            x = np.frombuffer(w.readframes(w.getnframes()), np.int16).reshape(-1, ch)
+        pcm = subprocess.run([FFMPEG, "-loglevel", "error", "-nostdin", "-i", str(VIDEO / s["wav"]), "-ac", "1", "-ar", str(sr),
+                              "-f", "s16le", "-"], capture_output=True, check=True).stdout
+        x = np.frombuffer(pcm, np.int16).reshape(-1, ch)
         at = round((f0 / FPS + s["lead"]) * sr)  # where the scene's first frame really is, not its rounded start
         x = x[: max(0, len(buf) - at)]
         buf[at: at + len(x)] = x  # scenes never overlap: each is lead + narration + pad
