@@ -185,6 +185,7 @@ class _Run:
     bot: BotTestResult | None = None
     live: LiveAbResult | None = None
     truth: tuple[float, float] | None = None
+    base_observed: bool = False   # the production prompt has a scored conversation for every persona
 
     def advance(self, state: str, **update) -> Generation:
         """Move to `state` and persist. Validated, so a state outside GenState fails here, not in the DB."""
@@ -225,6 +226,7 @@ def _observe(run: _Run) -> pd.DataFrame:
         run.note("OBSERVED", f"Reused {len(scores)} stored scores of the production prompt.")
     if scores.empty:
         raise RuntimeError("observing the production prompt produced no scores")
+    run.base_observed = scores["lead_id"].nunique() >= len(ctx.personas)
     return scores
 
 
@@ -246,8 +248,18 @@ def _estimate_ok(run: _Run, n_prompts: int) -> bool:
     ctx = run.ctx
     if getattr(ctx.provider, "name", "") == "stub":
         return True
-    prompt_tokens = len(run.prod.text) // CHARS_PER_TOKEN
-    est = loop_module("bot_tests").estimate_cost(len(ctx.personas), n_prompts, ctx.cfg.bot_tests.max_turns,
+    # The bot sees the prompt rendered for a persona (unreachable branches dropped), about half the
+    # raw template; and the base prompt's conversations are disk-cached once observed for every
+    # persona, so they cost nothing again (a re-test was refused on a 2x over-estimate, 10 Oct).
+    rendered = run.prod.text
+    if ctx.personas and callable(render_fn := getattr(loop_module("render"), "render", None)):
+        try:
+            rendered = render_fn(run.prod.text, ctx.personas[0].render_vars)
+        except Exception:  # noqa: BLE001 - the estimate falls back to the raw template (an over-estimate)
+            rendered = run.prod.text
+    prompt_tokens = len(rendered) // CHARS_PER_TOKEN
+    paid = n_prompts - (1 if run.base_observed else 0)
+    est = loop_module("bot_tests").estimate_cost(len(ctx.personas), max(paid, 0), ctx.cfg.bot_tests.max_turns,
                                                  prompt_tokens, ctx.prices)
     left = ctx.cfg.caps.max_spend_inr - loop_module("store_loop").total_spend(ctx.conn)
     run.note("BOT_TESTED", f"Estimated bot-test cost INR {est:.2f}; INR {left:.2f} left under the cap.")
