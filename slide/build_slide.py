@@ -33,7 +33,7 @@ OUT = Path(__file__).resolve().parent / "one_slide.pptx"
 W, H = 40 / 3, 7.5               # PowerPoint's 16:9 Widescreen: 12192000 x 6858000 EMU
 CHART = (0.45, 1.95, 5.05, 3.6)  # x, y, w, h of the chart picture
 WORKFLOW = ("Route", "Track", "Analyse", "Decide", "Roll out")
-TITLE = "Prompt changes now ship on evidence, not judgement"
+TITLE = "Slow & Steady: prompt changes ship on evidence, not judgement"
 DATASETS = {"bttc": "historical Vani meeting calls", "buyer_logs": "historical buyer calls"}
 
 

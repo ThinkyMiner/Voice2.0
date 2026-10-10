@@ -65,10 +65,34 @@ dashboard:  ## http://localhost:8501 (reads the store; auto-refreshes while make
 slide:  ## slide/one_slide.pptx, plus its chart PNG in reports/
 	$(RUN) python slide/build_slide.py
 
-# --- self-improving loop (PLAN_LOOP.md §L9); appended by Lane B
+# --- The loop (docs/loop_api.md). SOURCE = production | audited. ARGS passes flags through, e.g.
+# make listen ARGS=--yes-send-real-audio, make loop ARGS="--until judge --yes-send-real-transcripts".
+# The --yes-* flags send real customer calls to the model provider: only on the user's go-ahead.
+.PHONY: platform listen judge agreement loop loop-status
+SOURCE ?= production
+
+platform:  ## the Slow & Steady platform (API + web): http://127.0.0.1:8600
+	$(RUN) uvicorn abtest.ext.service:app --host 127.0.0.1 --port 8600
+
+listen:  ## make listen SOURCE=production|audited ARGS=--yes-send-real-audio  (recordings -> transcripts)
+	$(RUN) python -m abtest.ext.listen --source $(SOURCE) $(ARGS)
+
+judge:  ## make judge SOURCE=production|audited ARGS=--yes-send-real-transcripts  (grade every call)
+	$(RUN) python -m abtest.ext.judge audit --source $(SOURCE) $(ARGS)
+
+agreement:  ## the judge vs IndiaMART's human QA grades -> reports/judge_agreement.md
+	$(RUN) python -m abtest.ext.judge agreement $(ARGS)
+
+loop:  ## advance the loop's current cycle: make loop ARGS="--until judge" (stops at approvals and go-aheads)
+	$(RUN) python -m abtest.ext.loop advance $(ARGS)
+
+loop-status:  ## the prompt registry, the cycles and the next action
+	$(RUN) python -m abtest.ext.loop status
+
+# --- Sarvam self-improving loop (PLAN_LOOP.md §L9, src/abtest/loop/); appended by Lane B
 # Personal data stays under data/derived/loop/ (gitignored); the demo needs no network. Real runs need
 # SARVAM_API_KEY in .env, and the batch speech-to-text needs the SDK, hence `--with sarvamai` below.
-.PHONY: loop-test loop-demo loop-observe loop-agreement loop-run loop-status loop-pause loop-resume
+.PHONY: loop-test loop-demo loop-observe loop-agreement loop-run loop-runs loop-pause loop-resume
 
 LOOP        := $(RUN) python -m abtest.loop
 LOOP_SDK    := $(RUN) --with sarvamai python -m abtest.loop
@@ -92,7 +116,7 @@ loop-agreement:  ## make loop-agreement SHEET=<filled audit csv>
 loop-run:  ## make loop-run [GENERATIONS=1]  (real Sarvam, simulated A/B traffic; stops at the spend cap)
 	$(LOOP_SDK) run --generations $(GENERATIONS)
 
-loop-status:  ## generations table and total spend
+loop-runs:  ## generations table and total spend (named loop-runs: Kartik's loop owns loop-status)
 	$(LOOP) status
 
 loop-pause:  ## no new generation starts until loop-resume

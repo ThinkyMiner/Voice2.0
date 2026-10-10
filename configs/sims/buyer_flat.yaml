@@ -1,0 +1,7 @@
+# Simulator ground truth: the engine must never read this file.
+# buyer_flat (the loop's prove stage): B changes nothing. Expect INCONCLUSIVE, A stays: 95 of seeds
+# 1-100 (the rest are the engine's false-alarm rates: 2 STOPPED_HARM, 2 BLOCKED_GUARDRAIL, 1 PENDING_APPROVAL).
+true_effect: {primary_rel_lift: 0.0, secondary_change: 0.0}   # relative for continuous, absolute for binary
+reference: {from: null, to: null, bot_version: null}   # the whole buyer file (5-9 Oct 2026); no bot_version column
+volume: {daily_leads: 164.8, scale: 4.0}   # as buyer_disconnect_stop: data_profile_buyer_logs VolumeStats, x4
+fault: {drop_b_exposure_rate: 0.0}
