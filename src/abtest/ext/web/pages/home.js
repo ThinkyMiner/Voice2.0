@@ -141,7 +141,7 @@ export async function render(el) {
   const latest = fx.items[0];
   const acc = k.agreement_overall, kap = k.agreement_kappa;
   const agreeTone = acc == null ? "" : kap != null ? (kap < 0.2 ? "harm" : kap < 0.6 ? "warn" : "win") : acc < 0.6 ? "harm" : acc < 0.8 ? "warn" : "win";
-  const ag = au?.agreement, { text: checks, good } = goodChecks(ag, audioIds(rb.items));  // what the judge gets right, first
+  const ag = au?.agreement, { text: checks, good, sameN } = goodChecks(ag, audioIds(rb.items));  // what the judge gets right, first
   const qaN = au?.human_split ? au.human_split.pass + au.human_split.non_fatal + au.human_split.fatal : 0;
   const qaLine = qaN && !verBy[prodV]?.fix_id ? (qaN === k.calls_audited ? "all also audited by IndiaMART QA" : `${int(qaN)} also audited by IndiaMART QA`) : "";
   const st = station(cur);
@@ -173,9 +173,9 @@ export async function render(el) {
       ${kpi("#/audit", `Fatal rate ${pct(k.fatal_rate)}, judge's grade. Open the audit.`, html`<div class="eyebrow">Fatal rate <span class="tag">judge</span></div><div class="big harm">${pct(k.fatal_rate)}</div>
         <div class="sub">of ${int(k.calls_audited)} graded calls · non‑fatal ${pct(k.non_fatal_rate, 0)} · pass ${pct(k.pass_rate, 0)}</div><div aria-hidden="true">${sp ? gradeStack(sp, "minibar") : ""}</div>`)}
       ${checks.length ? kpi("#/audit", `${good.length} of ${checks.length} checks agree well with IndiaMART QA. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big">${int(good.length)}<small>of ${int(checks.length)} checks</small></div>
-        <div class="sub">agree well with IndiaMART QA (κ 0.6 or more) on ${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls · overall grade ${pct(acc, 0)}, κ ${fix(kap)}, ${kappaWord(kap)}</div>`)
+        <div class="sub">agree well with IndiaMART QA (κ 0.6 or more) on ${sameN ? `${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls` : "the calls both graded"} · overall grade ${pct(acc, 0)}, κ ${fix(kap)}, ${kappaWord(kap)}</div>`)
         : kpi("#/audit", `Judge versus IndiaMART QA: ${pct(acc, 0)} agreement. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big ${agreeTone}">${pct(acc, 0)}<small>agree</small></div>
-        <div class="sub">with IndiaMART QA on the overall grade · κ ${fix(kap)}, ${kappaWord(kap)} · fatal vs rest ${pct(k.fatal_vs_rest_accuracy, 0)}</div>`)}
+        <div class="sub">with IndiaMART QA on the overall grade${k.agreement_n != null ? ` of ${int(k.agreement_n)} ${k.agreement_held_out ? "held-out " : ""}calls` : ""} · κ ${fix(kap)}, ${kappaWord(kap)} · fatal vs rest ${pct(k.fatal_vs_rest_accuracy, 0)}</div>`)}
       ${kpi("#/issues", `${int(k.root_causes)} root causes. Open the issues.`, html`<div class="eyebrow">Root causes <span class="tag">judge</span></div><div class="big ${k.root_causes ? "" : "none"}">${k.root_causes ? int(k.root_causes) : "—"}</div>
         <div class="sub">${k.root_causes ? "ranked by priority; the loop fixes the top one a prompt can fix" : "not ranked yet: Improve ranks them after the judge"}</div>`)}
       ${kpi("#/fixes", `${fx.items.length} prompt fixes. Open the fixes.`, html`<div class="eyebrow">Prompt fixes</div><div class="big ${fx.items.length ? "" : "none"}">${fx.items.length ? int(fx.items.length) : "—"}</div>

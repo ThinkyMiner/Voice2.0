@@ -115,10 +115,12 @@ export function agreement(row) {
     text: `Matches QA auditors on ${pct(row.accuracy, 0)} of ${int(row.n)} calls · κ ${fix(row.kappa)}, ${kappaWord(row.kappa)}` };
 }
 /** An AgreementReport's checks a transcript judge can read (audio-only ones left out: `audio` holds their rubric
- *  ids) and, best first, those in good agreement or better: κ 0.6 or more, kappaWord's "good". */
+ *  ids) and, best first, those in good agreement or better: κ 0.6 or more, kappaWord's "good". sameN: each was
+ *  measured on the report's own n_calls (a call with QA's check or overall left blank shifts a row's n). */
 export function goodChecks(ag, audio) {
   const text = (ag?.rows || []).filter((r) => !audio.has(r.rubric_id));
-  return { text, good: text.filter((r) => r.kappa != null && r.kappa >= 0.6).sort((x, y) => y.kappa - x.kappa) };
+  return { text, good: text.filter((r) => r.kappa != null && r.kappa >= 0.6).sort((x, y) => y.kappa - x.kappa),
+    sameN: text.every((r) => r.n === ag?.n_calls) };
 }
 export const audioIds = (rubrics) => new Set((rubrics || []).filter((r) => r.needs_audio).map((r) => r.id));
 export const agreeLine = (row) => {

@@ -89,7 +89,7 @@ export async function render(el, { params }) {
 function trust(a, ag, names, audio) {
   const k = ag.overall_kappa, n = ag.n_calls, matches = Math.round(ag.overall_accuracy * n);
   const base = plural(n, ag.held_out ? "held-out call" : "call"), nm = (r) => names[r.rubric_id] || r.rubric_id;
-  const { text, good } = goodChecks(ag, audio);
+  const { text, good, sameN } = goodChecks(ag, audio), onN = sameN ? `on the same ${base}` : "on the calls both graded";
   const fair = text.filter((r) => r.kappa != null && r.kappa >= 0.4 && r.kappa < 0.6).length;
   const deaf = ag.rows.filter((r) => audio.has(r.rubric_id)).map(nm);
   const oc = ag.overall_confusion || {}, same = Object.keys(oc).length > 0;
@@ -103,17 +103,17 @@ function trust(a, ag, names, audio) {
       : "Caution: the rubrics were tuned on these same calls, which flatters the judge.";
   const kRange = good.length ? `Cohen's κ ${fix(good.at(-1).kappa)}${good.length > 1 ? ` to ${fix(good[0].kappa)}` : ""}` : "";
   const chips = good.length ? html`<ul class="trust-checks">${good.map((r) => html`<li class="chip win">${nm(r)}<span class="mono">κ ${fix(r.kappa)}</span></li>`)}</ul>` : "";
-  const why = k != null && k < 0.4 ? html`<p class="trust-why"><b>Why not the overall grade yet:</b> a call takes its worst check's grade, so a miss on any one of its ${plural(text.length, "check")} can change it, and QA's grade also covers the lead record the bot saved, which the judge cannot see. On the overall grade it matches QA on ${int(matches)} of ${base}, ${k < 0.2 ? "no better than chance" : `${word} agreement`} (Cohen's κ ${fix(k)}).</p>` : "";
+  const why = byCheck ? html`<p class="trust-why"><b>Why not the overall grade yet:</b> a call takes its worst check's grade, so a miss on any one of its ${plural(text.length, "check")} can change it, and QA's grade also covers the lead record the bot saved, which the judge cannot see. On the overall grade it matches QA on ${int(matches)} of ${base}, ${k < 0.2 ? "no better than chance" : `${word} agreement`} (Cohen's κ ${fix(k)}).</p>` : "";
   const qaBase = same ? `on the same ${base}` : `on QA's own grade of all ${plural(qaN, "call")} it graded`;
   return html`<section class="trust t-${tone || "none"}" aria-labelledby="trust-h">
     <div class="trust-say"><div class="eyebrow">Can the judge be trusted yet?</div>
       ${byCheck ? html`<h2 id="trust-h"><b>Reliable on ${good.length} of ${text.length} checks.</b> Not yet on a call's overall grade.</h2>
-        <p>On these ${good.length === 1 ? "one" : int(good.length)} its grades agree with IndiaMART QA's well beyond chance (${kRange}; 0 is guessing, 1 is perfect), on the same ${base}:</p>${chips}${why}`
+        <p>On these ${good.length === 1 ? "one" : int(good.length)} its grades agree with IndiaMART QA's well beyond chance (${kRange}; 0 is guessing, 1 is perfect), ${onN}:</p>${chips}${why}`
       : html`<h2 id="trust-h"><b>${verdict}</b> It matches IndiaMART QA's overall grade on ${int(matches)} of ${plural(n, "call")}.</h2>
         <p>${k != null ? `${k < 0.2 ? "That is no better than chance" : `Agreement beyond chance is ${word}`} (Cohen's κ ${fix(k)}; 0 is guessing, 1 is perfect). ` : ""}${top ? `Answering “${GRADE[top]}” on every call would match ${pct(qa[top] / qaN)} of QA's grades, ${same ? `on the same ${base}` : `on all ${plural(qaN, "call")} it graded`}.` : ""}</p>
-        ${good.length ? html`<p>Check by check, it agrees well (κ 0.6 or more) on ${good.length} of ${text.length}:</p>${chips}` : ""}${why}`}</div>
+        ${good.length ? html`<p>Check by check, it agrees well (κ 0.6 or more) on ${good.length} of ${text.length}:</p>${chips}` : ""}`}</div>
     <dl class="trust-stats">
-      ${text.length ? html`<div><dt>Checks in good agreement</dt><dd>${int(good.length)}<small> of ${int(text.length)}</small></dd><small>κ 0.6 or more${fair ? `; ${fair} more moderate` : ""}, on the ${base}</small></div>` : ""}
+      ${text.length ? html`<div><dt>Checks in good agreement</dt><dd>${int(good.length)}<small> of ${int(text.length)}</small></dd><small>κ 0.6 or more${fair ? `; ${fair} more moderate` : ""}, ${sameN ? `on the ${base}` : "on the calls both graded"}</small></div>` : ""}
       <div><dt>Overall grade matches</dt><dd>${pct(ag.overall_accuracy)}</dd><small>${int(matches)} of ${base} · κ ${fix(k)}</small></div>
       ${top ? html`<div><dt>Always “${GRADE[top]}”</dt><dd>${pct(qa[top] / qaN)}</dd><small>a trivial guess, ${qaBase}</small></div>` : ""}
       <div><dt>Fatal vs not fatal</dt><dd>${pct(ag.fatal_vs_rest_accuracy)}</dd><small>on the ${base}${qaN ? `; always “not fatal” gives ${pct(1 - qa.fatal / qaN)}${same ? "" : ` on QA's ${int(qaN)}`}` : ""}</small></div>
