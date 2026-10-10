@@ -40,11 +40,15 @@ test, and rolls the winner out. Then it starts again on the new prompt.
    fixing and loop modules, each built by a parallel subagent with offline tests (stubbed model,
    network blocked), then run on the real recordings.
 6. **The platform.** Design research on Vapi, Sarvam, ElevenLabs, Retell, Cartesia, Linear, Resend
-   and Braintrust (screenshots and computed styles through a headless browser) set an Indian-rooted
-   but formal direction: khadi paper and indigo ink, Newsreader with Anek (a Mumbai foundry whose
-   faces cover Latin, Devanagari and Telugu), a kolam-style loop emblem, audits set as a ledger, prompt
-   fixes as contract redlines, and the A/B monitor drawn as the corridor between its win and harm
-   boundaries.
+   and Braintrust (screenshots and computed styles through a headless browser) set a quiet, formal
+   direction: warm paper with teal ink and a saffron accent, Instrument Serif headings over Geist
+   text, Devanagari in Tiro Devanagari Hindi, the loop drawn as a ring, prompt fixes shown as a legal
+   redline, and the A/B monitor drawn as the z-path between its win and harm boundaries. The first
+   version failed on contact with the real calls (410 calls in one table, risky-call lists hundreds
+   of rows long), so a usability pass ran on the real data: per group of pages a reviewer used the
+   pages, a fixer repaired them against screenshots at desktop and phone widths in both themes, and a
+   final checker went across all of them. The Docs tab was written the same way, with reviewers
+   checking every claim against the code.
 
 ## Tools
 

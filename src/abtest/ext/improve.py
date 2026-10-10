@@ -48,6 +48,7 @@ from abtest.ext.models import (
     RubricVerdict,
     Transcript,
     Turn,
+    is_real,
     load,
     save,
 )
@@ -56,7 +57,6 @@ ROOT_CAUSES_DIR = LOOP_DIR / "root_causes"  # <prompt_version>.json  (list[RootC
 FIXES_DIR = LOOP_DIR / "fixes"              # <fix_id>.json  (Fix)
 REPLAY_DIR = LOOP_DIR / "replay"            # <fix_id>/<call_id>-<A|B>.json (Transcript) and .audit.json
 FAIL = ("fatal", "non_fatal")
-REAL = ("production", "audited")            # Transcript sources that are real customer calls
 ROOT_TYPES = get_args(RootType)
 MAX_BOT_TURNS = 14
 THINK_TOKENS = 3000  # Claude 5.5 on OpenRouter reasons by default and that eats max_tokens: 400 came back empty
@@ -518,7 +518,7 @@ def replay(fix: Fix, rc: RootCause, audits: Sequence[CallAudit], n: int = 8,
                          if (t := _transcript(cid, rc.prompt_version)) is not None), n))
     if not cases:
         raise ValueError(f"{rc.id}: none of its calls has a transcript in {TRANSCRIPTS_DIR}")
-    if (real := [t.call_id for t in cases if t.source in REAL]) and not allow_real:
+    if (real := [t.call_id for t in cases if is_real(t)]) and not allow_real:
         raise PermissionError(f"{len(real)} of {len(cases)} replay calls are real customer calls and their personas "
                               "would go to the model provider; pass allow_real=True (CLI: "
                               "--yes-send-real-transcripts) once that is approved")
@@ -578,7 +578,7 @@ def _rubrics() -> list[Rubric]:
 
 def _refuse_real(call_ids: Iterable[str], version: str, allowed: bool) -> None:
     """The CLI's privacy gate: a call without a transcript on disk counts as real."""
-    real = [c for c in call_ids if (t := _transcript(c, version)) is None or t.source in REAL]
+    real = [c for c in call_ids if (t := _transcript(c, version)) is None or is_real(t)]
     if real and not allowed:
         sys.exit(f"refusing: {len(real)} real customer call(s) would be sent to the model provider; rerun with "
                  "--yes-send-real-transcripts once that is approved")

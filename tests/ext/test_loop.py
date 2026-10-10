@@ -335,6 +335,26 @@ def test_cli_advance_status_and_approve(world, capsys):
     assert loop.main(["status"]) == 0
 
 
+def test_replays_of_real_calls_count_as_real():
+    def rep(cid, origin):
+        return transcript(cid, source="replay").model_copy(update={"meta": {"replay_of": origin}})
+    save(models.TRANSCRIPTS_DIR / "r1.json", transcript("r1", source="audited"))
+    save(models.TRANSCRIPTS_DIR / "r1-B.json", rep("r1-B", "r1"))
+    save(models.TRANSCRIPTS_DIR / "f1.json", transcript("f1"))
+    assert models.is_real(rep("r1-B", "r1")) and models.is_real(rep("r1-B-B", "r1-B"))  # a replay of a replay
+    assert not models.is_real(rep("f1-B", "f1"))                         # built from an invented call
+    assert models.is_real(rep("x-B", "not-on-this-machine"))             # origin unknown: counts as real
+    assert not models.is_real(transcript("hand-made", source="replay"))  # a fixture with no origin
+
+
+def test_replays_built_from_real_calls_wait_for_the_go_ahead_too(world):
+    save(models.TRANSCRIPTS_DIR / "real-1.json", transcript("real-1", source="audited"))
+    world.calls["v1"] = [transcript("real-1-B", source="replay").model_copy(update={"meta": {"replay_of": "real-1"}})]
+    c = loop.advance()
+    assert c.stage == "judge" and "go-ahead" in c.notes[-1] and not [s for s in world.seen if s[0] == "judge"]
+    assert loop.advance(allow_real=True).stage != "judge"
+
+
 def test_cli_stops_cleanly_at_the_spend_limit(monkeypatch, capsys):
     def broke(*a):
         raise llm.BudgetExceeded("OpenRouter refused on the key's spend limit")

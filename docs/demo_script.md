@@ -1,7 +1,10 @@
-# Demo script: 3 minutes
+# Demo script: about 6½ minutes
 
-The three required scenarios (B is worse and stopped early, B wins and is promoted, inconclusive),
-then the approval gate and the split evidence. The spoken lines (in quotes) are about 440 words.
+Slow & Steady, by Team Hare & Tortoise. **Part 1 (3:00)** proves a prompt change with the A/B
+engine on the Streamlit dashboard: B is worse and stopped early, B wins and is promoted,
+inconclusive, then the approval gate and the split evidence. **Part 2 (3:30)** shows where Prompt B
+comes from: the loop on the platform. The spoken lines (in quotes) are about 440 words in part 1
+and 430 in part 2.
 
 The figures quoted are from the pinned demo seeds in `configs/scenarios/`: harm 1103, win 1101,
 inconclusive 1104, and approval 1101, which is the win run's traffic. If a seed is re-pinned, read
@@ -157,3 +160,83 @@ and truth reports land in `reports/`. Because `make demo` approves the approval 
 If `make live` was already run, running it again replaces the earlier harm run, so the dashboard
 shows the experiment disappear for a moment and come back from day 1.
 
+
+---
+
+# Part 2: the loop on the platform (3:00 to 6:30)
+
+## Before the clock starts
+
+- The morning run in [docs/runbook.md](runbook.md) has finished: cycle 1 is at **PENDING_APPROVAL**.
+  Do not approve it yet; the approval happens on camera.
+- The platform is running with the go-ahead, so its buttons can run cycle 2 (whose replay calls are
+  built from real buyers): `LOOP_ALLOW_REAL=1 make platform`. Open http://127.0.0.1:8600 in a second
+  tab, light theme.
+- **Customer calls on camera.** The Calls and call pages show real customer transcripts. For the
+  video, either show those two screens from the demo copy (`python3 -m http.server -d
+  src/abtest/ext/web 8611`, then http://127.0.0.1:8611/#/calls: invented calls, labelled as demo
+  data) or blur names, numbers and quotes. Every other screen shows aggregates only.
+- Numbers below in angle brackets come from the run: read them off the screen.
+
+## 3:00 to 3:25: where Prompt B comes from
+
+**Screen:** the Loop home: the ring, Prompt A in production, cycle 1 waiting at Approval.
+
+"Part one proved that a prompt change is safe to ship. But where does Prompt B come from? Today
+someone writes it on a hunch. Slow and Steady writes it from the calls themselves, and this ring is
+the loop it runs."
+
+## 3:25 to 4:00: listen and judge
+
+**Do:** open **Calls**, then one call (from the demo copy, or blurred). Point at the transcript
+beside the recording, the scorecard, and one grade's quote.
+
+"Every call is transcribed and graded on IndiaMART's own QA checklist: the same eighteen columns
+the QA team fills in by hand, plus three prompt rules, like never claiming to be human. Each grade
+carries the quote that proves it, and the QA team's own grade sits beside it."
+
+## 4:00 to 4:25: how far to trust the judge
+
+**Do:** open **Audit**. Point at the agreement card and the per-check table.
+
+"We measured the judge against the QA team on <160> calls they had audited. On individual checks it
+agrees most of the time. On the overall verdict it does not yet, because the auditors also see the
+lead record the bot saved, and the judge cannot. The platform says that on screen instead of hiding
+it."
+
+## 4:25 to 4:50: your own rubrics
+
+**Do:** open **Rubrics**, then **New rubric**: name, question, when it applies, what is fatal. Press
+**Test on a call** on a demo call; do not save.
+
+"Teams add their own checks in plain English, test them on a call before saving, and the next cycle
+grades every call with them."
+
+## 4:50 to 5:30: root cause, fix, gate, replay
+
+**Do:** open **Issues**, then the top cause's fix in **Fixes**. Point at the priority, the redline,
+the gate's checks and the replay's before and after.
+
+"Failures become named root causes, ranked by a published formula. The top one a prompt can fix is
+<name>, in <n> calls. The fix is a minimal edit to the prompt, shown as a redline. A safety gate
+blocks any edit that adds a promise or weakens an honesty rule. Then the same buyers are simulated
+against Prompt A and Prompt B: the failure falls from <x> to <y>."
+
+## 5:30 to 6:05: prove it on ten percent, then approve
+
+**Do:** open **Experiments**, then `vani-loop-c1`. Point at the 90/10 split, the stated assumption
+for the simulated traffic, and the z-path between its boundaries. Press **Approve**.
+
+"Prompt B then gets ten percent of leads through the same engine as part one. The traffic is
+simulated, and the screen says exactly what we assumed. It wins, and waits for a person. I
+approve."
+
+## 6:05 to 6:30: the loop starts again
+
+**Do:** open **Prompts** (v2 is production), then the **Loop** home: cycle 2 has opened on v2. Press
+**Run until it needs you** and confirm (the next cycle costs about $2–3 and runs in the background). End
+on the **Docs** tab.
+
+"Prompt B is now production, and the loop starts again on it: every call teaches the next prompt.
+It is all documented in the Docs tab. We are team Hare and Tortoise. The hare ships a prompt change
+on a hunch. The tortoise ships it on evidence."

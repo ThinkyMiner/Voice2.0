@@ -2,6 +2,7 @@
 temp LOOP_DIR, invented calls, audits, root causes and fixes; the stubbed model for rubric tests."""
 
 import time
+import types
 
 import httpx
 import pytest
@@ -87,6 +88,12 @@ def test_call_detail_shows_the_calibrated_grade_like_the_list(client):
     assert listed["overall"] == client.get("/api/calls/real-2").json()["audit"]["overall"] == "pass"
 
 
+def test_the_site_is_revalidated_on_every_load(client):
+    r = client.get("/app.js")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
+    assert "cache-control" not in client.get("/api/overview").headers
+
+
 def test_recordings_are_local_only(client):
     _calls_on_disk()
     assert client.get("/api/recordings/real-1").status_code == 404
@@ -167,6 +174,26 @@ def test_rubric_studio_crud(client):
     assert listed["price_promise"]["active"] is False and listed["price_promise"]["version"] == 3
     assert [v["version"] for v in client.get("/api/rubrics/price_promise/versions").json()["items"]] == [1, 2, 3]
     assert client.get("/api/rubrics/nope/versions").status_code == 404
+
+
+def test_the_web_sends_real_call_content_only_with_the_servers_go_ahead(client, monkeypatch):
+    seen = []
+
+    def advance(until=None, allow_real=False):
+        seen.append(allow_real)
+        return types.SimpleNamespace(n=1, stage="judge")
+    monkeypatch.setattr(loop, "advance", advance)
+
+    def post_and_wait():
+        assert client.post("/api/loop/advance", json={}).status_code == 202
+        for _ in range(200):
+            if not service._advancing.locked():
+                return
+            time.sleep(0.01)
+    post_and_wait()
+    monkeypatch.setenv("LOOP_ALLOW_REAL", "1")
+    post_and_wait()
+    assert seen == [False, True] and client.get("/api/settings").json()["allow_real"] is True
 
 
 def test_rubric_test_refuses_real_calls_without_the_server_flag(client, monkeypatch):
