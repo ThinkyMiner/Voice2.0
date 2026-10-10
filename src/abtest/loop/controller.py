@@ -271,9 +271,17 @@ def _generation_steps(run: _Run) -> None:
 
     _set_context(ctx, g, "propose")
     ledger = loop_module("ledger")
-    proposed = loop_module("proposer").propose(
-        run.prod.text, run.diagnosis, excerpts, ctx.rubric, ledger.ledger_summary(ctx.conn, ctx.loop_id),
-        ledger.tried_hashes(ctx.conn, ctx.loop_id), cfg.propose.candidates, g, ctx.provider, cfg)
+    try:
+        proposed = loop_module("proposer").propose(
+            run.prod.text, run.diagnosis, excerpts, ctx.rubric, ledger.ledger_summary(ctx.conn, ctx.loop_id),
+            ledger.tried_hashes(ctx.conn, ctx.loop_id), cfg.propose.candidates, g, ctx.provider, cfg)
+    except Exception as e:  # noqa: BLE001 - a proposer that returns nothing usable ends the generation
+        if type(e).__name__ != "ProviderError":
+            raise
+        # measured 10 Oct: sarvam-105b's reasoning can exhaust even 16,384 tokens on the 24k-word
+        # prompt; the generation ends without a candidate and the next one tries again
+        run.advance("PROPOSED")
+        return _no_candidate(run, f"The proposer returned no usable reply ({e}).")
     for c in proposed:
         run.save(c)  # failed pre-checks too: the ledger records them
     run.note("PROPOSED", f"{len(proposed)} proposed, {sum(map(_eligible, proposed))} passed the pre-checks.")

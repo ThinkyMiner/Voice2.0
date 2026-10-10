@@ -174,7 +174,7 @@ def test_each_role_takes_its_settings_from_the_config(tmp_path, base_cfg):
     p.chat("proposer", [{"role": "system", "content": "p"}])
     buyer, proposer = (r["body"] for r in api.requests)
     assert (buyer["reasoning_effort"], buyer["max_tokens"]) == ("low", 1024)
-    assert (proposer["reasoning_effort"], proposer["max_tokens"]) == ("high", 8192)
+    assert (proposer["reasoning_effort"], proposer["max_tokens"]) == ("low", 8192)
 
 
 def test_the_gate_role_borrows_the_judge_settings_and_is_deterministic(tmp_path, base_cfg):

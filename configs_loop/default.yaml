@@ -10,7 +10,7 @@ provider:
   concurrency: 4
   roles:
     judge:    {reasoning_effort: low,    max_tokens: 4096}
-    proposer: {reasoning_effort: high,   max_tokens: 8192}
+    proposer: {reasoning_effort: low,    max_tokens: 8192}   # high exhausted 16,384 tokens (10 Oct)
     buyer:    {reasoning_effort: low,    max_tokens: 1024}
     bot:      {reasoning_effort: low,    max_tokens: 2048}
 stt: {model: "saaras:v4", language_code: unknown, max_jobs_in_flight: 3, poll_interval_s: 30}
