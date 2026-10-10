@@ -19,7 +19,7 @@ export async function render(el, { params }) {
   const gens = [];  // versions by generation, oldest first in each
   for (const p of [...pr.items].sort((a, b) => String(a.created_ts).localeCompare(String(b.created_ts)))) (gens[depth(p)] ||= []).push(p);
   const where = (p) => {
-    if (!p.fix_id) return p.status === "production" ? "The original prompt, in production" : "The original prompt";
+    if (!p.fix_id) return "The original prompt";
     const f = fixBy[p.fix_id], x = xBy[cycBy[p.fix_id]?.experiment_id];
     return [f?.gate ? (f.gate.passed ? "gate passed" : "gate blocked") : "gate not run",
       f?.replay ? `replay ${pct(f.replay.fail_rate_a, 0)} → ${pct(f.replay.fail_rate_b, 0)} failing, ${f.replay.n_cases} cases` : "replay not run",
@@ -30,7 +30,7 @@ export async function render(el, { params }) {
 
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Improve</div><h1 class="title">Prompt <em>versions</em></h1>
-      <p class="lede">Every prompt Vani has run or tested. Each new version is one fix to its parent: it must pass the safety gate, the replay and an A/B test before it becomes production. Production is <b class="mono ink">${pr.production}</b>.</p></div></div>
+      <p class="lede">Every prompt Vani has run or tested; each new one is a single fix to its parent. Production is <b class="mono ink">${pr.production}</b>.</p></div></div>
     <div class="lineage-x" aria-label="Prompt versions, oldest generation first">${gens.map((g, i) => html`
       ${i ? html`<div class="gen-arrow" aria-hidden="true">→</div>` : ""}
       <div class="gen">${g.map((p) => html`<button class="pv ${p.status}" type="button" data-v="${p.version}" aria-pressed="${p.version === sel}">
@@ -82,12 +82,12 @@ export async function render(el, { params }) {
 
   const changes = (p) => {
     const f = fixBy[p.fix_id];
-    if (!f) return html`<p class="muted">The fix behind ${p.version} (${p.fix_id}) is not on file, so its edits cannot be shown. The full text is under “Full text”.</p>`;
+    if (!f) return html`<p class="muted">The fix behind ${p.version} (${p.fix_id}) is not on file; see Full text.</p>`;
     return html`<div class="edits">${f.edits.map((e, i) => html`<div class="edit">
         <div class="eyebrow">Edit ${i + 1} of ${f.edits.length} · ${e.mode === "append" ? "added at the end" : "replaces text"}</div>
         <p class="redline-line">${e.mode === "append" ? html`<ins>${e.text}</ins>` : wordDiff(e.find, e.replace)}</p>
-        ${e.why ? html`<p class="why">${e.why}</p>` : ""}</div>`)}
-      <p class="muted small">${p.version} is ${p.parent} with ${f.edits.length === 1 ? "this edit" : `these ${f.edits.length} edits`}; everything else is unchanged. <a href="#/fixes/${enc(f.id)}">Read the fix with its context, safety gate and replay</a></p></div>`;
+        ${e.why ? html`<p class="why" title="${e.why}">${e.why}</p>` : ""}</div>`)}
+      <p class="muted small">Nothing else changed from ${p.parent}. <a href="#/fixes/${enc(f.id)}">Open the fix, its gate and replay</a></p></div>`;
   };
 
   let ticket = 0;
@@ -99,7 +99,8 @@ export async function render(el, { params }) {
     $$(".pv", el).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
     history.replaceState(null, "", `#/prompts?v=${enc(v)}`);
     mount($("#rt", el), html`Prompt <span class="fig">${v}</span> ${stateChip(p.status)}`);
-    $("#rs", el).textContent = `sha ${short(p.sha256, 12)} · ${p.path}`;
+    $("#rs", el).textContent = `sha ${short(p.sha256, 12)}`;
+    $("#rs", el).title = p.path;
     mount($("#modes", el), p.fix_id ? html`<div class="seg" role="group" aria-label="Show">${[["changes", `What changed from ${p.parent}`], ["text", "Full text"]].map(([m, l]) => html`<button type="button" data-mode="${m}" aria-pressed="${m === mode}">${l}</button>`)}</div>` : "");
     $$("[data-mode]", el).forEach((b) => b.addEventListener("click", () => { mode = b.dataset.mode; read(sel); }));
     $("#find-box", el).hidden = mode !== "text";
@@ -112,7 +113,7 @@ export async function render(el, { params }) {
       const t = await text(`/api/prompts/${enc(v)}/text`);
       if (mine !== ticket) return;  // a newer selection owns the reader
       box.textContent = t.replace(/﻿/g, "");
-      $("#rs", el).textContent = `${int(words(t))} words · ${int(t.split("\n").length)} lines · sha ${short(p.sha256, 12)} · ${p.path}`;
+      $("#rs", el).textContent = `${int(words(t))} words · sha ${short(p.sha256, 12)}`;
       if (input.value.trim()) find();
     } catch (err) {
       if (mine !== ticket) return;

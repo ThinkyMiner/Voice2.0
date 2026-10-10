@@ -125,7 +125,7 @@ export function goodChecks(ag, audio) {
 export const audioIds = (rubrics) => new Set((rubrics || []).filter((r) => r.needs_audio).map((r) => r.id));
 export const agreeLine = (row) => {
   const a = agreement(row);
-  return html`<div class="agree-line ${a.weak ? "weak" : "ok"}" title="Cohen's κ discounts agreement by chance: 0 is chance level, 1 is perfect.">${a.text}</div>`;
+  return html`<div class="agree-line ${a.weak ? "weak" : "ok"}" title="${a.text}. Cohen's κ discounts agreement by chance: 0 is chance level, 1 is perfect.">${row ? `Matches QA ${a.short}, ${kappaWord(row.kappa)}` : "Judge only, no QA column"}</div>`;
 };
 
 // ------------------------------------------------ failed loads and confirmations (shell, loop pages)

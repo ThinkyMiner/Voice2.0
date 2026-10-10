@@ -8,18 +8,10 @@
 
 .docs { --fs-body: 15.5px; --fs-small: 14px; --fs-cap: 12.5px; display: grid; grid-template-columns: minmax(0, 1fr); }
 
-/* --- hero: the title first, then Kabir's doha as the epigraph ------------------------------------------- */
+/* --- hero ------------------------------------------------------------------------------------------------- */
 .docs .dhero { margin-bottom: 56px; }
 .docs .dhero > .eyebrow { margin-bottom: 14px; }
 .docs .dhero .lede { max-width: 36em; }
-.docs .doha { max-width: 34em; margin: 36px 0 0; padding: 2px 0 2px 20px; border-left: 1px solid var(--hairline-2); display: grid; gap: 10px; }
-.docs .doha blockquote { margin: 0; }
-.docs .doha .deva { font: 400 clamp(20px, 2vw, 25px)/1.7 var(--f-deva); color: var(--ink); }
-.docs .doha .deva span, .docs .doha .tr span { display: block; }
-.docs .doha .tr { font: italic 400 16px/1.5 var(--f-display); color: var(--muted); }
-.docs .doha figcaption { display: grid; gap: 8px; }
-.docs .doha .en { font-size: var(--fs-small); line-height: 1.6; color: var(--muted); max-width: 31em; text-wrap: pretty; }
-.docs .doha cite { font: 500 10.5px/1 var(--f-mono); letter-spacing: .09em; text-transform: uppercase; font-style: normal; color: var(--muted); }
 
 /* --- layout: contents beside the text from 1024px; below, a compact one that stays under the sticky bar ---- */
 .docs .toc { display: none; }
@@ -254,7 +246,6 @@
 @media (max-width: 640px) {
   .docs { --fs-body: 15px; }
   .docs .dhero { margin-bottom: 40px; }
-  .docs .doha { margin-top: 28px; padding-left: 16px; }
   .docs .dsec { margin-top: 64px; padding-top: 32px; }
   .docs .dsec > h3 { margin-top: 36px; font-size: 22px; }
   .docs .dsec > p.lead { font-size: 16.5px; }

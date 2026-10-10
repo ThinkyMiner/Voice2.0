@@ -105,20 +105,14 @@ function corridor(width) {  // the planned win and harm boundaries, drawn at the
 const hero = () => html`<header class="dhero">
   <div class="eyebrow accent">Docs · How it works</div>
   <h1 class="title">How Vani Lab <em>works</em></h1>
-  <p class="lede">One page for anyone new to the platform: what each page is for, what each stage of the loop does, and how far to trust each number. Every figure here comes from the code, the configs, or the committed docs and reports.</p>
-  <figure class="doha">
-    <blockquote lang="hi"><p class="deva"><span>धीरे-धीरे रे मना, धीरे सब कुछ होय।</span><span>माली सींचे सौ घड़ा, ऋतु आए फल होय॥</span></p></blockquote>
-    <p class="tr" lang="hi-Latn"><span>Dheere-dheere re mana, dheere sab kuch hoye,</span><span>maali seenche sau ghada, ritu aaye phal hoye.</span></p>
-    <figcaption><p class="en">“Slowly, O mind, everything comes in its own time: the gardener may pour a hundred pots of water, but the fruit comes only in its season.”</p>
-      <cite>Kabir</cite></figcaption>
-  </figure>
+  <p class="lede">What each page is for, what each stage of the loop does, and how far to trust each number.</p>
 </header>`;
 
 const overview = () => sec("overview", html`What Vani Lab is`, html`
   <p class="lead">Today a change to Vani's prompt goes live to every caller on judgement alone: if it is bad, it costs meetings until someone notices; if it is good, nobody can prove it. Vani Lab is the platform Team Hare &amp; Tortoise built to close that gap for Vani, IndiaMART's buyer-side voice bot.</p>
   <p>It listens to Vani's calls, grades each one on IndiaMART's own QA checklist, finds the highest-priority failure a prompt change can fix, writes the fix (Prompt B), tests it in simulated conversations and then on 10% of simulated leads with a sequential A/B test, and, once a named person approves, makes it production in its prompt registry. Then it starts again on the new prompt, which no live bot has spoken yet: its next audit runs on the up to eight simulated replay conversations that tested it.</p>
-  <p><b>No real buyer has heard a Prompt B yet.</b> The loop's A/B test replays real buyer-call history with an effect assumed for B, so its result comes from that assumption, not from what Prompt B says: it exercises the engine and the approval path, not Prompt B. A live experiment (<code>vani-live-…</code>) is the exception: the same sticky router splits leads between two versions of a Vani agent on Sarvam, and Sarvam dials consenting team numbers only. A handful of calls never decides anything, so it shows the routing, not a result. And “production” is a status in the platform's own prompt registry; nothing is deployed to the live bot.</p>
-  <p>Vani Lab has two halves: <b>the loop</b> writes the change from the calls themselves, and <b>the A/B engine</b> decides, from nothing but who got which prompt and what happened on their calls; in the loop, those calls are replayed history with an assumed effect for B, and in a live experiment they are real Sarvam calls. Their code lives in <code>src/abtest/ext/</code> and <code>src/abtest/</code>.</p>
+  <p><b>No real buyer has heard a Prompt B yet.</b> The loop's A/B test replays real buyer-call history with an effect assumed for B, so it exercises the engine and the approval path, not Prompt B. A live experiment (<code>vani-live-…</code>) is the exception: the same sticky router splits leads between two versions of a Vani agent on Sarvam, which dials consenting team numbers only; a handful of calls shows the routing, not a result. And “production” is a status in the platform's own prompt registry; nothing is deployed to the live bot.</p>
+  <p>Vani Lab has two halves: <b>the loop</b> writes the change from the calls themselves, and <b>the A/B engine</b> decides from nothing but who got which prompt and what happened on their calls. Their code lives in <code>src/abtest/ext/</code> and <code>src/abtest/</code>.</p>
   <blockquote class="pull"><p><span>The hare ships a prompt change on a hunch.</span> <em>The tortoise ships it on evidence.</em></p></blockquote>
   <figure class="ringfig">${raw(ring())}
     <figcaption><ul class="key">
@@ -156,8 +150,7 @@ const PAGE_DOCS = [  // [nav route, title, href, what you use it for, what it sh
 const pages = () => sec("pages", html`What each page is for`, html`
   <p>The rail follows the loop: the Loop page on top, then <b>Listen &amp; judge</b> (Calls, Audit, Rubrics), <b>Improve</b> (Issues, Fixes, Prompts), <b>Prove</b> (Experiments), <b>Platform</b> (Settings) and <b>Learn</b> (these docs). On a narrow screen it folds into a menu button that names the page you are on. Search (⌘K or Ctrl K) jumps to any page, prompt version, root cause, experiment, fix, rubric, call or section of these docs. Pages describe themselves when they are empty, with the command that fills them.</p>
   <div class="pgs">${PAGE_DOCS.map(([route, title, href, use, body]) => html`<article class="pg">
-    <div class="ph"><span aria-hidden="true">${icon(route)}</span><h3><a href="${href}">${title}</a></h3><code>${href}</code></div><p class="use">${use}</p>${body}</article>`)}</div>
-  ${callout("Demo data", html`<p>Served without the platform behind it, the site runs on demo data: invented calls, names, products and grades beside real engine runs. It says so on the page. Run <code>make platform</code> for the real data.</p>`)}`);
+    <div class="ph"><span aria-hidden="true">${icon(route)}</span><h3><a href="${href}">${title}</a></h3><code>${href}</code></div><p class="use">${use}</p>${body}</article>`)}</div>`);
 
 const STAGE_DOCS = [  // per ui.js STAGES: [what happens, model role, what stops it or makes it wait, where to see it]
   [html`The loop's Listen stage counts the calls this prompt version has and calls no model. Those calls are transcribed beforehand by <code>make listen</code>: recordings become bot and buyer transcripts with timestamps, Hindi, Hinglish and Telugu are written in Latin script the way IndiaMART's auditors write them, and every phone number becomes <code>[number]</code>. On v1 the loop judges, by default, the buyer-side calls IndiaMART's QA team audited. A later prompt version was never spoken by a live bot, so its calls are the replay conversations that tested it, labelled <i>replay</i>.`,
@@ -268,7 +261,7 @@ const judge = () => sec("judge", html`How far to <em>trust</em> the judge`, html
     <div><dt>Fatal vs not fatal</dt><dd>The share of calls where the judge and QA agree on whether the call is Fatal; the Loop page calls it fatal vs rest.</dd></div>
   </dl>
   <p>On the Calls page each audited call shows <i>Same</i> or <i>Differ</i> for its two overall grades, and a call's scorecard says per parameter whether they agree. The numbers change with every run, so they are not copied here. The <a href="#/audit">Audit page</a> shows the latest, and <code>make agreement</code> writes them to <code>reports/judge_agreement.md</code>.</p>
-  ${callout("Honest limit", html`<p>IndiaMART's auditors also judge what the bot saved into the lead record, which the judge cannot see: it reads the transcript only, with no audio, no lead record and no catalogue. And the audio-only checks cannot be graded from text, so the overall comparison leaves them out and a call's scorecard shows “—” for them. Trust the per-parameter rows first: the overall grade can disagree with the auditors' even where most parameters agree.</p>`, "limit")}`);
+  ${callout("Honest limit", html`<p>IndiaMART's auditors also judge what the bot saved into the lead record, which the judge cannot see: it reads the transcript only, with no audio, no lead record and no catalogue. Trust the per-parameter rows first: the overall grade can disagree with the auditors' even where most parameters agree.</p>`, "limit")}`);
 
 const fixes = () => sec("fixes", html`Root causes, fixes and the gate`, html`
   <h3>Failures become root causes</h3>
@@ -293,7 +286,7 @@ const fixes = () => sec("fixes", html`Root causes, fixes and the gate`, html`
   <p>B goes on to the A/B test only if it fails the cause's rubric in fewer of these simulated conversations than A did; otherwise the try ends as REPLAY_NO_GAIN. With at most eight pairs and no significance test, one conversation can decide it, so this screens out fixes that clearly do not help; it is not evidence of an effect. Simulated A, not the real calls, is the fair before: both sides went through the same simulation. The fix's page also shows how the real calls did and every other rubric's change, B minus A; the cycle notes a regression, but only the cause's own rubric decides.</p>`);
 
 const prove = () => sec("prove", html`Proving it: <em>the A/B engine</em>`, html`
-  <p>The engine decides whether B did better than A on the traffic it is given. It reads only exposures (who got which prompt), calls and the experiment's configuration, which is frozen and hashed when the experiment starts. It never reads the simulator's assumed effect; a test checks that, statically and at runtime. With no buyer traffic yet, the traffic is simulated (see <i>Simulated traffic, stated plainly</i> below), so in the loop the engine shows itself and the approval path working, not what Prompt B does.</p>
+  <p>The engine decides whether B did better than A on the traffic it is given. It reads only exposures (who got which prompt), calls and the experiment's configuration, which is frozen and hashed when the experiment starts. It never reads the simulator's assumed effect; a test checks that, statically and at runtime. With no buyer traffic yet, the traffic is simulated (see <i>Simulated traffic, stated plainly</i> below).</p>
   <h3>The unit is the lead</h3>
   <p>The lead is both the unit that gets a prompt and the unit of analysis. Statistics are never computed over calls: a lead's calls are correlated and always share a prompt, so counting calls would overstate the sample and produce false wins. A lead enters the analysis at its first answered call, the first moment it hears the bot, and counts at a look only once it has matured: one day for buyer calls, two for the seller calls of the headline experiment.</p>
   <h3>Sticky routing, nothing stored</h3>
@@ -464,7 +457,7 @@ const faq = () => sec("faq", html`FAQ`, html`<div class="faq">
 
 const page = () => html`<div class="docs">
   <nav class="toc" aria-label="On this page"><div class="eyebrow">On this page</div>${tocList()}
-    <p class="hint">Every section has its own link. Press <kbd>${$("#kbd-hint")?.textContent?.trim() || "⌘K"}</kbd> and type <i>docs</i> to jump to one.</p></nav>
+    <p class="hint">Press <kbd>${$("#kbd-hint")?.textContent?.trim() || "⌘K"}</kbd> and type <i>docs</i> to jump to a section.</p></nav>
   <article class="dbody">${hero()}
     <details class="toc-m"><summary><span class="eyebrow">Contents</span><span class="cur" id="doc-cur">${SECTIONS[0][1]}</span></summary><nav aria-label="On this page">${tocList()}</nav></details>
     ${overview()}${pages()}${loop()}${grades()}${judge()}${fixes()}${prove()}${running()}${privacy()}${glossary()}${faq()}

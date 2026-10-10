@@ -45,41 +45,40 @@ function station(c) {
 const figs = (s) => raw(esc(s).replace(/(&#?\w+;)|\b(v\d+|\d[\d,.]*)\b/g, (m, ent, f) => ent || `<span class="fig">${f}</span>`));  // the serif's 1 reads as l; entities pass untouched ("v2&#39;s")
 const first = (s) => (String(s || "").match(/^.+?[.!?](?=\s|$)/)?.[0] || String(s || "")).trim();
 const plain = (note) => cap(String(note || "").replace(/^(blocked|waiting|done|close):\s*/, ""));
-const fixStatus = (f, x) => [
+const fixStatus = (f) => [
   `${f.edits.length} edit${f.edits.length === 1 ? "" : "s"}`,
   f.gate ? (f.gate.passed ? "gate passed" : "gate blocked") : "gate not run",
-  f.replay ? `replay ${pct(f.replay.fail_rate_a, 0)} → ${pct(f.replay.fail_rate_b, 0)} failing, ${f.replay.n_cases} cases` : "replay not run",
-  x ? `A/B ${OUTCOME[x.state] || x.state.toLowerCase()}` : "no A/B yet"].join(" · ");
+  f.replay ? `replay ${pct(f.replay.fail_rate_a, 0)} → ${pct(f.replay.fail_rate_b, 0)} failing, ${f.replay.n_cases} cases` : "replay not run"].join(" · ");
 
 /** The headline and the one next step for where the loop stands. */
 function plan(c, lp, k) {
   const A = c?.production_version || k.prodV, B = c?.candidate_version || "Prompt B", n = c?.n;
   const wait = /^waiting/.test(lp.next_action || "") ? lp.next_action : "";
-  if (lp.busy) return { title: `Cycle ${n ?? 1} is running`, body: "The loop is working in the background. The run log below shows each step as it happens; this page refreshes when it stops." };
+  if (lp.busy) return { title: `Cycle ${n ?? 1} is running`, body: "The run log below shows each step; the page refreshes when it stops." };
   if (!c || c.stage === "done") {
     const m = c ? c.n + 1 : 1;
-    return { title: `Ready to start cycle ${m}`, body: `Cycle ${m} works on ${A}, the prompt in production. Starting opens the cycle and counts ${A}'s calls. No model is called.`,
+    return { title: `Ready to start cycle ${m}`, body: `It works on ${A}, the prompt in production. No model is called.`,
       run: { until: "listen", label: `Start cycle ${m}` } };
   }
   if (c.stage === "blocked") return { title: `Cycle ${n} is blocked`, tone: "harm", body: plain(c.notes.at(-1)) || "No root cause a prompt change can fix is left on this version." };
   if (c.stage === "approval" && (k.x?.state === "PENDING_APPROVAL" || /^waiting for approval/.test(wait)))
-    return { title: `Cycle ${n} needs your decision`, tone: "pending", body: `${B} beat ${A} on simulated traffic. It keeps 10% of that traffic until someone approves or rejects it on the experiment page.`,
+    return { title: `Cycle ${n} needs your decision`, tone: "pending", body: `${B} beat ${A} on simulated traffic. It keeps 10% of it until you decide.`,
       link: ["Review and decide", `#/experiments/${enc(c.experiment_id)}`] };
   if (k.real && !k.allowReal && (NEEDS_REAL(c) || /^waiting for the go-ahead/.test(wait)))
     return { title: `Cycle ${n} is waiting for your go-ahead`, tone: "pending",
-      body: `${c.stage === "judge" && k.graded ? "The numbers below are from the judge's last run. Grading again for this cycle" : `The next step, ${STEP_NAME[c.stage] || c.stage},`} sends real call content to the model provider (OpenRouter), so it needs your go-ahead. Run it from a terminal, or start the platform with LOOP_ALLOW_REAL=1 to run it from here:`, cli: GO_AHEAD };
+      body: `${c.stage === "judge" && k.graded ? "The numbers below are from the judge's last run. Grading again" : `The next step, ${STEP_NAME[c.stage] || c.stage},`} sends real call content to OpenRouter. Run it from a terminal, or start the platform with LOOP_ALLOW_REAL=1:`, cli: GO_AHEAD };
   if (/^waiting for transcripts/.test(wait)) return { title: `Cycle ${n} is waiting for calls`, tone: "pending", body: plain(wait.replace(/^waiting for transcripts of \S+:\s*/, "")) };
   if (/^waiting: none of the/.test(wait)) return { title: `Cycle ${n}: the judge could not grade any call`, tone: "harm", body: "Its errors are in the run log. Grading again retries them.", run: { until: "judge", label: "Grade again", paid: ["judge"] } };
   const rc = k.rc ? ` “${k.rc.name}”` : "";
   const S = {
     listen: [`Cycle ${n}: count ${A}'s calls`, "Counts the calls this cycle works on. No model is called.", "Count the calls"],
-    judge: [`Cycle ${n}: grade ${A}'s calls`, "The judge model grades every call against the active rubrics. Calls graded before are cached and cost nothing.", "Grade the calls"],
-    improve: [`Cycle ${n}: rank the root causes`, "Groups the failed grades into root causes, ranks them by priority and picks the top one a prompt change can fix.", "Rank root causes"],
+    judge: [`Cycle ${n}: grade ${A}'s calls`, "The judge grades every call against the active rubrics. Cached grades cost nothing.", "Grade the calls"],
+    improve: [`Cycle ${n}: rank the root causes`, "Groups failed grades into root causes and picks the top one a prompt can fix.", "Rank root causes"],
     gate: c.fix_id ? [`Cycle ${n}: safety-check ${B}`, `The gate model checks ${B} against the safety rules before any replay.`, "Run the safety gate"]
       : [`Cycle ${n}: write the fix${rc ? ` for${rc}` : ""}`, `The fixer drafts Prompt B as a few edits to ${A}, then the safety gate checks it.`, "Write the fix"],
     // up to 8 calls: improve.replay(n=8)
-    replay: [`Cycle ${n}: replay ${B} against ${A}`, `Up to 8 of the calls behind${rc || " the root cause"} become simulated buyers. Each one talks to ${A} and to ${B}, and the judge grades both conversations.`, "Run the replay"],
-    prove: [`Cycle ${n}: A/B test ${B}`, `The A/B engine replays call history with ${B} on 10% of leads and an effect assumed for B, deciding at each checkpoint. Simulated traffic; no model is called.`, "Run the A/B test"],
+    replay: [`Cycle ${n}: replay ${B} against ${A}`, `Up to 8 calls behind${rc || " the root cause"} become simulated buyers; the judge grades ${A} and ${B} on each.`, "Run the replay"],
+    prove: [`Cycle ${n}: A/B test ${B}`, `${B} gets 10% of replayed leads, with an assumed effect. Simulated traffic; no model is called.`, "Run the A/B test"],
     approval: [`Cycle ${n}: read the A/B decision`, `${c.experiment_id || "The A/B test"} has ended${k.x ? `: ${OUTCOME[k.x.state] || k.x.state}` : ""}. This moves the cycle to roll-out.`, "Read the decision"],
     rollout: k.x?.state === "PROMOTED" ? [`Cycle ${n}: roll out ${B}`, `${B} becomes production, ${A} is retired, and cycle ${n + 1} starts on ${B}.`, `Roll out ${B}`]
       : [`Cycle ${n}: close the cycle`, `${B} is rejected and ${A} stays in production. Cycle ${n + 1} then starts on ${A}.`, "Close the cycle"],
@@ -88,7 +87,7 @@ function plan(c, lp, k) {
   const rest = ORDER.slice(ORDER.indexOf(c.stage), ORDER.indexOf("approval"));  // the steps before a person decides
   return { title: S[0], body: S[1], run: { until: c.stage, label: S[2], body: S[1], paid: PAID[c.stage] || [] },
     all: rest.length > 1 ? { label: "Run until it needs you", paid: [...new Set(rest.flatMap((s) => PAID[s] || []))],
-      body: `Runs every step from ${STEP_NAME[c.stage] || c.stage} on, until the loop needs a person: the A/B decision, a step that is blocked, or a step that waits for your go-ahead.` } : null };
+      body: `Runs every step from ${STEP_NAME[c.stage] || c.stage} on, until the loop needs a person.` } : null };
 }
 
 function ask(run, settings) {
@@ -131,9 +130,7 @@ export async function render(el) {
     allowReal: Boolean(settings?.allow_real) });
   const p = plan(cur, lp, ctx(cur));
   const sp = shares({ pass: k.pass_rate, non_fatal: k.non_fatal_rate, fatal: k.fatal_rate });
-  const loopX = xs.items.filter((x) => x.cycle != null), liveX = xs.items.filter((x) => x.simulated === false).length;
-  const engineX = xs.items.length - loopX.length - liveX, scen = (n) => `${n} engine scenario${n === 1 ? "" : "s"}`;
-  const liveNote = liveX ? ` · ${liveX} live experiment${liveX === 1 ? "" : "s"} on real calls` : "";
+  const loopX = xs.items.filter((x) => x.cycle != null);
   const finished = loopX.filter((x) => !["RUNNING", "DRAFT", "PENDING_APPROVAL"].includes(x.state));
   const promoted = finished.filter((x) => x.state === "PROMOTED"), stopped = finished.filter((x) => x.state === "STOPPED_HARM").length;
   const units = await Promise.all(promoted.map((x) => get(`/api/experiments/${enc(x.experiment_id)}`).then((d) => d.impact?.unit, () => null)));
@@ -143,14 +140,14 @@ export async function render(el) {
   const agreeTone = acc == null ? "" : kap != null ? (kap < 0.2 ? "harm" : kap < 0.6 ? "warn" : "win") : acc < 0.6 ? "harm" : acc < 0.8 ? "warn" : "win";
   const ag = au?.agreement, { text: checks, good, sameN } = goodChecks(ag, audioIds(rb.items));  // what the judge gets right, first
   const qaN = au?.human_split ? au.human_split.pass + au.human_split.non_fatal + au.human_split.fatal : 0;
-  const qaLine = qaN && !verBy[prodV]?.fix_id ? (qaN === k.calls_audited ? "all also audited by IndiaMART QA" : `${int(qaN)} also audited by IndiaMART QA`) : "";
+  const qaLine = qaN && !verBy[prodV]?.fix_id ? (qaN === k.calls_audited ? "all also audited by QA" : `${int(qaN)} also audited by QA`) : "";
   const st = station(cur);
   const closed = (ov.cycles || []).filter((c) => c.n !== cur?.n);
 
   mount(el, html`
     <section class="status">
       <div class="status-main">
-        <p class="status-intro">Vani, IndiaMART's AI voice agent, talks to buyers and turns what they need into a lead for sellers. Today a change to its prompt goes live on judgement alone. Vani Lab grades every call against IndiaMART's QA checklist, writes a prompt fix for the costliest failure a prompt can fix, and tests it on simulated traffic before a person approves it.</p>
+        <p class="status-intro">Vani Lab grades every call, fixes the costliest failure and tests the fix on simulated traffic before a person approves.</p>
         <div class="eyebrow accent">The loop · ${cur ? html`cycle ${cur.n} · ${GROUPS[st.station][0]}${st.detail ? ` ${st.detail}` : ""}` : "not started yet"}</div>
         <h1 class="status-title ${p.tone || ""}">${figs(p.title)}</h1>
         <p class="status-body">${p.body}</p>
@@ -171,25 +168,25 @@ export async function render(el) {
       ${kpi("#/calls", `${int(k.calls_audited)} calls graded by the judge. Open the calls.`, html`<div class="eyebrow">Calls graded</div><div class="big">${int(k.calls_audited)}</div>
         <div class="sub">by the judge, on ${prodV || "—"}${k.calls_total != null && k.calls_total !== k.calls_audited ? ` (of ${int(k.calls_total)})` : ""}${qaLine ? html`<span class="sub-line">${qaLine}</span>` : ""}</div>`)}
       ${kpi("#/audit", `Fatal rate ${pct(k.fatal_rate)}, judge's grade. Open the audit.`, html`<div class="eyebrow">Fatal rate <span class="tag">judge</span></div><div class="big harm">${pct(k.fatal_rate)}</div>
-        <div class="sub">of ${int(k.calls_audited)} graded calls · non‑fatal ${pct(k.non_fatal_rate, 0)} · pass ${pct(k.pass_rate, 0)}</div><div aria-hidden="true">${sp ? gradeStack(sp, "minibar") : ""}</div>`)}
+        <div class="sub">non‑fatal ${pct(k.non_fatal_rate, 0)} · pass ${pct(k.pass_rate, 0)}</div><div aria-hidden="true">${sp ? gradeStack(sp, "minibar") : ""}</div>`)}
       ${checks.length ? kpi("#/audit", `${good.length} of ${checks.length} checks agree well with IndiaMART QA. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big">${int(good.length)}<small>of ${int(checks.length)} checks</small></div>
-        <div class="sub">agree well with IndiaMART QA (κ 0.6 or more) on ${sameN ? `${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls` : "the calls both graded"} · overall grade ${pct(acc, 0)}, κ ${fix(kap)}, ${kappaWord(kap)}</div>`)
+        <div class="sub" title="κ 0.6 or more, on ${sameN ? `${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls` : "the calls both graded"}">agree well with QA · overall grade ${pct(acc, 0)}, κ ${fix(kap)}, ${kappaWord(kap)}</div>`)
         : kpi("#/audit", `Judge versus IndiaMART QA: ${pct(acc, 0)} agreement. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big ${agreeTone}">${pct(acc, 0)}<small>agree</small></div>
-        <div class="sub">with IndiaMART QA on the overall grade${k.agreement_n != null ? ` of ${int(k.agreement_n)} ${k.agreement_held_out ? "held-out " : ""}calls` : ""} · κ ${fix(kap)}, ${kappaWord(kap)} · fatal vs rest ${pct(k.fatal_vs_rest_accuracy, 0)}</div>`)}
+        <div class="sub" title="On the overall grade · fatal vs rest ${pct(k.fatal_vs_rest_accuracy, 0)}">${k.agreement_n != null ? `on ${int(k.agreement_n)} ${k.agreement_held_out ? "held-out " : ""}calls · ` : ""}κ ${fix(kap)}, ${kappaWord(kap)}</div>`)}
       ${kpi("#/issues", `${int(k.root_causes)} root causes. Open the issues.`, html`<div class="eyebrow">Root causes <span class="tag">judge</span></div><div class="big ${k.root_causes ? "" : "none"}">${k.root_causes ? int(k.root_causes) : "—"}</div>
-        <div class="sub">${k.root_causes ? "ranked by priority; the loop fixes the top one a prompt can fix" : "not ranked yet: Improve ranks them after the judge"}</div>`)}
+        <div class="sub">${k.root_causes ? "ranked by priority" : "not ranked yet"}</div>`)}
       ${kpi("#/fixes", `${fx.items.length} prompt fixes. Open the fixes.`, html`<div class="eyebrow">Prompt fixes</div><div class="big ${fx.items.length ? "" : "none"}">${fx.items.length ? int(fx.items.length) : "—"}</div>
-        <div class="sub">${latest ? `latest: ${fixStatus(latest, xBy[(ov.cycles || []).find((c) => c.fix_id === latest.id)?.experiment_id])}` : "none written yet: the fixer writes one for the top root cause"}</div>`)}
+        <div class="sub">${latest ? `latest: ${fixStatus(latest)}` : "none written yet"}</div>`)}
       ${kpi("#/experiments", "Weekly impact from loop experiments. Open the experiments.", html`<div class="eyebrow">Weekly impact</div>
-        ${finished.length ? html`<div class="big ${k.per_week_gained > 0 ? "win" : ""}">${sint(k.per_week_gained)}</div><div class="sub">simulated ${unit} a week gained · ${int(promoted.length)} of ${int(finished.length)} finished loop A/B test${finished.length === 1 ? "" : "s"} promoted${stopped ? `, ${stopped} stopped for harm before roll-out` : ""}${k.per_week_protected ? ` · ${int(k.per_week_protected)} a week protected` : ""}${liveNote}</div>`
-          : html`<div class="big none">—</div><div class="sub">no loop A/B test has finished yet${engineX ? ` · the ${scen(engineX)} are separate and not counted` : ""}${liveNote}</div>`}`)}
+        ${finished.length ? html`<div class="big ${k.per_week_gained > 0 ? "win" : ""}">${sint(k.per_week_gained)}</div><div class="sub">simulated ${unit} a week · ${int(promoted.length)} of ${int(finished.length)} loop tests promoted${stopped ? `, ${stopped} stopped for harm` : ""}${k.per_week_protected ? ` · ${int(k.per_week_protected)} protected` : ""}</div>`
+          : html`<div class="big none">—</div><div class="sub">no loop A/B test finished yet</div>`}`)}
     </section>
-    ${acc != null && (kap != null ? kap <= 0.4 : acc < 0.7) ? html`<p class="kpi-note"><i class="dot demo" aria-hidden="true"></i><span>The judge's overall grade, and the fatal rate built on it, are directional for now: a call takes its worst check's grade, so one miss on any check can change it, and QA also sees the lead record the bot saved, which the judge cannot. <a href="#/audit">See which checks it gets right</a></span></p>` : ""}
+    ${acc != null && (kap != null ? kap <= 0.4 : acc < 0.7) ? html`<p class="kpi-note"><i class="dot demo" aria-hidden="true"></i><span>The overall grade and fatal rate are directional for now: one miss on any check can change a call's grade. <a href="#/audit">See which checks it gets right</a></span></p>` : ""}
 
     <section class="section" id="current"></section>
 
     ${closed.length ? html`<section class="section">
-      <div class="section-head"><h2>Earlier <em>cycles</em></h2><p>Newest first. Each cycle starts on the prompt the one before left in production.</p></div>
+      <div class="section-head"><h2>Earlier <em>cycles</em></h2><p>Newest first.</p></div>
       <div class="timeline">${closed.map((c) => {
         const r = rcBy[c.root_cause_id], x = xBy[c.experiment_id];
         return html`<div class="tl ${c.outcome === "PROMOTED" ? "win" : "harm"}">
@@ -225,7 +222,7 @@ export async function render(el) {
     const idx = (key) => ORDER.indexOf(key);
     mount(host, html`
       <div class="section-head"><h2>${c ? html`Cycle <span class="fig">${c.n}</span>, <em>${c.stage === "done" ? "closed" : c.stage === "blocked" ? "blocked" : `${GROUPS[station(c).station][0].toLowerCase()}`}</em>` : html`How a cycle <em>runs</em>`}</h2>
-        <p>${c ? html`Prompt A is ${c.production_version}${c.candidate_version ? html`; Prompt B is ${c.candidate_version}` : ""}${calls ? ` · ${int(calls[1])} calls${calls[2] === calls[1] ? ", all real" : `, ${int(calls[2])} real`}` : ""} · started ${when(c.started_ts)}` : "Five stations, eight steps; nothing ships without the A/B test and a human."}</p></div>
+        <p>${c ? html`Prompt A is ${c.production_version}${c.candidate_version ? html`; Prompt B is ${c.candidate_version}` : ""}${calls ? ` · ${int(calls[1])} calls${calls[2] === calls[1] ? ", all real" : `, ${int(calls[2])} real`}` : ""} · started ${when(c.started_ts)}` : "Nothing ships without an A/B test and a human."}</p></div>
       <ol class="stations">${GROUPS.map(([name, subs]) => {
         const states = subs.map(([key]) => stp[idx(key)]);
         const s = states.includes("halt") ? "halt" : states.includes("current") ? "current" : states.every((x) => x === "done") ? "done" : states.every((x) => x === "skip") ? "skip" : "";
@@ -235,13 +232,13 @@ export async function render(el) {
       ${c ? html`<div class="links3">
         ${kc.rc ? html`<a class="linkcard" href="#/issues?version=${enc(kc.rc.prompt_version)}&rc=${enc(kc.rc.id)}" aria-label="Root cause: ${kc.rc.name}"><span class="eyebrow">Root cause</span><span class="t">${kc.rc.name}</span>
             <span class="s">${int(kc.rc.n_calls)} of ${int(kc.rc.n_audited)} graded calls · priority ${fix(kc.rc.priority, 1)}</span></a>`
-          : html`<a class="linkcard" href="#/issues" aria-label="Root causes"><span class="eyebrow">Root cause</span><span class="t muted">${c.root_cause_id || "Not chosen yet"}</span><span class="s">Chosen once the judge has graded the calls</span></a>`}
+          : html`<a class="linkcard" href="#/issues" aria-label="Root causes"><span class="eyebrow">Root cause</span><span class="t muted">${c.root_cause_id || "Not chosen yet"}</span><span class="s">Chosen after grading</span></a>`}
         ${kc.f ? html`<a class="linkcard" href="#/fixes/${enc(kc.f.id)}" aria-label="Prompt fix ${kc.f.id}"><span class="eyebrow">Prompt fix · ${kc.f.id}</span><span class="t">${first(kc.f.rationale)}</span>
-            <span class="s">${fixStatus(kc.f, kc.x)}</span></a>`
-          : html`<a class="linkcard" href="#/fixes" aria-label="Prompt fixes"><span class="eyebrow">Prompt fix</span><span class="t muted">${c.fix_id || "Not written yet"}</span><span class="s">Written for the top root cause a prompt can fix</span></a>`}
+            <span class="s">${fixStatus(kc.f)}</span></a>`
+          : html`<a class="linkcard" href="#/fixes" aria-label="Prompt fixes"><span class="eyebrow">Prompt fix</span><span class="t muted">${c.fix_id || "Not written yet"}</span><span class="s">For the top root cause</span></a>`}
         ${kc.x ? html`<a class="linkcard" href="#/experiments/${enc(kc.x.experiment_id)}" aria-label="A/B test ${kc.x.experiment_id}"><span class="eyebrow">A/B test · simulated</span><span class="t">${cap(OUTCOME[kc.x.state] || kc.x.state.toLowerCase())}</span>
             <span class="s">${kc.x.looks_done} of ${kc.x.n_looks} checkpoints · lift ${kc.x.lift_rel == null ? "—" : `${kc.x.lift_rel >= 0 ? "+" : "−"}${pct(Math.abs(kc.x.lift_rel))}`}</span></a>`
-          : html`<a class="linkcard" href="#/experiments" aria-label="Experiments"><span class="eyebrow">A/B test</span><span class="t muted">Not started</span><span class="s">${c.candidate_version ? `${c.candidate_version} gets one after the replay` : "Runs once a fix passes the gate and the replay"}</span></a>`}
+          : html`<a class="linkcard" href="#/experiments" aria-label="Experiments"><span class="eyebrow">A/B test</span><span class="t muted">Not started</span><span class="s">${c.candidate_version ? `${c.candidate_version} gets one after the replay` : "After the gate and the replay"}</span></a>`}
       </div>` : ""}
       ${notes.length ? html`<details class="enginelog"><summary>Engine notes for this cycle · ${notes.length}</summary><ul class="notes">${notes.map((t) => html`<li>${t}</li>`)}</ul></details>` : ""}`);
   };
