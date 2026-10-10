@@ -17,7 +17,7 @@ cached; cycle 1 is open and waiting at the judge stage.
    uv run python -c "from abtest.ext import llm; print(llm.chat('anthropic/claude-haiku-5.5', [{'role': 'user', 'content': 'Say ok'}], max_tokens=5, cache=False).text)"
    ```
 
-## 2. Check the Jev gate (under $1, prompt text only, a minute)
+## 2. Check the Jev gate (estimated under $1 and about a minute; prompt text only)
 
 The patch gate runs on Jev (TypeSafe's Jev Router on OpenRouter, `typesafe/jev-router`). Before the run, check
 it on its three test edits:

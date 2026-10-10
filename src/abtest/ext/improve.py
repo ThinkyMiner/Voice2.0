@@ -452,14 +452,15 @@ def gate(fix: Fix, model: str | None = None) -> GateResult:
     return result
 
 
-def gate_check(a: str, b: str, diff: str, model: str | None = None) -> GateResult:
-    """The gate on two prompt texts and their diff, saving nothing. Only prompt text is sent."""
+def gate_check(a: str, b: str, diff: str, model: str | None = None, cache: bool = True) -> GateResult:
+    """The gate on two prompt texts and their diff. Only prompt text is sent; no Fix is saved (the reply is
+    cached and its cost counted against the cap, like every model call)."""
     model = model or llm.model_for("gate")
     questions = "\n".join(f"- {cid}: {q}" for cid, _, q in GATE_CHECKS)
     user = (f"Prompt A:\n<<<\n{a}\n>>>\n\nPrompt B:\n<<<\n{b}\n>>>\n\nUnified diff, A -> B:\n{diff}\n\n"
             f"Questions:\n{questions}")
     res = llm.chat(model, [{"role": "system", "content": _GATE}, {"role": "user", "content": user}],
-                   schema=_GATE_SCHEMA, schema_name="gate", max_tokens=GATE_TOKENS)
+                   schema=_GATE_SCHEMA, schema_name="gate", max_tokens=GATE_TOKENS, cache=cache)
     data = res.data if isinstance(res.data, dict) else {}
     ans = {cid: data[cid] if isinstance(data.get(cid), dict) else {} for cid, _, _ in GATE_CHECKS}
     checks = tuple(GateCheck(id=cid, question=q, probability=_prob(ans[cid], blocking), blocking=blocking,
@@ -470,7 +471,8 @@ def gate_check(a: str, b: str, diff: str, model: str | None = None) -> GateResul
 
 
 def gate_eval(model: str | None = None) -> list[tuple[str, str, GateResult]]:
-    """The gate on its test edits to v1 (one safe, two it must block): [(name, expected pass | block, result)]."""
+    """The gate on its test edits to v1 (one safe, two it must block): [(name, expected pass | block, result)].
+    Always asks the model afresh: a check of the live model must not replay a cached verdict."""
     a = _base_text(_prompt_version("v1"))
     out = []
     for path in sorted(PATCHES.glob("*.yaml")):
@@ -478,7 +480,7 @@ def gate_eval(model: str | None = None) -> list[tuple[str, str, GateResult]]:
         b = _apply(a, [Edit(**fx["edit"], why=fx["name"])])
         diff = "".join(difflib.unified_diff(a.splitlines(keepends=True), b.splitlines(keepends=True),
                                             fromfile="v1", tofile=fx["name"], n=3))
-        out.append((fx["name"], fx["expect"], gate_check(a, b, diff, model)))
+        out.append((fx["name"], fx["expect"], gate_check(a, b, diff, model, cache=False)))
     return out
 
 

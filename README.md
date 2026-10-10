@@ -49,9 +49,9 @@ writes that new prompt from the calls themselves, then feeds it to the engine, a
 3. **Improve.** Failures become named root causes, ranked by
    `priority = 100 × (3·fatal + non-fatal) / (3·audited)`. The top prompt-fixable cause gets 1–3
    minimal edits to the prompt (Claude Opus 5.5).
-4. **Gate and replay.** A safety check on Jev (TypeSafe's Jev Router, through OpenRouter) blocks edits
-   that add promises or weaken honesty rules (`make gate-eval` checks it on a safe test edit and two
-   unsafe ones); then
+4. **Gate and replay.** A safety check on Jev (TypeSafe's Jev Router, through OpenRouter) asks whether an
+   edit adds a promise, weakens an honesty rule or contradicts the prompt, and blocks it when any of those
+   is likely (`make gate-eval` checks Jev on a safe test edit and two unsafe ones); then
    the same buyers are simulated against Prompt A and Prompt B for a fair before/after.
 5. **Prove and roll out.** Prompt B goes to 10% through the engine above (simulated traffic, with the
    assumed effect stated). A person approves, B becomes production, and the next cycle audits B's replay conversations (no live bot has spoken B yet).
