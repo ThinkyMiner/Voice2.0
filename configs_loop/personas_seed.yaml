@@ -193,3 +193,100 @@ personas:
       - "Mobile covers, pachas piece."
       - "Ahmedabad."
       - "Bas, seller ko bolo call kare. Rakhta hoon."
+
+  # p7-p10 added 10 Oct for 10-caller bot tests: price and delivery pressure, Telugu, already bought,
+  # and a detailed bulk requirement. Same rules: made up, invented names, every variable present.
+  - card_id: p7
+    source_call_id: seed
+    requirement: "Wants 20 ergonomic office chairs for a new office in Pune; keeps pushing for a price and a guaranteed delivery date."
+    language: Hinglish
+    tone: pushy negotiator
+    irritation_point: "The assistant will not give a price or promise next-day delivery."
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      buyer_name: "Rohit"
+      updated_buyer_name: "Rohit Kulkarni"
+      buyer_city: "Pune"
+      product_name: "Ergonomic Office Chair"
+      quantity: "20"
+      quantity_unit_options: '["Piece"]'
+      seller_name: "Comfort Seating Solutions"
+      initial_message: "Namaste Rohit ji, main Vani bol rahi hoon IndiaMART se. Aap Ergonomic Office Chair ke liye call kar rahe the?"
+    script:
+      - "Haan, bees chairs chahiye office ke liye."
+      - "Pehle price batao, ek chair kitne ki padegi?"
+      - "Kal tak delivery pakki hogi na? Guarantee do."
+      - "Pune mein, Hinjewadi."
+      - "Theek hai, seller se baat karwa do."
+  - card_id: p8
+    source_call_id: seed
+    requirement: "Wants fifty 25 kg bags of basmati rice for a hotel in Hyderabad; prefers Telugu, manages in Hindi."
+    language: Telugu, then Hindi
+    tone: warm but hesitant in Hindi
+    irritation_point: "The assistant keeps using English words he does not follow."
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      buyer_name: "Srinivas"
+      updated_buyer_name: "Srinivas Reddy"
+      buyer_city: "Hyderabad"
+      product_name: "Basmati Rice"
+      quantity: "50"
+      quantity_unit_options: '["Bag", "Kg", "Ton"]'
+      seller_name: "Deccan Rice Traders"
+      language_name: "Telugu"
+      initial_message: "Namaskaram, nenu IndiaMART nundi Vani. Meeru Basmati Rice kosam call chesaru kada?"
+    script:
+      - "Avunu, basmati rice kavali."
+      - "Yabhai bags, okkokati iravai aidu kilolu."
+      - "Hindi mein bhi chalega, thoda thoda."
+      - "Hyderabad, Kukatpally."
+      - "Sare, dhanyavadalu."
+  - card_id: p9
+    source_call_id: seed
+    requirement: "Already bought a 5 kW solar panel set from another seller last week; wants the call to end."
+    language: Hindi
+    tone: polite at first, annoyed if pushed
+    irritation_point: "Being asked for details after saying he has already bought."
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      buyer_name: "Mahesh"
+      updated_buyer_name: "Mahesh Meena"
+      buyer_city: "Jaipur"
+      product_name: "Solar Panel"
+      quantity: "1"
+      quantity_unit_options: '["Set", "Piece"]'
+      seller_name: "Sunrise Solar Systems"
+      initial_message: "Namaste Mahesh ji, main Vani bol rahi hoon IndiaMART se. Aap Solar Panel ke liye call kar rahe the?"
+    script:
+      - "Haan, par main toh pichhle hafte hi le chuka hoon."
+      - "Dusre seller se le liya, ab zaroorat nahi hai."
+      - "Bataya na, nahi chahiye. Band karo please."
+      - "Theek hai, namaste."
+  - card_id: p10
+    source_call_id: seed
+    requirement: "Needs 2,000 metres of 4-inch PVC pipe, pressure rated, with a GST invoice, for a construction site in Chennai."
+    language: English
+    tone: precise and businesslike
+    irritation_point: "Vague answers about specifications."
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      buyer_name: "Karthik"
+      updated_buyer_name: "Karthik Subramanian"
+      buyer_city: "Chennai"
+      product_name: "PVC Pipe"
+      quantity: "2000"
+      quantity_unit_options: '["Metre", "Piece", "Bundle"]'
+      specification_options: '{"Size": ["2 inch", "4 inch", "6 inch"], "Pressure Rating": ["4 kg/cm2", "6 kg/cm2"]}'
+      seller_name: "South India Pipes"
+      language_name: "English"
+      initial_message: "Hello Karthik, this is Vani from IndiaMART. You were calling about PVC pipes, right?"
+    script:
+      - "Yes. I need 4-inch PVC pipes, two thousand metres."
+      - "Pressure rated, six kg per square centimetre."
+      - "Delivery to a site in Chennai, Sholinganallur."
+      - "We need a proper GST invoice."
+      - "Fine, have the seller send a quote."

@@ -292,7 +292,7 @@ def test_fixture_variable_sets_default_and_personas_fallback(monkeypatch, tmp_pa
     assert len(render.fixture_variable_sets()) == 3
     monkeypatch.setattr(render, "RENDER_VARS", tmp_path / "missing.yaml")
     seeds = render.fixture_variable_sets()
-    assert len(seeds) == 6 and all("product_name" in s for s in seeds)
+    assert len(seeds) == 10 and all("product_name" in s for s in seeds)
     monkeypatch.setattr(render, "PERSONAS_SEED", tmp_path / "missing_too.yaml")
     assert render.fixture_variable_sets() == []
     with pytest.raises(OSError):

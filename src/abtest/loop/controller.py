@@ -31,7 +31,7 @@ from abtest.loop.contracts import (LOOP_DATA_DIR, LOOP_REPORTS_DIR, ROOT, BotTes
                                    Rubric)
 
 SPEND_CAP = "SPEND_CAP"            # terminal marker of a generation cut short by caps.max_spend_inr
-NO_CANDIDATE_STOP = 3              # consecutive NO_CANDIDATE generations that stop the loop (§L2.9)
+NO_CANDIDATE_STOP = 3              # default of cfg.loop.max_no_candidate_streak (§L2.9)
 CHARS_PER_TOKEN = 4                # rough prompt-size estimate for the pre-flight cost check only
 GEN_STATES = frozenset(typing.get_args(GenState))
 
@@ -539,7 +539,7 @@ def _stop_reason(ctx: LoopContext, finished: list[Generation], n: int) -> str | 
         if g.terminal != "NO_CANDIDATE":
             break
         tail += 1
-    if tail >= NO_CANDIDATE_STOP:
+    if tail >= ctx.cfg.loop.max_no_candidate_streak:
         return f"{tail} consecutive NO_CANDIDATE generations"
     spent = loop_module("store_loop").total_spend(ctx.conn)
     if spent >= ctx.cfg.caps.max_spend_inr:

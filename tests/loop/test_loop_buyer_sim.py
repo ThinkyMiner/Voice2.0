@@ -54,12 +54,13 @@ def real_prompt() -> str:
     return (ROOT / "prompts" / "base_buyer_vani.txt").read_bytes().decode("utf-8")
 
 
-def test_six_seed_personas_with_short_scripts(seeds):
-    assert [c.card_id for c in seeds] == [f"p{i}" for i in range(1, 7)]
+def test_ten_seed_personas_with_short_scripts(seeds):
+    # 10 simulated callers per iteration (10 Oct): p1-p6 plus price pressure, Telugu, already bought, bulk specs
+    assert [c.card_id for c in seeds] == [f"p{i}" for i in range(1, 11)]
     assert all(c.source_call_id == "seed" for c in seeds)
     assert all(4 <= len(c.script) <= 5 for c in seeds)
     assert all(c.requirement and c.tone and c.language for c in seeds)
-    assert len({c.requirement for c in seeds}) == 6
+    assert len({c.requirement for c in seeds}) == 10
 
 
 def test_seed_personas_cover_the_mix(seeds):

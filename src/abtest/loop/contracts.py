@@ -226,6 +226,9 @@ class LoopSection(_Frozen):
     flow: Flow
     mode: Literal["sim", "live"]
     auto_after_generations: int = Field(ge=0)
+    # consecutive NO_CANDIDATE generations that stop the loop (PLAN_LOOP §L2.9); a run meant to keep
+    # iterating up to its spend cap sets it higher
+    max_no_candidate_streak: int = Field(default=3, gt=0)
 
 
 class RoleSettings(_Frozen):

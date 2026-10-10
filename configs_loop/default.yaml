@@ -1,7 +1,7 @@
 # Loop configuration (PLAN_LOOP.md §L7.3). Every key the loop reads, with its default.
 # A loop instance copies this file to configs_loop/<loop id>.yaml and overrides keys there.
 # `caps` are frozen with each generation; changing them starts a new generation (PLAN_LOOP §L1.6).
-loop: {id: vani-loop, flow: buyer, mode: sim, auto_after_generations: 3}
+loop: {id: vani-loop, flow: buyer, mode: sim, auto_after_generations: 3, max_no_candidate_streak: 3}
 template: configs/experiments/vani-buyer-qty-asks-v1.yaml
 rubric: configs_loop/rubrics/vani-call-quality-v1.yaml
 provider:
