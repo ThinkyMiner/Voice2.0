@@ -197,11 +197,11 @@ def _experiment(conn, eid: str, scenario: str | None, cycles: dict[str, int], de
                 "decisions": [d.model_dump(mode="json") for d in ds],
                 "impact": {"per_week": _per_week(s, cfg, last), "unit": " / ".join(cfg.primary.dispositions)}}
         if not out["simulated"]:
-            out["live"] = _live(conn, eid, cfg)
+            out["live"] = _live(conn, eid, cfg, s)
     return _finite(out)
 
 
-def _live(conn, eid: str, cfg: ExperimentConfig) -> dict | None:
+def _live(conn, eid: str, cfg: ExperimentConfig, s: ExperimentState) -> dict | None:
     """A live experiment's Sarvam agent and each arm's version and calls (sarvam_live.summary), plus B's change
     when it is one line of A's prompt: both lines, and the changed words with the two words before them."""
     from abtest.ext import sarvam_live
@@ -210,9 +210,13 @@ def _live(conn, eid: str, cfg: ExperimentConfig) -> dict | None:
     except sqlite3.OperationalError:  # no live tables: ext/sarvam_live did not start it
         return None
     try:
-        a, b = ((ROOT / cfg.variants[v].patch.path).read_text(encoding="utf-8").splitlines() for v in "AB")
-    except (AttributeError, KeyError, OSError, TypeError):  # not two prompt files
+        texts = config.resolve_prompts(cfg)
+        same = config.freeze(cfg).prompt_hash == s.prompt_hash
+    except (OSError, ValueError):  # a prompt file gone, or not UTF-8 (UnicodeDecodeError is a ValueError)
         return out | {"change": None}
+    if not same:  # a prompt file was edited after the start: what is on disk is not what the calls tested
+        return out | {"change": None}
+    a, b = texts["A"].splitlines(), texts["B"].splitlines()
     lines = [(x, y) for x, y in zip(a, b) if x != y] if len(a) == len(b) else []
     if len(lines) != 1:
         return out | {"change": None}

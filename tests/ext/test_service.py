@@ -254,7 +254,7 @@ def test_experiments_and_approval_continue_the_loop(world, client):  # noqa: F81
     assert o["kpis"]["experiments"] == 1 and o["kpis"]["per_week_gained"] > 0
 
 
-def test_a_live_experiment_is_not_simulated(client):
+def test_a_live_experiment_is_not_simulated(client, monkeypatch):
     """ext/sarvam_live's experiments (vani-live-*) run on real calls: the platform must not call them simulated."""
     raw = yaml.safe_load((ROOT / loop.TEMPLATE).read_text(encoding="utf-8")) | {"id": "vani-live-t1", "variants": {
         v: {"patch": {"mode": "full", "path": f"prompts/live/vani_demo_{v}.txt"}} for v in "AB"}}
@@ -273,6 +273,9 @@ def test_a_live_experiment_is_not_simulated(client):
     assert live["agent"] == "Outbound-t" and live["arms"]["B"] == {
         "version": "2", "assigned": 0, "called": 0, "back": 0, "provisional": 0, "connected": 0, "dispositions": {}}
     assert (live["change"]["find"], live["change"]["replace"]) == ("quantity = 3", "quantity = 2")  # the one line B changes
+    real = config.resolve_prompts
+    monkeypatch.setattr(config, "resolve_prompts", lambda c: real(c) | {"B": real(c)["B"].replace("quantity = 2", "quantity = 1")})
+    assert client.get("/api/experiments/vani-live-t1").json()["live"]["change"] is None  # edited after the start
     t = transcript("live-1", source="live", version="live")  # a live call, graded by the judge
     save(models.TRANSCRIPTS_DIR / "live-1.json", t)
     save(models.AUDITS_DIR / "live" / "live-1.json", audit(t, "non_fatal"))
