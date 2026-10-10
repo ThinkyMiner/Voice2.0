@@ -208,7 +208,7 @@ const loop = () => sec("loop", html`The loop, stage by stage`, html`
     [html`<code>transcribe</code>`, "google/gemini-3-flash-preview", html`<code>make listen</code>: audio to transcript`],
     [html`<code>judge</code>`, "anthropic/claude-sonnet-5.5", "Grading every call, grouping root causes, grading the replays, the Rubric Studio's Try it"],
     [html`<code>fixer</code>`, "anthropic/claude-opus-5.5", "Writing Prompt B"],
-    [html`<code>gate</code>`, "anthropic/claude-sonnet-5.5", "The safety gate"],
+    [html`<code>gate</code>`, "typesafe/jev-router", "The safety gate: Jev, TypeSafe's router, which picks a model and reasoning effort per request"],
     [html`<code>replay</code>`, "anthropic/claude-haiku-5.5", "Buyer personas, the simulated bot and the simulated buyer"],
     [html`<code>judge_fast</code>`, "anthropic/claude-haiku-5.5", "Configured; no stage calls it today"],
   ])}`);

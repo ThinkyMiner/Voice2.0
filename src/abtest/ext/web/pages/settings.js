@@ -5,7 +5,7 @@ import { html, mount, pct, fix, int } from "../ui.js";
 
 const DEFAULTS = {
   models: { transcribe: "google/gemini-3-flash-preview", judge: "anthropic/claude-sonnet-5.5", judge_fast: "anthropic/claude-haiku-5.5",
-    fixer: "anthropic/claude-opus-5.5", gate: "anthropic/claude-sonnet-5.5", replay: "anthropic/claude-haiku-5.5" },
+    fixer: "anthropic/claude-opus-5.5", gate: "typesafe/jev-router", replay: "anthropic/claude-haiku-5.5" },
   budget: null,
   paths: { loop: "data/derived/loop", recordings: "data/derived/loop/recordings", transcripts: "data/derived/loop/transcripts",
     audits: "data/derived/loop/audits/<version>", prompts: "data/derived/loop/prompts", rubrics: "src/abtest/ext/rubric_sets",

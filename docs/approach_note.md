@@ -29,7 +29,7 @@ until someone notices, and a good one cannot be proven. The QA team audits calls
 | Listen | Recordings become bot / buyer transcripts with timestamps; phone numbers masked; Hinglish in Latin script, as the auditors write it | Gemini 3 Flash (audio in) via OpenRouter |
 | Judge | Every call graded Pass / Non-Fatal / Fatal on 18 rubrics, one per column of IndiaMART's QA sheet, plus 3 prompt rules (never claims to be human, no forbidden commitment, language policy). Each grade carries a reason and the quote behind it; the call's grade is its worst rubric, the QA team's own rule. Teams add their own rubrics in the Rubric Studio | Claude Sonnet 5.5 |
 | Improve | Failures become named root causes ranked by `priority = 100 × (3·fatal + non-fatal) / (3·audited)`; the top prompt-fixable cause gets 1–3 minimal, cited edits | Claude Opus 5.5 |
-| Gate | Blocks any edit that adds a commitment, weakens a safety rule or contradicts the prompt | Claude Sonnet 5.5 |
+| Gate | Blocks any edit that adds a commitment, weakens a safety rule or contradicts the prompt; `make gate-eval` checks it on a safe edit and two unsafe ones | Jev (TypeSafe's Jev Router, via OpenRouter) |
 | Replay | The same buyers, built from the real calls, are simulated against Prompt A and Prompt B and graded by the same judge | Claude Haiku 5.5 as bot and buyer |
 | Prove | Prompt B gets 10% of leads through the A/B engine below | Python engine, no model calls |
 | Roll out | A named approver promotes B; B becomes production in the prompt registry; the next cycle audits B | Prompt registry and decision log |
