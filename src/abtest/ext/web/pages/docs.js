@@ -397,7 +397,7 @@ make boundaries   <i># the win and harm boundaries, checked</i>`)}
     [html`<code>OPENROUTER_API_KEY</code>`, "the environment, else .env", html`The model provider's key (<code>OPENROUTER</code> also works)`],
   ])}
   <h3>The cache and the spend cap</h3>
-  <p>Every model call goes through one client, <code>src/abtest/ext/llm.py</code>. It caches each request on disk under the SHA-256 of the request (<code>data/derived/loop/llm_cache</code>), so a rerun sends nothing new, costs nothing and gives the same answer. It also records spend across processes (<code>llm_spend.json</code>, shown on <a href="#/settings">Settings</a>) and refuses any new call once spend has reached <code>LLM_BUDGET_USD</code> (the call that crosses it can overshoot by its own cost).</p>
+  <p>Every model call goes through one client, <code>src/abtest/ext/llm.py</code>. It caches each request on disk under the SHA-256 of the request (<code>data/derived/loop/llm_cache</code>), so a rerun sends nothing new, costs nothing and gives the same answer. It also records spend across processes (<code>llm_spend.json</code>, shown on <a href="#/settings">Settings</a>) and refuses any new call once spend has reached <code>LLM_BUDGET_USD</code> (calls already in flight when it is reached can overshoot it by their combined cost).</p>
   ${callout("If a run stops on the spend limit", html`<p>The command stops with one line saying so, whether it hit <code>LLM_BUDGET_USD</code> or the key's own limit at the provider. Finished work is saved and cached: raise the limit and run the same command again, and it resumes where it stopped.</p>`)}`);
 
 const privacy = () => sec("privacy", html`Privacy and honesty`, html`
@@ -449,7 +449,7 @@ const glossary = () => sec("glossary", html`Glossary`, html`
 
 const faq = () => sec("faq", html`FAQ`, html`<div class="faq">
   <article><h3>Why simulated traffic?</h3><p>Because there is no live traffic to send a prompt to. Replaying real call history with a known, stated effect for B lets every decision be checked against ground truth: the simulator knows what it injected and the engine does not. The flip side is the honest limit: the loop's A/B result reflects the assumed effect, not what Prompt B really does to buyers, which only live traffic can show.</p></article>
-  <article><h3>Why approval and not auto-promotion?</h3><p>A prompt change reaches every caller, so a named person signs off and the decision log records who. In the loop it matters twice over: the A/B win comes from an assumed effect, so the evidence a person should weigh is the fix itself, its redline, its gate and its replay, which is a screen of at most eight simulated conversations, not a measured effect. Auto-promotion is supported; the engine's win scenario shows it.</p></article>
+  <article><h3>Why approval and not auto-promotion?</h3><p>A prompt change reaches every caller, so a named person signs off and the decision log records who. In the loop it matters twice over: the A/B win comes from an assumed effect, so the evidence a person should weigh is the fix itself, its redline, its gate and its replay, which is a screen of at most eight pairs of simulated conversations, not a measured effect. Auto-promotion is supported; the engine's win scenario shows it.</p></article>
   <article><h3>Why does a new rubric re-grade the calls?</h3><p>The judge grades every active rubric in one call, and each audit records the rubric set it used. Change the set and the old grades no longer describe today's checklist, so the next Judge stage grades the calls again, and agreement is measured on one set at a time. The root-cause ranking is kept per prompt version once a cause on it has been tried, so on a version a cycle has already worked on, a changed rubric shapes the fixes only from the next prompt version on. Re-grading costs model calls, while an unchanged set costs nothing.</p></article>
   <article><h3>What does a cycle cost?</h3><p>Only its model calls: the A/B engine is free. The runbook (<code>docs/runbook.md</code>) estimates about $2–3 for a later cycle. Every request is cached on disk, so a rerun is free, and <code>LLM_BUDGET_USD</code> (default $40) caps the total; the provider's key can carry a lower cap of its own. <a href="#/settings">Settings</a> shows the spend.</p></article>
   <article><h3>What is on the demo site?</h3><p>Without the platform, the site loads demo data: invented calls, names, products and grades, beside real engine runs. Saving a rubric keeps it in your browser only, and advancing the loop replays a scripted run. Run <code>make platform</code> for the real thing.</p></article>
@@ -484,13 +484,23 @@ export async function render(el) {
     cur.textContent = SECTIONS.find(([x]) => x === s)?.[1] || "";
   };
   const seen = new Set();
-  const io = new IntersectionObserver((es) => {  // the section crossing a band near the top is the current one
+  const onCross = (es) => {  // the section crossing a band near the top is the current one
     for (const e of es) e.isIntersecting ? seen.add(e.target.dataset.s) : seen.delete(e.target.dataset.s);
     const s = SECTIONS.find(([x]) => seen.has(x));
     if (s) mark(s[0]);
     else if (first.getBoundingClientRect().top > innerHeight * 0.3) mark(SECTIONS[0][0]);  // an instant jump back above it
-  }, { rootMargin: "-22% 0px -70% 0px" });
-  $$(".dsec", el).forEach((s) => io.observe(s));
+  };
+  let io = null, vh = 0;
+  const watch = () => {  // the band in px: the spec resolves rootMargin percentages against the width, even top and bottom
+    if (innerHeight === vh) return;
+    vh = innerHeight;
+    io?.disconnect();
+    seen.clear();
+    io = new IntersectionObserver(onCross, { rootMargin: `-${Math.round(vh * 0.22)}px 0px -${Math.round(vh * 0.7)}px 0px` });
+    $$(".dsec", el).forEach((s) => io.observe(s));
+  };
+  watch();
+  addEventListener("resize", watch);
 
   const host = $("#doc-cor", el);
   let w = 0;
@@ -528,5 +538,5 @@ export async function render(el) {
   }
   from = null;
   if (goal) $("h2", goal).focus({ preventScroll: true });
-  return () => { io.disconnect(); ro.disconnect(); clearTimeout(t); removeEventListener("scroll", onScroll); };
+  return () => { io.disconnect(); ro.disconnect(); clearTimeout(t); removeEventListener("scroll", onScroll); removeEventListener("resize", watch); };
 }
