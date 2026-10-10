@@ -62,13 +62,14 @@ function outcome(x, s) {
 function verdict(x, s, dayOf) {
   const L = s.L, g = s.g;
   if (!L) return "No checkpoint yet: the first one comes once enough B leads have matured.";
-  const d = dayOf(L.ts_sim), at = `checkpoint ${L.look}${d != null ? ` (simulated day ${d})` : ""}`;
+  const live = x.simulated === false, on = live ? "on real calls" : "on simulated traffic";  // vani-live-*: Sarvam calls
+  const d = dayOf(L.ts_sim), at = `checkpoint ${L.look}${d != null ? ` (${live ? "" : "simulated "}day ${d})` : ""}`;
   const ci = L.ci95 ? ` (95% CI ${spct(L.ci95[0])} to ${spct(L.ci95[1])})` : "";
   const moved = `${L.lift_rel >= 0 ? "raised" : "lowered"} ${lc(s.prim)} by ${pct(Math.abs(L.lift_rel))}${ci}`;
   switch (x.state) {
-    case "PROMOTED": return `B ${moved} on simulated traffic. ${s.human ? `Promoted by ${s.human.actor}` : "Promoted automatically"} at ${at}.`;
-    case "PENDING_APPROVAL": return `B ${moved} on simulated traffic and crossed the win line at ${at}. It waits for a human to approve or reject it.`;
-    case "REJECTED": return `B ${moved} on simulated traffic, but ${s.human?.actor || "a human"} rejected it; all traffic is back on A.`;
+    case "PROMOTED": return `B ${moved} ${on}. ${s.human ? `Promoted by ${s.human.actor}` : "Promoted automatically"} at ${at}.`;
+    case "PENDING_APPROVAL": return `B ${moved} ${on} and crossed the win line at ${at}. It waits for a human to approve or reject it.`;
+    case "REJECTED": return `B ${moved} ${on}, but ${s.human?.actor || "a human"} rejected it; all traffic is back on A.`;
     case "STOPPED_HARM": return s.primaryHarm ? `B ${moved}, past the harm line, so the engine stopped it at ${at}. All traffic is back on A.`
       : g ? `Stopped at ${at}: B raised ${lc(g.name)} by about ${g.f(g.delta)} against a limit of ${g.f(g.lim)}, despite ${spct(L.lift_rel)} ${lc(s.prim)}.`
         : `Stopped for harm at ${at}. All traffic is back on A.`;
@@ -108,7 +109,7 @@ export async function renderList(el) {
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Prove</div><h1 class="title">A/B <em>experiments</em></h1>
       <p class="lede">Prompt B gets 10% of leads while a sequential test checks the evidence at each checkpoint: promote, stop for harm, block on the guardrail, or call it inconclusive.
-        The traffic is simulated: the engine replays real call history with an effect assumed for B, which it never sees.</p></div></div>
+        The traffic is simulated: the engine replays real call history with an effect assumed for B, which it never sees. A live experiment (vani-live-…) is the exception: real calls through Sarvam, to consenting team members only.</p></div></div>
 
     <section class="section" style="margin-top:0">
       <div class="section-head"><h2>From the <em>loop</em></h2><p>A cycle's Prompt B against the production prompt.</p></div>
@@ -189,12 +190,13 @@ export async function renderExperiment(el, { id }) {
 
   mount(el, html`
     <div class="page-head xhead"><div>
-      <div class="eyebrow">${x.cycle != null ? `Loop experiment · cycle ${x.cycle}` : `Engine scenario${scenario(x.experiment_id) ? ` · ${scenario(x.experiment_id)}` : ""}`}${x.decisions?.[0]?.ts_wall ? ` · run ${when(x.decisions[0].ts_wall)}` : ""}</div>
+      <div class="eyebrow">${x.simulated === false ? "Live experiment · real calls through Sarvam" : x.cycle != null ? `Loop experiment · cycle ${x.cycle}` : `Engine scenario${scenario(x.experiment_id) ? ` · ${scenario(x.experiment_id)}` : ""}`}${x.decisions?.[0]?.ts_wall ? ` · run ${when(x.decisions[0].ts_wall)}` : ""}</div>
       <h1 class="title xtitle">${ch.kind === "append" ? html`“${ch.title}”` : ch.title}</h1>
       <div class="row xchips">${stateChip(x.state)}${s.human ? html`<span class="chip">${s.human.to_state === "PROMOTED" ? "Approved" : "Rejected"} by ${s.human.actor}${dayOf(s.human.ts_sim) != null ? ` · day ${dayOf(s.human.ts_sim)}` : ""}</span>` : ""}
         <span class="mono muted xid">${x.experiment_id}</span></div>
       <p class="xverdict">${verdict(x, s, dayOf)}</p>
-      <p class="xsim"><i class="dot demo" aria-hidden="true"></i><span>Simulated traffic · assumed for B: ${assumed(x) || "—"}${x.cycle == null ? ". Engine scenario: B is a test patch, not a prompt version, and production is unchanged whatever the result." : ""}</span></p>
+      ${x.simulated === false ? html`<p class="xsim"><i class="dot live" aria-hidden="true"></i><span>Real calls · each lead routed by our sticky router to the agent's version for its arm, dialled through Sarvam to consenting team numbers only. Nothing is assumed for B.</span></p>`
+        : html`<p class="xsim"><i class="dot demo" aria-hidden="true"></i><span>Simulated traffic · assumed for B: ${assumed(x) || "—"}${x.cycle == null ? ". Engine scenario: B is a test patch, not a prompt version, and production is unchanged whatever the result." : ""}</span></p>`}
     </div></div>
 
     ${pending ? html`<div class="decide-panel" id="decide">
@@ -221,12 +223,12 @@ export async function renderExperiment(el, { id }) {
           <div class="sub">limit ${g.f(g.lim)} · ${guardRole(g, x, s).note}</div>${rciBar(g, guardRole(g, x, s).iv)}`
           : html`<div class="big muted">—</div><div class="sub">no checkpoint yet</div>`}</div>
       <div class="kpi"><div class="eyebrow" title="The engine checks the evidence at planned checkpoints; it can stop early at any of them.">Checkpoints</div><div class="big">${looks.length}<small>of ${cfg.window?.looks ?? "—"}</small></div>
-        <div class="sub">${L ? `simulated day ${dayOf(L.ts_sim)}; planned over ${cfg.window?.days ?? "—"} days` : "none yet"}</div></div>
+        <div class="sub">${L ? `${x.simulated === false ? "" : "simulated "}day ${dayOf(L.ts_sim)}; planned over ${cfg.window?.days ?? "—"} days` : "none yet"}</div></div>
       <div class="kpi"><div class="eyebrow">Leads counted</div><div class="big">${int((L?.n_a || 0) + (L?.n_b || 0))}</div><div class="sub">A ${int(L?.n_a)} · B ${int(L?.n_b)} of ${int(x.n_b_max)} planned for B</div></div>
       <div class="kpi"><div class="eyebrow">Impact a week</div><div class="big ${iTone}">${impact == null ? "—" : sint(impact)}</div>
         <div class="sub">${untrusted ? "no estimate: the split failed its check" : impact == null ? "after the first checkpoint" : `${x.impact.unit} if B took all traffic${s.tone === "win" ? "" : "; not taken"}`}</div></div>
       <div class="kpi"><div class="eyebrow">Split at the end</div><div style="margin-top:12px">${splitBar(x.allocation || cfg.allocation || { A: 1, B: 0 })}</div>
-        <div class="sub">${pending ? "B keeps its share until someone decides" : x.state === "PROMOTED" ? "B serves all simulated traffic" : x.state === "RUNNING" ? "the planned split" : "all simulated traffic back on A"}</div></div>
+        <div class="sub">${pending ? "B keeps its share until someone decides" : x.state === "PROMOTED" ? `B serves all ${x.simulated === false ? "new calls" : "simulated traffic"}` : x.state === "RUNNING" ? "the planned split" : `all ${x.simulated === false ? "new calls" : "simulated traffic"} back on A`}</div></div>
     </section>
 
     <section class="section">
@@ -279,8 +281,8 @@ export async function renderExperiment(el, { id }) {
       if (!name) { $("#actor", el).focus(); return toast("Add your name: approvals are recorded with the approver.", "harm"); }
       const ok = await confirmDialog({
         title: approved ? "Promote B to all traffic?" : "Reject B?", ok: approved ? "Approve B" : "Reject B", tone: approved ? "accent" : "danger",
-        body: html`<p>${approved ? "B gets 100% of the simulated traffic." : "All simulated traffic returns to A."} This is recorded on the decision log as <b>${name}</b>.</p>
-          ${x.cycle != null ? html`<p>${approved ? "The loop's next step rolls Prompt B out as production." : "Prompt B is rejected and production stays as it is."}</p>` : html`<p class="muted">Engine scenario: this changes only this simulated run. Production is unchanged.</p>`}`,
+        body: html`<p>${approved ? `B gets 100% of the ${x.simulated === false ? "new calls" : "simulated traffic"}.` : `All ${x.simulated === false ? "new calls go" : "simulated traffic returns"} to A.`} This is recorded on the decision log as <b>${name}</b>.</p>
+          ${x.cycle != null ? html`<p>${approved ? "The loop's next step rolls Prompt B out as production." : "Prompt B is rejected and production stays as it is."}</p>` : x.simulated === false ? html`<p class="muted">Live experiment: the next calls follow this decision. Production is unchanged.</p>` : html`<p class="muted">Engine scenario: this changes only this simulated run. Production is unchanged.</p>`}`,
       });
       if (!ok) return;
       try { localStorage.setItem("vani-actor", name); } catch { /* not remembered */ }
