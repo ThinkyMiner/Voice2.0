@@ -308,11 +308,11 @@ def test_length_twice_raises(tmp_path, base_cfg):
     assert [r["body"]["max_tokens"] for r in api.requests] == [4096, 8192]
 
 
-def test_length_at_the_ceiling_is_not_retried_because_it_would_replay_the_cache(tmp_path, base_cfg):
-    api = FakeApi(reply(None, finish="length"))
-    with pytest.raises(ProviderError, match="max_tokens=8192"):
+def test_length_retry_grows_to_the_ceiling_then_gives_up(tmp_path, base_cfg):
+    api = FakeApi(reply(None, finish="length"), reply(None, finish="length"))
+    with pytest.raises(ProviderError, match="max_tokens=16384"):
         make(tmp_path, api, make_cfg(base_cfg)).complete_json("proposer", "s", "u", SCHEMA)   # proposer is 8192
-    assert api.n == 1
+    assert [r["body"]["max_tokens"] for r in api.requests] == [8192, 16384]
 
 
 def test_chat_length_retry_doubles_max_tokens_and_returns_the_text(tmp_path, base_cfg):

@@ -115,21 +115,33 @@ def score_calls(transcripts: Iterable[Transcript], rubric: Rubric, provider) -> 
 
     Transcripts with no bot turn or fewer than two non-empty turns are skipped (and counted in the
     log, never by id): the observe step reports them as the early-hang-up share instead. A
-    malformed judge reply raises, so no call is silently missing; the disk cache makes the rerun free.
+    call whose judge reply stays unusable after the provider's retry (for example sarvam-105b's
+    reasoning exhausting max_tokens) is skipped and counted, never silently: `score_calls.last_failed`
+    holds those call ids and the log says how many. SpendCapExceeded always propagates.
     """
     h = rubric_hash(rubric)
     scores: list[RubricScore] = []
-    skipped = 0
+    skipped, failed_ids = 0, []
     for t in transcripts:
         if not _scorable(t):
             skipped += 1
             continue
-        answers = judge_call(t, rubric, provider)
+        try:
+            answers = judge_call(t, rubric, provider)
+        except Exception as e:  # noqa: BLE001 - one bad reply must not discard the whole batch
+            if type(e).__name__ == "SpendCapExceeded":
+                raise
+            failed_ids.append(t.call_id)
+            log.warning("score_calls: judge failed on one call (%s); skipped", type(e).__name__)
+            continue
         score, risk, failed = score_from_answers(rubric, {a.criterion_id: a for a in answers})
         scores.append(RubricScore(call_id=t.call_id, rubric_hash=h, judge_model=rubric.judge.model,
                                   answers=tuple(answers), rubric_score=score, rubric_risk=risk, failed=failed))
     if skipped:
         log.info("score_calls: skipped %d transcript(s) with no bot turn or fewer than 2 turns", skipped)
+    if failed_ids:
+        log.warning("score_calls: %d call(s) had no usable judge reply and were skipped", len(failed_ids))
+    score_calls.last_failed = tuple(failed_ids)
     return scores
 
 

@@ -52,7 +52,8 @@ STT_ENDPOINT = "speech-to-text-job"
 STUB_DIR = ROOT / "tests" / "loop" / "fixtures" / "stub"
 
 VALID_REASONING_EFFORT = ("low", "high", "max")
-MAX_TOKENS_CEILING = 8192            # a length retry doubles max_tokens up to this
+MAX_TOKENS_CEILING = 16384           # a length retry doubles max_tokens up to this; measured 10 Oct:
+                                     # sarvam-105b's reasoning can exhaust 8,192 tokens on a long Hindi call
 BACKOFF_S = (1, 2, 4, 8, 16)         # 429/503: sleep before retry k, at most len(BACKOFF_S) tries
 MAX_TRIES = 5
 STT_FILES_PER_JOB = 20

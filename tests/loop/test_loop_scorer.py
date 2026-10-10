@@ -166,12 +166,26 @@ def test_score_calls_scores_in_order_and_skips_unscorable_transcripts():
     assert (a.rubric_score, a.rubric_risk, a.failed) == expected
 
 
-def test_score_calls_lets_provider_errors_propagate():
+def test_score_calls_lets_the_spend_cap_propagate():
+    from abtest.loop.sarvam import SpendCapExceeded
+
     class Capped(FakeProvider):
         def complete_json(self, *a, **k):
-            raise RuntimeError("spend cap")
-    with pytest.raises(RuntimeError, match="spend cap"):
+            raise SpendCapExceeded("spend cap")
+    with pytest.raises(SpendCapExceeded, match="spend cap"):
         score_calls([transcript()], rubric_v1(), Capped())
+
+
+def test_score_calls_skips_and_records_a_call_whose_judge_reply_is_unusable():
+    # measured 10 Oct: sarvam-105b's reasoning can exhaust max_tokens on one long call; the batch survives
+    class Flaky(FakeProvider):
+        def complete_json(self, role, system, user, schema):
+            if "BROKEN" in user:
+                raise RuntimeError("no valid JSON object after one retry")
+            return super().complete_json(role, system, user, schema)
+    good, bad = transcript("ok"), transcript("bad", turns=(("bot", "BROKEN hello"), ("buyer", "Haan.")))
+    out = score_calls([good, bad], rubric_v1(), Flaky())
+    assert [s.call_id for s in out] == ["ok"] and score_calls.last_failed == ("bad",)
 
 
 def test_score_calls_empty_input():
