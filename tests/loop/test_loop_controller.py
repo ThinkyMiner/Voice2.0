@@ -620,3 +620,21 @@ def test_two_generations_on_the_stub_provider(tmp_path, monkeypatch):
         # one file per promotion; generation 2 starts from generation 1's promoted prompt
         assert gens[1].base_prompt_hash in {f.stem for f in files}
         assert len(files) == sum(g.terminal == "PROMOTED" for g in gens)
+
+
+def test_the_gate_fails_closed_when_it_cannot_answer():
+    from abtest.loop.contracts import Candidate
+    from abtest.contracts import AppendPatch
+
+    class ProviderError(Exception):  # matched by name, like loop.sarvam.ProviderError
+        pass
+
+    class BrokenGate:
+        @staticmethod
+        def gate(prompt, candidate, provider, cfg):
+            raise ProviderError("gate: no valid JSON object after one retry")
+
+    patch = AppendPatch(mode="append", text="be kind")
+    c = Candidate(candidate_id="g1-c1", generation=1, patch=patch, patch_hash="h", rationale="r", targets=("closure",))
+    out = controller._gate_or_block(BrokenGate, "prompt", c, provider=None, cfg=None)
+    assert out.status == "gate_blocked" and out.gate == {"gate_unavailable": 1.0}

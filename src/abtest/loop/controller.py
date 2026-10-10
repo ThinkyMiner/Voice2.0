@@ -14,6 +14,7 @@ swap them out. Personal data stays in the loop DB and under data/derived/loop/; 
 writes (reports/loop/generation_<loop id>_<n>.md) carries aggregates only, never a transcript line.
 """
 
+import logging
 import hashlib
 import importlib
 import os
@@ -54,6 +55,8 @@ class Production:
     text: str
     hash: str
 
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------------------
 # Helpers
@@ -248,6 +251,18 @@ def _estimate_ok(run: _Run, n_prompts: int) -> bool:
     return est <= left
 
 
+def _gate_or_block(gate, prompt: str, candidate: Candidate, provider, cfg: LoopConfig) -> Candidate:
+    """The patch gate fails closed: a candidate the gate could not judge is blocked, never let through
+    ungated (measured 10 Oct: the gate's reasoning can exhaust its token budget)."""
+    try:
+        return gate.gate(prompt, candidate, provider, cfg)
+    except Exception as e:  # noqa: BLE001
+        if type(e).__name__ != "ProviderError":
+            raise
+        log.warning("gate: no usable reply for %s; blocked (fail closed)", candidate.candidate_id)
+        return candidate.model_copy(update={"gate": {"gate_unavailable": 1.0}, "status": "gate_blocked"})
+
+
 def _no_candidate(run: _Run, why: str) -> None:
     run.note("NO_CANDIDATE", why)
     run.advance("NO_CANDIDATE", terminal="NO_CANDIDATE")
@@ -292,7 +307,7 @@ def _generation_steps(run: _Run) -> None:
 
     _set_context(ctx, g, "gate")
     gate = loop_module("gate")
-    gated = [run.save(gate.gate(run.prod.text, c, ctx.provider, cfg)) for c in survivors]
+    gated = [run.save(_gate_or_block(gate, run.prod.text, c, ctx.provider, cfg)) for c in survivors]
     survivors = [c for c in gated if c.status != "gate_blocked"]
     run.note("GATED", f"{len(survivors)} of {len(gated)} passed the patch gate.")
     run.advance("GATED")

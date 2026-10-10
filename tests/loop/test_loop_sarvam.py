@@ -181,7 +181,7 @@ def test_the_gate_role_borrows_the_judge_settings_and_is_deterministic(tmp_path,
     api = FakeApi(reply(GOOD))
     make(tmp_path, api, make_cfg(base_cfg)).complete_json("gate", "s", "u", SCHEMA)
     body = api.requests[0]["body"]
-    assert (body["reasoning_effort"], body["max_tokens"], body["temperature"]) == ("low", 4096, 0)
+    assert (body["reasoning_effort"], body["max_tokens"], body["temperature"]) == ("low", 8192, 0)  # the gate starts at GATE_MIN_TOKENS
 
 
 # ---------------------------------------------------------------------------------------

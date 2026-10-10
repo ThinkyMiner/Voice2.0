@@ -33,4 +33,4 @@ sim:                           # simulated traffic for the live A/B in sim mode 
   risk_base: {"BL Enriched": 0.08, "BL Approved": 0.08, "Abruptly Disconnected Call": 0.55, default: 0.20}
   risk_noise_sd: 0.08
   seed: 20261010
-caps: {max_share_b: 0.10, max_live_calls_per_day: 0, max_spend_inr: 150, max_generations: 3}   # 0 calls/day until L0 sets it
+caps: {max_share_b: 0.10, max_live_calls_per_day: 0, max_spend_inr: 150, max_generations: 6}   # 0 calls/day until L0 sets it

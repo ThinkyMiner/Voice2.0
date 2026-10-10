@@ -60,6 +60,9 @@ STT_ENDPOINT = "speech-to-text-job"
 STUB_DIR = ROOT / "tests" / "loop" / "fixtures" / "stub"
 
 VALID_REASONING_EFFORT = ("low", "high", "max")
+GATE_MIN_TOKENS = 8192               # the gate borrows the judge's settings; its reasoning over the patch
+                                     # context exhausted 8,192 tokens once (10 Oct), so it starts here and
+                                     # a length retry can reach the ceiling
 MAX_TOKENS_CEILING = 16384           # a length retry doubles max_tokens up to this; measured 10 Oct:
                                      # sarvam-105b's reasoning can exhaust 8,192 tokens on a long Hindi call
 BACKOFF_S = (1, 2, 4, 8, 16)         # 429/503: sleep before retry k, at most len(BACKOFF_S) tries
@@ -529,6 +532,8 @@ class SarvamProvider:
         settings = roles.get(role) or roles.get("judge")
         if settings is None:
             raise ProviderError(f"no settings for role {role!r} and no judge settings to fall back on")
+        if role == "gate" and settings.max_tokens < GATE_MIN_TOKENS:
+            settings = settings.model_copy(update={"max_tokens": GATE_MIN_TOKENS})
         return settings
 
     def _body(self, role: str, messages: Sequence[Mapping[str, str]], max_tokens: int, json_mode: bool) -> dict:
