@@ -110,7 +110,7 @@ export async function renderStudio(el, { id }) {
         <div class="two">${field("applies_when", "Applies when", "Leave empty for every call; otherwise the grade is N/A", 2)}${field("guidance", "Guidance (optional)", "How your auditors decide edge cases", 2)}</div>
         <div class="field"><span>Root type</span><div id="root">${seg(ROOTS.map((r) => [r, r]), d.root_type)}</div><small>Where a failure is fixed: the prompt, speech recognition, catalogue knowledge, the call flow, or the platform.</small></div>
         <div class="two">
-          <div class="field"><span>Weight</span><div class="range"><input type="range" name="weight" min="1" max="5" step="1" value="${d.weight}" aria-label="Weight, 1 to 5"><output id="wout">${d.weight}</output></div><small>How much this rubric counts when root causes are ranked.</small></div>
+          <div class="field"><span>Weight</span><div class="range"><input type="range" name="weight" min="1" max="5" step="1" value="${d.weight}" aria-label="Weight, 1 to 5"><output id="wout">${d.weight}</output></div><small>How much this check matters to your team, shown with the rubric. Root causes are ranked by fatal and non-fatal grades, not by weight.</small></div>
           <div class="field"><span>Needs audio</span><label class="switch"><input type="checkbox" name="needs_audio" ${d.needs_audio ? "checked" : ""}>Only gradable from the recording</label><small>A transcript-only judge answers N/A.</small></div>
         </div>
         <div class="two">
@@ -142,7 +142,7 @@ export async function renderStudio(el, { id }) {
   const label = isNew ? "New rubric" : cur.name;
   const crumb = $("#crumbs li:last-child");
   if (crumb) { crumb.textContent = label; crumb.classList.remove("mono"); }
-  setTimeout(() => { document.title = `${label} · Vani Loop`; });
+  setTimeout(() => { document.title = `${label} · Slow & Steady`; });
 
   const form = $("#form", el);
   const read = () => {

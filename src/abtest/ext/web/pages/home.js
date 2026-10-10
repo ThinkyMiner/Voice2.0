@@ -20,7 +20,8 @@ const HALT_AT = { GATE_BLOCKED: "gate", REPLAY_NO_GAIN: "replay", REPLAY_FAILED:
 const OUTCOME = { PROMOTED: "B won and was promoted", PENDING_APPROVAL: "B won; waiting for a human", STOPPED_HARM: "stopped for harm",
   BLOCKED_GUARDRAIL: "blocked by the guardrail", INCONCLUSIVE: "no clear effect", HALTED_SRM: "halted: the split was off", REJECTED: "rejected by a human",
   RUNNING: "running", GATE_BLOCKED: "blocked by the safety gate", REPLAY_NO_GAIN: "no gain in the replay" };
-// Steps that send real call content to the model provider: the web never runs them on real calls (loop.py).
+// Steps that send real call content to the model provider (real calls, and replays built from them): the web
+// runs them only when the platform was started with LOOP_ALLOW_REAL=1 (loop.py, models.is_real).
 const NEEDS_REAL = (c) => ["judge", "improve", "replay"].includes(c.stage) || (c.stage === "gate" && !c.fix_id);
 const STEP_NAME = { judge: "grading the calls", improve: "ranking the root causes", gate: "writing the fix", replay: "the replay" };
 const PAID = { judge: ["judge"], improve: ["judge"], gate: ["fixer", "gate"], replay: ["replay", "judge"] };  // llm roles per step
@@ -64,11 +65,11 @@ function plan(c, lp, k) {
   if (c.stage === "approval" && (k.x?.state === "PENDING_APPROVAL" || /^waiting for approval/.test(wait)))
     return { title: `Cycle ${n} needs your decision`, tone: "pending", body: `${B} beat ${A} on simulated traffic. It keeps 10% of that traffic until someone approves or rejects it on the experiment page.`,
       link: ["Review and decide", `#/experiments/${enc(c.experiment_id)}`] };
-  if (k.real && (NEEDS_REAL(c) || /^waiting for the go-ahead/.test(wait)))
+  if (k.real && !k.allowReal && (NEEDS_REAL(c) || /^waiting for the go-ahead/.test(wait)))
     return { title: `Cycle ${n} is waiting for your go-ahead`, tone: "pending",
-      body: `${c.stage === "judge" && k.graded ? "The numbers below are from the judge's last run. Grading again for this cycle" : `The next step, ${STEP_NAME[c.stage] || c.stage},`} sends real call content to the model provider (OpenRouter). The web never sends real calls, so it runs from a terminal once that is approved:`, cli: GO_AHEAD };
+      body: `${c.stage === "judge" && k.graded ? "The numbers below are from the judge's last run. Grading again for this cycle" : `The next step, ${STEP_NAME[c.stage] || c.stage},`} sends real call content to the model provider (OpenRouter), so it needs your go-ahead. Run it from a terminal, or start the platform with LOOP_ALLOW_REAL=1 to run it from here:`, cli: GO_AHEAD };
   if (/^waiting for transcripts/.test(wait)) return { title: `Cycle ${n} is waiting for calls`, tone: "pending", body: plain(wait.replace(/^waiting for transcripts of \S+:\s*/, "")) };
-  if (/^waiting: none of the/.test(wait)) return { title: `Cycle ${n}: the judge could not grade any call`, tone: "harm", body: "Its errors are in the run log. Grading again retries them.", run: { until: "judge", label: "Grade again" } };
+  if (/^waiting: none of the/.test(wait)) return { title: `Cycle ${n}: the judge could not grade any call`, tone: "harm", body: "Its errors are in the run log. Grading again retries them.", run: { until: "judge", label: "Grade again", paid: ["judge"] } };
   const rc = k.rc ? ` “${k.rc.name}”` : "";
   const S = {
     listen: [`Cycle ${n}: count ${A}'s calls`, "Counts the calls this cycle works on. No model is called.", "Count the calls"],
@@ -84,18 +85,21 @@ function plan(c, lp, k) {
       : [`Cycle ${n}: close the cycle`, `${B} is rejected and ${A} stays in production. Cycle ${n + 1} then starts on ${A}.`, "Close the cycle"],
   }[c.stage];
   if (!S) return { title: `Cycle ${n} is at ${c.stage}`, body: lp.next_action || "" };
-  return { title: S[0], body: S[1], run: { until: c.stage, label: S[2], paid: PAID[c.stage] || [] } };
+  const rest = ORDER.slice(ORDER.indexOf(c.stage), ORDER.indexOf("approval"));  // the steps before a person decides
+  return { title: S[0], body: S[1], run: { until: c.stage, label: S[2], body: S[1], paid: PAID[c.stage] || [] },
+    all: rest.length > 1 ? { label: "Run until it needs you", paid: [...new Set(rest.flatMap((s) => PAID[s] || []))],
+      body: `Runs every step from ${STEP_NAME[c.stage] || c.stage} on, until the loop needs a person: the A/B decision, a step that is blocked, or a step that waits for your go-ahead.` } : null };
 }
 
-function ask(p, settings) {
-  const roles = p.run.paid || [], b = settings?.budget;
+function ask(run, settings) {
+  const roles = run.paid || [], b = settings?.budget;
   const models = [...new Set(roles.map((r) => settings?.models?.[r]).filter(Boolean))];
   return confirmDialog({
-    title: `${p.run.label}?`, ok: p.run.label,
-    body: html`<p>${p.body}</p>
+    title: `${run.label}?`, ok: run.label,
+    body: html`<p>${run.body}</p>
       <p><b>Model calls:</b> ${roles.length ? html`${models.join(" and ") || "the platform's models"}, through OpenRouter. ${b ? `$${fix(b.spent_usd)} of the $${fix(b.cap_usd, 0)} budget is spent so far. ` : ""}Replies are cached, so anything graded before costs nothing.` : "none, so nothing is spent."}</p>
-      <p><b>Real calls</b> are never sent from the web: a step that needs them stops and waits for your go-ahead in a terminal.</p>
-      <p class="muted">${state.demo ? "Demo mode: a scripted replay from the cache; nothing is written." : "It runs in the background, one step, and updates the loop's files on this machine."}</p>`,
+      <p>${settings?.allow_real ? html`<b>Real calls:</b> this platform was started with LOOP_ALLOW_REAL=1, so a step that needs real call content sends it to OpenRouter.` : html`<b>Real calls</b> are not sent from here: a step that needs them stops and waits for your go-ahead.`}</p>
+      <p class="muted">${state.demo ? "Demo mode: a scripted replay from the cache; nothing is written." : "It runs in the background and updates the loop's files on this machine."}</p>`,
   });
 }
 
@@ -106,12 +110,13 @@ export async function render(el) {
   state.overviewFresh = false;
   const prodV = ov.production?.version;
   const versions = [...new Set([prodV, ...(ov.cycles || []).map((c) => c.production_version)].filter(Boolean))];
-  const [lp, pr, fx, xs, iss] = await Promise.all([
+  const [lp, pr, fx, xs, iss, settings] = await Promise.all([
     get("/api/loop"),
     get("/api/prompts").catch(() => ({ items: [] })),
     get("/api/fixes").catch(() => ({ items: [] })),
     get("/api/experiments").catch(() => ({ items: [] })),
     Promise.allSettled(versions.map((v) => get(`/api/issues?version=${enc(v)}`))),
+    get("/api/settings").catch(() => null),
   ]);
   const rcBy = Object.fromEntries(iss.flatMap((r) => (r.status === "fulfilled" ? r.value.items.map((i) => [i.id, i]) : [])));
   const fixBy = Object.fromEntries(fx.items.map((f) => [f.id, f]));
@@ -120,7 +125,8 @@ export async function render(el) {
   const cur = lp.cycle || ov.cycle;
   const k = ov.kpis || {};
   const ctx = (c) => ({ prodV, rc: rcBy[c?.root_cause_id], f: fixBy[c?.fix_id], x: xBy[c?.experiment_id], graded: k.calls_audited || 0,
-    real: !state.demo && Boolean(c || prodV) && !verBy[c?.production_version || prodV]?.fix_id });  // a root version runs on real calls
+    real: !state.demo && Boolean(c || prodV),  // v1's calls are real; a later version's are replays built from them
+    allowReal: Boolean(settings?.allow_real) });
   const p = plan(cur, lp, ctx(cur));
   const sp = shares({ pass: k.pass_rate, non_fatal: k.non_fatal_rate, fatal: k.fatal_rate });
   const loopX = xs.items.filter((x) => x.cycle != null), engineX = xs.items.length - loopX.length;
@@ -140,12 +146,13 @@ export async function render(el) {
         ${p.cli ? html`<code class="cmd">${p.cli}</code>` : ""}
         <div class="row status-actions">
           ${p.run ? html`<button class="btn primary" id="adv" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3l8 5-8 5z"/></svg><span>${p.run.label}</span></button>` : ""}
+          ${p.run && p.all ? html`<button class="btn" id="adv-all" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l6 5-6 5zM9 3l6 5-6 5z"/></svg><span>${p.all.label}</span></button>` : ""}
           ${p.link ? html`<a class="btn primary" href="${p.link[1]}">${p.link[0]}</a>` : ""}
           ${!p.run && !p.link && !lp.busy ? html`<button class="btn" type="button" data-retry>Refresh</button>` : ""}
           ${lp.busy ? html`<button class="btn" id="adv" type="button" disabled><span>Running…</span></button>` : ""}
         </div>
         <details class="runlog" id="runlog" ${lp.busy ? "open" : ""} ${lp.log?.length ? "" : "hidden"}><summary><span class="eyebrow">Run log</span><span class="last-line" id="lastline"></span></summary><pre class="log" id="log"></pre></details>
-        <p class="status-intro">Vani Loop listens to buyer calls, grades each one against IndiaMART's QA checklist, writes a prompt fix for the costliest failure and tests it on simulated traffic before it ships.</p>
+        <p class="status-intro">Slow &amp; Steady listens to Vani's buyer calls, grades each one against IndiaMART's QA checklist, writes a prompt fix for the costliest failure and tests it on simulated traffic before it ships.</p>
       </div>
       <div class="ring-wrap" id="ring"></div>
     </section>
@@ -251,7 +258,13 @@ export async function render(el) {
   // --- one step at a time, confirmed first, with live progress from GET /api/loop
   const btn = $("#adv", el);
   let timer = 0, alive = true;
-  const busyUi = (b) => { if (!btn) return; btn.disabled = b; btn.lastElementChild.textContent = b ? "Running…" : p.run?.label || "Running…"; };
+  const busyUi = (b) => {
+    if (!btn) return;
+    btn.disabled = b;
+    btn.lastElementChild.textContent = b ? "Running…" : p.run?.label || "Running…";
+    const all = $("#adv-all", el);
+    if (all) all.disabled = b;
+  };
   const poll = async () => {
     if (!alive) return;
     try {
@@ -263,12 +276,12 @@ export async function render(el) {
       else { busyUi(false); window.dispatchEvent(new Event("vani:rerender")); }
     } catch (err) { busyUi(false); toast(`Loop status failed: ${err.message}`, "harm"); }
   };
-  if (p.run && btn) btn.addEventListener("click", async () => {
-    const settings = await get("/api/settings").catch(() => null);
-    if (!alive || !(await ask(p, settings))) return;
+  const go = async (run) => {
+    const now = await get("/api/settings").catch(() => settings);
+    if (!alive || !(await ask({ body: p.body, ...run }, now))) return;  // a run without its own text explains with the plan's
     busyUi(true);
     try {
-      await send("POST", "/api/loop/advance", { until: p.run.until });
+      await send("POST", "/api/loop/advance", run.until ? { until: run.until } : {});
       $("#runlog", el).hidden = false;
       $("#runlog", el).open = true;
       mount($(".status-title", el), `Cycle ${cur?.n ?? 1} is running`);
@@ -276,7 +289,9 @@ export async function render(el) {
       timer = setTimeout(poll, 500);
       if (state.demo) toast("Demo mode: a scripted run from the cache, nothing is written.");
     } catch (err) { busyUi(false); toast(err.status === 409 ? err.message : `Could not start: ${err.message}`, "harm"); }
-  });
+  };
+  if (p.run && btn) btn.addEventListener("click", () => go(p.run));
+  if (p.all) $("#adv-all", el)?.addEventListener("click", () => go(p.all));
   if (lp.busy) timer = setTimeout(poll, 900);
   return () => { alive = false; clearTimeout(timer); ring?.stop(); };
 }

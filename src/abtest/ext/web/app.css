@@ -1,4 +1,4 @@
-/* Vani Loop: an editorial QA lab notebook. Paper in light mode, ink in dark mode.
+/* Slow & Steady: an editorial QA lab notebook. Paper in light mode, ink in dark mode.
    Tokens first; every colour below is a token so both themes stay in step. */
 
 :root {
@@ -99,9 +99,10 @@ code, kbd, .mono { font-family: var(--f-mono); font-size: .86em; font-feature-se
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 0; text-decoration: none; }
 .brand svg { width: 28px; height: 28px; flex: none; }
-.brand-name { font: 400 23px/1 var(--f-display); letter-spacing: -.01em; }
+.brand-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.brand-name { font: 400 23px/1 var(--f-display); letter-spacing: -.01em; white-space: nowrap; }
 .brand-name em { font-style: italic; }
-.brand-deva { font: 400 13px/1 var(--f-deva); color: var(--muted); padding-top: 3px; }
+.brand-deva { font: 400 12px/1.2 var(--f-deva); color: var(--muted); white-space: nowrap; }
 .nav { display: flex; flex-direction: column; gap: 1px; }
 .nav-group { margin: 14px 10px 6px; }
 .nav a {

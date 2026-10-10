@@ -283,7 +283,8 @@ def call(call_id: str) -> dict:
     mp3 = models.RECORDINGS_DIR / f"{call_id}.mp3"
     return {"transcript": _dump(t), "audit": _dump(a), "human": h,
             "audio_url": f"/api/recordings/{call_id}" if mp3.exists() else None,
-            "rubrics": {r.id: {"name": r.name, "category": r.category, "root_type": r.root_type} for r in _rubrics()}}
+            "rubrics": {r.id: {"name": r.name, "category": r.category, "root_type": r.root_type,
+                               "needs_audio": r.needs_audio} for r in _rubrics()}}
 
 
 @router.get("/recordings/{call_id}")

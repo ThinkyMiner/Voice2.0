@@ -372,7 +372,8 @@ function scoreRow({ rid, v, hg, remark }, { h, name, meta, firstTurn }) {
     <td class="sc-name"><div>${name(rid)}</div><div class="sub">${meta[rid]?.category || ""}</div></td>
     <td class="sc-judge" title="${v?.confidence != null ? `Judge's confidence ${v.confidence.toFixed(2)}` : ""}"><span class="lbl">Judge</span>${v ? grade(v.grade) : html`<span class="muted">—</span>`}</td>
     ${h ? html`<td class="sc-qa"><span class="lbl">QA</span>${hg ? grade(hg) : html`<span class="muted">—</span>`}</td>
-      <td class="sc-agree">${v && hg ? (v.grade === hg ? html`<span class="agree y">✓ Yes</span>` : html`<span class="agree n">✕ No</span>`) : ""}</td>` : ""}
+      <td class="sc-agree">${v && hg ? (meta[rid]?.needs_audio ? html`<span class="muted" title="Heard, not read: the judge cannot grade this from a transcript, so there is nothing to compare">—</span>`
+        : v.grade === hg ? html`<span class="agree y">✓ Yes</span>` : html`<span class="agree n">✕ No</span>`) : ""}</td>` : ""}
     <td class="sc-why">${v?.reason || ""}${remark ? html`<div class="qa-remark"><b>QA:</b> ${remark}</div>` : ""}${turn != null ? html`<button type="button" class="link-btn" data-turn="${turn}">Turn ${turn + 1} →</button>` : ""}</td></tr>`;
 }
 
