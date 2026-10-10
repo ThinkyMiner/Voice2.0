@@ -8,6 +8,7 @@ asks for with cue("...") to seconds from the scene's start.
     uv run --with playwright python video/ad/timeline.py
 """
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -21,13 +22,14 @@ sys.path.insert(0, str(VIDEO))
 from capture import Clock  # noqa: E402  (the narration's clock: pauses in the wav snap the chunk boundaries)
 
 FPS = 30
+AUDIO = OUT / os.environ.get("VIDEO_AUDIO", "audio")  # the ad may speak in its own voice (tts.py VIDEO_AUDIO)
 DEFAULTS = {"motion": (0.3, 0.8), "walk": (0.5, 0.9)}  # (lead, pad)
 
 
 def load() -> list[dict]:
     spec = yaml.safe_load((AD / "timeline.yaml").read_text(encoding="utf-8"))["scenes"]
     script = {s["id"]: s for s in yaml.safe_load((VIDEO / "script.yaml").read_text(encoding="utf-8"))["scenes"]}
-    durations = json.loads((OUT / "audio" / "durations.json").read_text())
+    durations = json.loads((AUDIO / "durations.json").read_text())
     scenes, start = [], 0.0
     for s in spec:
         voice = s.get("clip") or s["id"]
@@ -37,7 +39,7 @@ def load() -> list[dict]:
         narr = durations[voice]
         lead, pad = s.get("lead", DEFAULTS[s["kind"]][0]), s.get("pad", DEFAULTS[s["kind"]][1])
         dur = round(lead + narr + pad, 3)
-        clock = Clock(say, OUT / "audio" / f"{voice}.wav", narr)
+        clock = Clock(say, AUDIO / f"{voice}.wav", narr)
         page = AD / "scenes" / ("walk.html" if s["kind"] == "walk" else f"{s['id']}.html")
         asks = set(re.findall(r"""cue\(\s*["'`]([^"'`]+)["'`]""", page.read_text(encoding="utf-8"))) if page.exists() else set()
         cues = {p: round(lead + clock.at(p), 3) for p in sorted(asks) if p in say}
@@ -48,7 +50,7 @@ def load() -> list[dict]:
             "lead": lead, "narr": narr, "pad": pad, "cues": cues,
             "caps": [[round(a + lead, 3), round(b + lead, 3), c] for a, b, c in clock.captions()],
             "beats": json.loads(beats_f.read_text()) if beats_f.exists() else [],
-            "wav": str((OUT / "audio" / f"{voice}.wav").relative_to(VIDEO)),
+            "wav": str((AUDIO / f"{voice}.wav").relative_to(VIDEO)),
         })
         start += dur
     return scenes
