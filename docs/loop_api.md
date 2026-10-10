@@ -1,4 +1,4 @@
-# Slow & Steady platform API (contract)
+# Vani Lab platform API (contract)
 
 Served by `src/abtest/ext/service.py` (`make platform`, port 8600): the base FastAPI app plus these
 JSON routes, plus the static site from `src/abtest/ext/web/` at `/`. Every object below is a model in

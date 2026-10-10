@@ -1,6 +1,6 @@
 # Demo script: about 6½ minutes
 
-Slow & Steady, by Team Hare & Tortoise. **Part 1 (3:00)** proves a prompt change with the A/B
+Vani Lab, by Team Hare & Tortoise. **Part 1 (3:00)** proves a prompt change with the A/B
 engine on the Streamlit dashboard: B is worse and stopped early, B wins and is promoted,
 inconclusive, then the approval gate and the split evidence. **Part 2 (3:30)** shows where Prompt B
 comes from: the loop on the platform. The spoken lines (in quotes) are about 440 words in part 1
@@ -183,7 +183,7 @@ shows the experiment disappear for a moment and come back from day 1.
 **Screen:** the Loop home: the ring, Prompt A in production, cycle 1 waiting at Approval.
 
 "Part one proved that a prompt change is safe to ship. But where does Prompt B come from? Today
-someone writes it on a hunch. Slow and Steady writes it from the calls themselves, and this ring is
+someone writes it on a hunch. Vani Lab writes it from the calls themselves, and this ring is
 the loop it runs."
 
 ## 3:25 to 4:00: listen and judge

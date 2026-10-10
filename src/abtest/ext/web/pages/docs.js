@@ -1,4 +1,4 @@
-// #/docs and #/docs/<section>: how Slow & Steady works, on one page, for a QA lead, a product manager or a
+// #/docs and #/docs/<section>: how Vani Lab works, on one page, for a QA lead, a product manager or a
 // judge seeing it for the first time. Static text, no fetches. Every number, name and threshold comes from the
 // code, the configs, README.md, docs/ or reports/; the judge's agreement changes with every run, so it lives on
 // #/audit, not here. The section comes from the address itself (app.js's docs route captures nothing), so the
@@ -104,7 +104,7 @@ function corridor(width) {  // the planned win and harm boundaries, drawn at the
 // ----------------------------------------------------------------------------------- sections
 const hero = () => html`<header class="dhero">
   <div class="eyebrow accent">Docs · How it works</div>
-  <h1 class="title">How Slow &amp; Steady <em>works</em></h1>
+  <h1 class="title">How Vani Lab <em>works</em></h1>
   <p class="lede">One page for anyone new to the platform: what each page is for, what each stage of the loop does, and how far to trust each number. Every figure here comes from the code, the configs, or the committed docs and reports.</p>
   <figure class="doha">
     <blockquote lang="hi"><p class="deva"><span>धीरे-धीरे रे मना, धीरे सब कुछ होय।</span><span>माली सींचे सौ घड़ा, ऋतु आए फल होय॥</span></p></blockquote>
@@ -114,10 +114,10 @@ const hero = () => html`<header class="dhero">
   </figure>
 </header>`;
 
-const overview = () => sec("overview", html`What Slow &amp; Steady is`, html`
-  <p class="lead">Slow &amp; Steady is the platform Team Hare &amp; Tortoise built for Vani, IndiaMART's buyer-side voice bot. It listens to Vani's calls, grades each one on IndiaMART's own QA checklist, finds the highest-priority failure a prompt change can fix, writes the fix (Prompt B), tests it in simulated conversations and then on 10% of simulated leads with a sequential A/B test, and, once a named person approves, makes it production in its prompt registry. Then it starts again on the new prompt, which no live bot has spoken yet: its next audit runs on the up to eight simulated replay conversations that tested it.</p>
+const overview = () => sec("overview", html`What Vani Lab is`, html`
+  <p class="lead">Vani Lab is the platform Team Hare &amp; Tortoise built for Vani, IndiaMART's buyer-side voice bot. It listens to Vani's calls, grades each one on IndiaMART's own QA checklist, finds the highest-priority failure a prompt change can fix, writes the fix (Prompt B), tests it in simulated conversations and then on 10% of simulated leads with a sequential A/B test, and, once a named person approves, makes it production in its prompt registry. Then it starts again on the new prompt, which no live bot has spoken yet: its next audit runs on the up to eight simulated replay conversations that tested it.</p>
   <p><b>There is no live traffic yet.</b> The A/B test replays real buyer-call history with an effect assumed for B, so its result comes from that assumption, not from what Prompt B says: it exercises the engine and the approval path, not Prompt B. And “production” is a status in the platform's own prompt registry; nothing is deployed to the live bot.</p>
-  <p>Without it, a change to Vani's prompt goes live to every caller on judgement alone. If the change is bad, it costs meetings until someone notices; if it is good, nobody can prove it. Slow &amp; Steady has two halves: <b>the loop</b> writes the change from the calls themselves, and <b>the A/B engine</b> decides, from nothing but who got which prompt and what happened on their calls; with no live traffic, those calls are replayed history with an assumed effect for B. Their code lives in <code>src/abtest/ext/</code> and <code>src/abtest/</code>.</p>
+  <p>Without it, a change to Vani's prompt goes live to every caller on judgement alone. If the change is bad, it costs meetings until someone notices; if it is good, nobody can prove it. Vani Lab has two halves: <b>the loop</b> writes the change from the calls themselves, and <b>the A/B engine</b> decides, from nothing but who got which prompt and what happened on their calls; with no live traffic, those calls are replayed history with an assumed effect for B. Their code lives in <code>src/abtest/ext/</code> and <code>src/abtest/</code>.</p>
   <blockquote class="pull"><p><span>The hare ships a prompt change on a hunch.</span> <em>The tortoise ships it on evidence.</em></p></blockquote>
   <figure class="ringfig">${raw(ring())}
     <figcaption><ul class="key">
@@ -461,7 +461,7 @@ const page = () => html`<div class="docs">
   <article class="dbody">${hero()}
     <details class="toc-m"><summary><span class="eyebrow">Contents</span><span class="cur" id="doc-cur">${SECTIONS[0][1]}</span></summary><nav aria-label="On this page">${tocList()}</nav></details>
     ${overview()}${pages()}${loop()}${grades()}${judge()}${fixes()}${prove()}${running()}${privacy()}${glossary()}${faq()}
-    <footer class="dfoot"><span>Slow &amp; Steady, by Team Hare &amp; Tortoise.</span><span>Sources: README.md, docs/loop_api.md, docs/runbook.md, reports/validation.md and the code under src/abtest/. <a href="#/docs">Back to the top</a></span></footer>
+    <footer class="dfoot"><span>Vani Lab, by Team Hare &amp; Tortoise.</span><span>Sources: README.md, docs/loop_api.md, docs/runbook.md, reports/validation.md and the code under src/abtest/. <a href="#/docs">Back to the top</a></span></footer>
   </article></div>`;
 
 // ------------------------------------------------------------------------------------- render

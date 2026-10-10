@@ -1,4 +1,4 @@
-"""The Slow & Steady platform (docs/loop_api.md): the base app's routes (GET /assign, unchanged) plus the
+"""The Vani Lab platform (docs/loop_api.md): the base app's routes (GET /assign, unchanged) plus the
 loop's JSON routes, and the static site in ext/web/ at "/", mounted last so /api/* and /assign win.
 make platform -> http://127.0.0.1:8600
 
@@ -529,7 +529,7 @@ def loop_advance(body: AdvanceIn | None = None) -> dict:
 
 # A new app around the base app's routes rather than the base app object itself: the host check is
 # middleware, which cannot join an app another importer may already have started.
-app = FastAPI(title="Slow & Steady")
+app = FastAPI(title="Vani Lab")
 app.router.routes.extend(r for r in api.app.routes if isinstance(r, APIRoute))
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=HOSTS)
 

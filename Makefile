@@ -71,7 +71,7 @@ slide:  ## slide/one_slide.pptx, plus its chart PNG in reports/
 .PHONY: platform listen judge agreement loop loop-status
 SOURCE ?= production
 
-platform:  ## the Slow & Steady platform (API + web): http://127.0.0.1:8600
+platform:  ## the Vani Lab platform (API + web): http://127.0.0.1:8600
 	$(RUN) uvicorn abtest.ext.service:app --host 127.0.0.1 --port 8600
 
 listen:  ## make listen SOURCE=production|audited ARGS=--yes-send-real-audio  (recordings -> transcripts)

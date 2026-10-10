@@ -461,7 +461,7 @@ def _prove(c: Cycle, allow_real: bool) -> Cycle:
                variants={"A": {"base": base.path}, "B": {"patch": {"mode": "full", "path": cand.path}}})
     path = EXPERIMENTS_DIR / f"{eid}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"# Slow & Steady loop, cycle {c.n}: A = {base.version} (production), B = {cand.version} ({c.fix_id}).\n"
+    path.write_text(f"# Vani Lab loop, cycle {c.n}: A = {base.version} (production), B = {cand.version} ({c.fix_id}).\n"
                     f"# Written by abtest.ext.loop from {TEMPLATE}.\n"
                     + yaml.safe_dump(raw, sort_keys=False, allow_unicode=True), encoding="utf-8")
     sim = os.environ.get("LOOP_DEMO_SIM", DEFAULT_SIM)

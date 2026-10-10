@@ -142,7 +142,7 @@ export async function renderStudio(el, { id }) {
   const label = isNew ? "New rubric" : cur.name;
   const crumb = $("#crumbs li:last-child");
   if (crumb) { crumb.textContent = label; crumb.classList.remove("mono"); }
-  setTimeout(() => { document.title = `${label} · Slow & Steady`; });
+  setTimeout(() => { document.title = `${label} · Vani Lab`; });
 
   const form = $("#form", el);
   const read = () => {

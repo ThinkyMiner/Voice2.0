@@ -1,11 +1,11 @@
-# Slow & Steady: approach note
+# Vani Lab: approach note
 
 **Team Hare & Tortoise.** The hare ships a prompt change on a hunch; the tortoise ships it on evidence.
 
 **Problem statements.** PS05, Agent A/B Testing & Auto-Rollout, extended with PS01's
 audit-and-fix loop, so that the A/B engine tests prompt changes that come from the calls themselves.
 
-**In one line.** Slow & Steady listens to Vani's calls, grades each one on IndiaMART's own QA checklist,
+**In one line.** Vani Lab listens to Vani's calls, grades each one on IndiaMART's own QA checklist,
 finds the costliest prompt failure, writes the fix (Prompt B), proves it on 10% of leads with a
 sequential A/B test, and rolls the winner out after a named person approves. Then it audits the new
 prompt and starts again.

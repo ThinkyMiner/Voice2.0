@@ -1,4 +1,4 @@
-# Slow & Steady
+# Vani Lab
 
 **VANI prompt A/B testing, auto-rollout and the audit-and-fix loop.** By Team Hare & Tortoise.
 

@@ -152,7 +152,7 @@ export async function render(el) {
           ${lp.busy ? html`<button class="btn" id="adv" type="button" disabled><span>Running…</span></button>` : ""}
         </div>
         <details class="runlog" id="runlog" ${lp.busy ? "open" : ""} ${lp.log?.length ? "" : "hidden"}><summary><span class="eyebrow">Run log</span><span class="last-line" id="lastline"></span></summary><pre class="log" id="log"></pre></details>
-        <p class="status-intro">Slow &amp; Steady listens to Vani's buyer calls, grades each one against IndiaMART's QA checklist, writes a prompt fix for the costliest failure and tests it on simulated traffic before it ships.</p>
+        <p class="status-intro">Vani Lab listens to Vani's buyer calls, grades each one against IndiaMART's QA checklist, writes a prompt fix for the costliest failure and tests it on simulated traffic before it ships.</p>
       </div>
       <div class="ring-wrap" id="ring"></div>
     </section>

@@ -76,11 +76,11 @@ async function show(n, label, id, render, key = "", keepScroll = false, back = n
     if (n === seq) { if (err?.status !== 404) console.error(err); mount(el, failState(err, back)); }
   }
   el.style.minHeight = "";
-  document.title = id ? `${id} · Slow & Steady` : label === "Loop" ? "Slow & Steady" : `${label} · Slow & Steady`;
+  document.title = id ? `${id} · Vani Lab` : label === "Loop" ? "Vani Lab" : `${label} · Vani Lab`;
 }
 
 function crumbs(label, id, key) {
-  const items = [html`<li><a href="#/">Slow &amp; Steady</a></li>`];
+  const items = [html`<li><a href="#/">Vani Lab</a></li>`];
   if (key && key !== "loop") items.push(id ? html`<li><a href="#/${key}">${label}</a></li>` : html`<li>${label}</li>`);
   else if (key === "loop") items.push(html`<li>The loop</li>`);
   if (id) items.push(html`<li class="mono">${id}</li>`);

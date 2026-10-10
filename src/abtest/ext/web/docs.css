@@ -1,4 +1,4 @@
-/* #/docs, the Slow & Steady handbook. pages/docs.js loads this file once and it stays for the session, so every
+/* #/docs, the Vani Lab handbook. pages/docs.js loads this file once and it stays for the session, so every
    rule sits under .docs, the page's root: no other page looks different after Docs has been opened. (The one
    exception, .page.docs-stay, is a class only docs.js sets, on the page wrapper.) Every colour is an app.css
    token, so both themes follow, and the type is app.css's: Instrument Serif to display, Geist to read, Geist
