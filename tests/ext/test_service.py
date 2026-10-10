@@ -88,6 +88,12 @@ def test_call_detail_shows_the_calibrated_grade_like_the_list(client):
     assert listed["overall"] == client.get("/api/calls/real-2").json()["audit"]["overall"] == "pass"
 
 
+def test_the_site_is_revalidated_on_every_load(client):
+    r = client.get("/app.js")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
+    assert "cache-control" not in client.get("/api/overview").headers
+
+
 def test_recordings_are_local_only(client):
     _calls_on_disk()
     assert client.get("/api/recordings/real-1").status_code == 404

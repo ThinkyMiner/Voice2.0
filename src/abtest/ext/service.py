@@ -530,6 +530,17 @@ def loop_advance(body: AdvanceIn | None = None) -> dict:
 app = FastAPI(title="Slow & Steady")
 app.router.routes.extend(r for r in api.app.routes if isinstance(r, APIRoute))
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=HOSTS)
+
+
+@app.middleware("http")
+async def revalidate_the_site(request, call_next):
+    """The site's files are ES modules: a browser that reuses a cached old module beside a new one shows a
+    broken page after an update, so every load revalidates them (a 304 when nothing changed)."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
 app.include_router(router)
 if WEB_DIR.is_dir():  # last: the site answers only what no route above does
     app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
