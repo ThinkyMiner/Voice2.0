@@ -39,6 +39,7 @@ LOOP = os.environ.get("VIDEO_LOOP_URL", PLATFORM).rstrip("/")
 ACTOR = os.environ.get("VIDEO_ACTOR", "kartik")
 FPS, TAIL = 30, 1.7  # each scene holds 1.7 s past its narration (the film runs past 5 minutes)
 CLEAN = os.environ.get("VIDEO_CLEAN") == "1"
+AUDIO = OUT / os.environ.get("VIDEO_AUDIO", "audio")  # the narration: another folder speaks in another voice
 CLIPS = OUT / ("clips_clean" if CLEAN else "clips")
 # Everything on the real platform that shows a call id, a call summary or call text (docs/demo_script.md,
 # "Customer calls on camera"): the Audit page's calls to listen to first, Issues' example calls, Fixes' example
@@ -438,7 +439,7 @@ def film(browser, sid: str, clock: Clock, overlay: str):
 def check(scenes, durations) -> None:
     """Every cue, of every beat and every card step, is a phrase its scene's narration says (no browser)."""
     for s in scenes:
-        clock = Clock(" ".join(s["say"].split()), OUT / "audio" / f"{s['id']}.wav", durations[s["id"]])
+        clock = Clock(" ".join(s["say"].split()), AUDIO / f"{s['id']}.wav", durations[s["id"]])
         if s["id"] in CARDS:
             cues = re.findall(r'data-cue="([^"]+)"', (HERE / "cards" / f"{s['id']}.html").read_text(encoding="utf-8"))
         else:
@@ -449,7 +450,7 @@ def check(scenes, durations) -> None:
 
 def main(argv: list[str]) -> None:
     scenes = yaml.safe_load((HERE / "script.yaml").read_text(encoding="utf-8"))["scenes"]
-    durations = json.loads((OUT / "audio" / "durations.json").read_text())
+    durations = json.loads((AUDIO / "durations.json").read_text())
     if argv == ["--check"]:
         return check(scenes, durations)
     want = argv or [s["id"] for s in scenes]
@@ -464,7 +465,7 @@ def main(argv: list[str]) -> None:
         try:
             for s in scenes:
                 if s["id"] in want:
-                    film(browser, s["id"], Clock(" ".join(s["say"].split()), OUT / "audio" / f"{s['id']}.wav", durations[s["id"]]), overlay)
+                    film(browser, s["id"], Clock(" ".join(s["say"].split()), AUDIO / f"{s['id']}.wav", durations[s["id"]]), overlay)
         finally:
             browser.close()
 

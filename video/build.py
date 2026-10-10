@@ -19,6 +19,7 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE / "out"
 FFMPEG = os.environ.get("FFMPEG", "/opt/homebrew/bin/ffmpeg")
 FPS, TAIL, XF = 30, 1.7, 0.35  # TAIL as in capture.py
+AUDIO = OUT / os.environ.get("VIDEO_AUDIO", "audio")
 
 
 def ff(*args) -> None:
@@ -26,7 +27,7 @@ def ff(*args) -> None:
 
 
 def segment(sid: str, dur: float) -> Path:
-    clip, wav, seg = OUT / "clips" / f"{sid}.webm", OUT / "audio" / f"{sid}.wav", OUT / "segments" / f"{sid}.mp4"
+    clip, wav, seg = OUT / "clips" / f"{sid}.webm", AUDIO / f"{sid}.wav", OUT / "segments" / f"{sid}.mp4"
     if not clip.exists():
         sys.exit(f"{sid}: no clip; run video/capture.py {sid}")
     if seg.exists() and seg.stat().st_mtime > max(clip.stat().st_mtime, wav.stat().st_mtime):
@@ -76,7 +77,7 @@ def contact_sheet(ids: list[str], segs: list[Path], durs: list[float], out: Path
 
 def main() -> None:
     ids = [s["id"] for s in yaml.safe_load((HERE / "script.yaml").read_text(encoding="utf-8"))["scenes"]]
-    narr = json.loads((OUT / "audio" / "durations.json").read_text())
+    narr = json.loads((AUDIO / "durations.json").read_text())
     durs = [round(narr[i] + TAIL, 3) for i in ids]
     segs = [segment(i, d) for i, d in zip(ids, durs)]
     total = join(segs, durs, OUT / "vani_lab_demo.mp4")
