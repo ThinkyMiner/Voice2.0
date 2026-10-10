@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · the cost</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="card.css">
+<style>
+  .lead { position: absolute; left: 120px; top: 214px; display: flex; gap: 22px; align-items: baseline; }
+  .cols { position: absolute; left: 120px; right: 120px; top: 300px; display: grid; grid-template-columns: 1fr 1px 1fr; gap: 90px; }
+  .cols .sep { background: var(--hairline-2); }
+  .col .label { font: 500 18px/1.5 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); max-width: 640px; }
+  .col .num { margin-top: 26px; display: flex; align-items: baseline; gap: 22px; }
+  .col .num small { font: 400 58px/1 var(--f-display); font-style: italic; color: var(--muted); }
+  .col .num b { font: 300 250px/.82 var(--f-ui); letter-spacing: -.055em; }
+  .col.a .num b { color: var(--harm); }
+  .col.b .num b { color: var(--accent); }
+  .col .unit { margin-top: 30px; font: 400 40px/1.2 var(--f-display); }
+  .col .unit .muted { font: 400 28px var(--f-ui); }
+  .guess { position: absolute; left: 120px; top: 812px; font: 400 76px/1 var(--f-display); font-style: italic; letter-spacing: -.02em; }
+  .guess span { color: var(--harm); }
+</style>
+</head>
+<body>
+<div class="top"><span class="brand"><svg class="logo"></svg><b>Vani <em>Lab</em></b></span><span class="team">Team Hare &amp; Tortoise</span></div>
+<div class="lead" data-step><span class="eyebrow accent">What a silent bad change costs</span><span class="eyebrow">on six months of real call history</span></div>
+<div class="cols">
+  <div class="col a" data-step data-cue="a prompt change that quietly loses">
+    <div class="label">A change that quietly loses 30% of meetings</div>
+    <div class="num"><small>about</small><b>250</b></div>
+    <div class="unit">Meeting Fixed a week <span class="muted">· at full rollout</span></div>
+  </div>
+  <div class="sep" data-step data-cue="Even the smallest change"></div>
+  <div class="col b" data-step data-cue="Even the smallest change">
+    <div class="label">The smallest change worth catching (15%)</div>
+    <div class="num"><small>about</small><b>165</b></div>
+    <div class="unit">Meeting Fixed a week</div>
+  </div>
+</div>
+<p class="guess" data-step data-cue="Guessing is expensive">Guessing is <span>expensive</span>.</p>
+<script src="card.js"></script>
+</body>
+</html>

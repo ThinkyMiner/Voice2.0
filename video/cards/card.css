@@ -1,0 +1,46 @@
+/* The video's cards: 1920x1080, light, in the platform's look (src/abtest/ext/web/app.css tokens and faces). */
+:root {
+  --bg: #F5F2EA; --surface: #FBF9F4; --raised: #FFFFFF;
+  --ink: #16140F; --muted: #6E6A60; --faint: #A29D90;
+  --hairline: rgba(22, 20, 15, .10); --hairline-2: rgba(22, 20, 15, .18);
+  --accent: #0F6B66; --accent-2: #D9912B; --accent-2-ink: #95600F;
+  --win: #2E7D5B; --harm: #B5402A; --warn: #B07A1A;
+  --accent-soft: color-mix(in srgb, var(--accent) 11%, transparent);
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.09 0 0 0 0 0.08 0 0 0 0 0.06 0 0 0 1.2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.06'/></svg>");
+  --f-display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --f-ui: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --f-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+body {
+  background: radial-gradient(1200px 800px at 78% 18%, rgba(217, 145, 43, .07), transparent 60%),
+    radial-gradient(1100px 900px at 12% 92%, rgba(15, 107, 102, .06), transparent 60%), var(--grain), var(--bg);
+  color: var(--ink); font: 400 24px/1.45 var(--f-ui); -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+h1, h2, h3, p { margin: 0; font-weight: 400; }
+.serif { font-family: var(--f-display); letter-spacing: -.015em; }
+.serif em { font-style: italic; }
+.fig { font-family: var(--f-ui); font-weight: 300; letter-spacing: -.03em; font-variant-numeric: lining-nums tabular-nums; }
+.eyebrow { font: 500 17px/1.3 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.eyebrow.accent { color: var(--accent); }
+.muted { color: var(--muted); }
+
+/* the frame every card shares: the brand top left, the team top right */
+.frame { position: absolute; inset: 0; padding: 72px 120px 0; }
+.top { position: absolute; left: 120px; right: 120px; top: 64px; display: flex; justify-content: space-between; align-items: center; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand svg { width: 40px; height: 40px; }
+.brand b { font: 400 34px/1 var(--f-display); letter-spacing: -.01em; }
+.brand b em { font-style: italic; }
+.team { font: 500 15px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.rule { height: 1px; background: var(--hairline); }
+
+/* steps appear in order: card.js adds .on at each step's time */
+[data-step] { opacity: 0; transform: translateY(18px); filter: blur(6px);
+  transition: opacity 900ms var(--ease), transform 1100ms var(--ease), filter 900ms var(--ease); }
+[data-step].on { opacity: 1; transform: none; filter: none; }
+[data-step].dim { opacity: .34; }

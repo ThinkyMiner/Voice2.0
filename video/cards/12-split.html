@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · split evidence</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="card.css">
+<style>
+  /* Figures from reports/split_win.md (make split-report SCENARIO=win, pinned seed 1101). */
+  .lead { position: absolute; left: 120px; top: 214px; display: flex; gap: 22px; align-items: baseline; }
+  .lead .mono { font: 500 17px var(--f-mono); color: var(--muted); }
+  .figs { position: absolute; left: 120px; right: 120px; top: 296px; display: grid; grid-template-columns: repeat(4, 1fr); }
+  .f { padding: 0 34px; border-left: 1px solid var(--hairline-2); }
+  .f:first-child { padding-left: 0; border-left: 0; }
+  .f .l { font: 500 17px/1.4 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .f b { display: block; margin-top: 18px; font: 300 140px/.9 var(--f-ui); letter-spacing: -.05em; }
+  .f b.accent { color: var(--accent); }
+  .f b.win { color: var(--win); }
+  .f small { display: block; margin-top: 18px; font: 400 23px/1.4 var(--f-ui); color: var(--muted); }
+  .days { position: absolute; left: 120px; right: 120px; top: 676px; }
+  .days .l { font: 500 16px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+  .bars { position: relative; margin-top: 18px; height: 170px; display: grid; grid-template-columns: repeat(16, 1fr); gap: 14px; align-items: end; }
+  .bars i { display: block; background: var(--accent); opacity: .7; border-radius: 4px 4px 0 0; height: 0; transition: height 900ms var(--ease); transition-delay: calc(var(--k) * 50ms); }
+  .days.on .bars i { height: var(--h); }
+  .target { position: absolute; left: -10px; right: -10px; border-top: 2px dashed var(--accent-2); }
+  .target span { position: absolute; right: 0; top: -30px; font: 500 15px var(--f-mono); letter-spacing: .1em; color: var(--accent-2-ink); }
+</style>
+</head>
+<body>
+<div class="top"><span class="brand"><svg class="logo"></svg><b>Vani <em>Lab</em></b></span><span class="team">Team Hare &amp; Tortoise</span></div>
+<div class="lead" data-step><span class="eyebrow accent">The split is real</span><span class="mono">vani-meeting-v1-win</span></div>
+<div class="figs">
+  <div class="f" data-step data-cue="ten percent configured"><div class="l">B's share, configured</div><b>10%</b><small>of leads</small></div>
+  <div class="f" data-step data-cue="nine point nine one achieved"><div class="l">Achieved</div><b class="accent">9.91%</b><small>95% CI 9.46% to 10.37%</small></div>
+  <div class="f" data-step data-cue="not one lead heard both"><div class="l">Leads in both arms</div><b>0</b><small>no lead heard both prompts</small></div>
+  <div class="f" data-step data-cue="a sample ratio check"><div class="l">Sample ratio check</div><b class="win">0.68</b><small>SRM p: OK; it halts the test when the split is off</small></div>
+</div>
+<div class="days" data-step data-cue="ten percent configured">
+  <div class="l">B's share of new leads, day by day</div>
+  <div class="bars" id="bars"><div class="target" id="target"><span>10% CONFIGURED</span></div></div>
+</div>
+<script src="card.js"></script>
+<script>
+  const SHARE = [8.72, 9.76, 10.14, 10.05, 10.43, 9.67, 10.05, 9.57, 9.57, 10.53, 11.88, 8.33, 9.67, 9.76, 9.95, 10.43];
+  const MAX = 13, bars = document.getElementById("bars");
+  SHARE.forEach((v, k) => { const i = document.createElement("i"); i.style.setProperty("--k", k); i.style.setProperty("--h", `${(v / MAX) * 100}%`); i.title = `${v}%`; bars.append(i); });
+  document.getElementById("target").style.bottom = `${(10 / MAX) * 100}%`;
+</script>
+</body>
+</html>

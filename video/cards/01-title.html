@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · title</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="card.css">
+<style>
+  .stage { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 0; }
+  svg.big { position: absolute; left: 50%; top: 50%; width: 1000px; height: 1000px; transform: translate(-50%, -52%); overflow: visible; }
+  svg.big .wave { fill: none; stroke: var(--ink); stroke-width: 1.4; opacity: .16; }
+  svg.big .echo { fill: none; stroke: var(--accent); stroke-width: 1.2; opacity: .28; }
+  .mark { font: 400 236px/.9 var(--f-display); letter-spacing: -.03em; }
+  .mark em { font-style: italic; }
+  .tag { margin-top: 34px; font: 300 46px/1.2 var(--f-ui); letter-spacing: -.015em; color: var(--muted); }
+  .team { margin-top: 64px; font: 500 19px var(--f-mono); letter-spacing: .2em; color: var(--accent); }
+  [data-step] { transition-duration: 700ms, 900ms, 700ms; }
+</style>
+</head>
+<body>
+<svg class="big" viewBox="0 0 1000 1000" aria-hidden="true"><path class="echo"/><path class="wave"/><circle class="head" r="9" fill="var(--accent-2)"/><circle class="glow" r="26" fill="var(--accent-2)" opacity=".16"/></svg>
+<div class="stage">
+  <h1 class="mark" data-step data-cue="Vani Lab">Vani <em>Lab</em></h1>
+  <p class="tag" data-step>Every prompt change, proven before it ships.</p>
+  <p class="team" data-step data-cue="by team Hare">TEAM HARE &amp; TORTOISE</p>
+</div>
+<script src="card.js"></script>
+<script>
+  const wave = document.querySelector(".wave"), echo = document.querySelector(".echo");
+  const head = document.querySelector(".head"), glow = document.querySelector(".glow");
+  const R = 430, t0 = performance.now();
+  (function frame(now) {
+    const t = (now - t0) / 1000, a = -Math.PI / 2 + t * 0.55;
+    wave.setAttribute("d", ringPath(500, 500, R, 0.8 + t * 1.1, a, 2.2));
+    echo.setAttribute("d", ringPath(500, 500, R - 22, -t * 0.9 + 2, a, 1.1));
+    for (const c of [head, glow]) { c.setAttribute("cx", 500 + R * Math.cos(a)); c.setAttribute("cy", 500 + R * Math.sin(a)); }
+    requestAnimationFrame(frame);
+  })(t0);
+</script>
+</body>
+</html>

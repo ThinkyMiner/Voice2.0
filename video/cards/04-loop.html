@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · the loop</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="card.css">
+<style>
+  .lead { position: absolute; left: 120px; top: 214px; }
+  svg.ring { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
+  .ring .guide { fill: none; stroke: var(--hairline-2); stroke-width: 1.2; stroke-dasharray: 2 7; }
+  .ring .wave { fill: none; stroke: var(--ink); stroke-width: 1.9; stroke-linejoin: round; opacity: .9; }
+  .ring .echo { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .35; }
+  .st .node { fill: var(--bg); stroke: var(--hairline-2); stroke-width: 2; transition: fill 500ms, stroke 500ms; }
+  .st .halo { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: 0; transform-box: fill-box; transform-origin: center; }
+  .st text { font: 500 25px var(--f-ui); fill: var(--faint); transition: fill 500ms; }
+  .st text.n { font: 500 15px var(--f-mono); letter-spacing: .12em; }
+  .st.done .node { fill: var(--ink); stroke: var(--ink); }
+  .st.done text { fill: var(--ink); }
+  .st.done text.n { fill: var(--muted); }
+  .st.current .node { fill: var(--bg); stroke: var(--accent); stroke-width: 3.4; }
+  .st.current .halo { opacity: .6; animation: halo 2.2s var(--ease) infinite; }
+  .st.current text { fill: var(--accent); font-weight: 600; }
+  .st.current text.n { fill: var(--accent); }
+  @keyframes halo { from { transform: scale(1); opacity: .6; } to { transform: scale(2.4); opacity: 0; } }
+  .center { position: absolute; left: 960px; top: 505px; width: 470px; transform: translate(-50%, -50%); text-align: center; }
+  .center > div { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); transition: opacity 600ms var(--ease), filter 600ms var(--ease); }
+  .center > div.out { opacity: 0; filter: blur(8px); }
+  .center .k { font: 500 16px var(--f-mono); letter-spacing: .14em; color: var(--accent); text-transform: uppercase; }
+  .center h2 { margin-top: 14px; font: 400 76px/.98 var(--f-display); letter-spacing: -.02em; }
+  .center h2 em { font-style: italic; }
+  .center p { margin-top: 18px; font: 400 25px/1.38 var(--f-ui); color: var(--muted); }
+  .marks { display: none; }
+</style>
+</head>
+<body>
+<div class="top"><span class="brand"><svg class="logo"></svg><b>Vani <em>Lab</em></b></span><span class="team">Team Hare &amp; Tortoise</span></div>
+<svg class="ring" viewBox="0 0 1920 1080" aria-hidden="true"><circle class="guide" cx="960" cy="505" r="248"/><path class="echo"/><path class="wave"/><g id="comet"></g><g id="sts"></g></svg>
+<div class="center" id="center"></div>
+<div class="marks">
+  <i data-step data-cue="closes the loop"></i>
+  <i data-step data-cue="listens to every call"></i>
+  <i data-step data-cue="grades it"></i>
+  <i data-step data-cue="groups the failures"></i>
+  <i data-step data-cue="checks the fix for safety"></i>
+  <i data-step data-cue="replays it"></i>
+  <i data-step data-cue="proves the fix"></i>
+  <i data-step data-cue="A person approves"></i>
+  <i data-step data-cue="the loop starts again"></i>
+</div>
+<script src="card.js"></script>
+<script>
+  const C = { x: 960, y: 505 }, R = 285, N = 7, TAU = Math.PI * 2;
+  const ST = [  // name, what the narration says it does
+    ["Listen", "Every call, as it comes in."], ["Judge", "Graded on IndiaMART's own QA checklist."],
+    ["Improve", "Failures grouped into root causes; a minimal fix to the prompt."], ["Safety gate", "The fix, checked for safety."],
+    ["Replay", "Replayed against the same buyers."], ["Prove on 10%", "Proven on ten percent of traffic."],
+    ["Approve and roll&nbsp;out", "A person approves; the fix rolls out."],
+  ];
+  const ang = (i) => -Math.PI / 2 + (i * TAU) / N;
+  const sts = document.getElementById("sts");
+  sts.innerHTML = ST.map(([name], i) => {
+    const a = ang(i), x = C.x + R * Math.cos(a), y = C.y + R * Math.sin(a);
+    const lx = C.x + (R + 50) * Math.cos(a), ly = C.y + (R + 50) * Math.sin(a);
+    const anchor = Math.cos(a) > 0.3 ? "start" : Math.cos(a) < -0.3 ? "end" : "middle";
+    const dy = Math.sin(a) < -0.5 ? -16 : Math.sin(a) > 0.5 ? 36 : 10;
+    return `<g class="st" data-i="${i}"><circle class="halo" cx="${x}" cy="${y}" r="20"/><circle class="node" cx="${x}" cy="${y}" r="11"/>`
+      + `<text class="n" x="${lx}" y="${ly + dy - 32}" text-anchor="${anchor}">0${i + 1}</text><text x="${lx}" y="${ly + dy}" text-anchor="${anchor}">${name}</text></g>`;
+  }).join("");
+  const groups = [...sts.children];
+  const comet = document.getElementById("comet"), SEG = 30, TAIL = 1.05;
+  comet.innerHTML = Array.from({ length: SEG }, (_, k) => `<path fill="none" stroke="var(--accent-2)" stroke-linecap="round" stroke-width="${(6.5 * (1 - k / SEG) + 0.5).toFixed(2)}" opacity="${((1 - k / SEG) ** 1.7 * 0.95).toFixed(3)}"/>`).join("")
+    + `<circle r="22" fill="var(--accent-2)" opacity=".16"/><circle r="9" fill="var(--accent-2)"/>`;
+  const segs = [...comet.querySelectorAll("path")], dots = comet.querySelectorAll("circle");
+  const at = (a) => `${(C.x + R * Math.cos(a)).toFixed(1)} ${(C.y + R * Math.sin(a)).toFixed(1)}`;
+  const wave = document.querySelector(".wave"), echo = document.querySelector(".echo");
+  let from = ang(0) - TAU / N * 0.9, to = ang(0) - TAU / N * 0.9, since = performance.now();
+  const t0 = performance.now();
+  (function frame(now) {
+    const k = Math.min(1, (now - since) / 1300), angle = from + (to - from) * (1 - (1 - k) ** 3), t = (now - t0) / 1000;
+    wave.setAttribute("d", ringPath(C.x, C.y, R, 0.8 + t * 1.2, angle, 1.6));
+    echo.setAttribute("d", ringPath(C.x, C.y, R - 15, -t + 2, angle, 0.8));
+    segs.forEach((s, j) => s.setAttribute("d", `M${at(angle - (j / SEG) * TAIL)}A${R} ${R} 0 0 0 ${at(angle - ((j + 1) / SEG) * TAIL)}`));
+    dots.forEach((c) => { c.setAttribute("cx", C.x + R * Math.cos(angle)); c.setAttribute("cy", C.y + R * Math.sin(angle)); });
+    requestAnimationFrame(frame);
+  })(t0);
+
+  const center = document.getElementById("center");
+  const say = (k, h, p) => {
+    for (const old of center.children) { old.classList.add("out"); setTimeout(() => old.remove(), 700); }
+    const d = document.createElement("div");
+    d.className = "out";
+    d.innerHTML = `<div class="k">${k}</div><h2>${h}</h2>${p ? `<p>${p}</p>` : ""}`;
+    center.append(d);
+    requestAnimationFrame(() => requestAnimationFrame(() => d.classList.remove("out")));
+  };
+  say("Vani Lab", "Closes the <em>loop</em>", "");
+  let lap = 0;
+  window.onStep = (i) => {
+    if (i === 0) return;
+    const s = (i - 1) % N;
+    if (i > N) lap = 1;
+    groups.forEach((g, j) => { g.classList.toggle("current", j === s); g.classList.toggle("done", lap ? j !== s : j < s); });
+    const now = performance.now(), k = Math.min(1, (now - since) / 1300);
+    from = from + (to - from) * (1 - (1 - k) ** 3);
+    to = ang(s) + lap * TAU;
+    since = now;
+    if (i > N) say("And again", "The loop starts <em>again</em>", "On the new prompt.");
+    else say(`Step 0${s + 1}`, ST[s][0].replace("10%", '<span class="fig">10%</span>'), ST[s][1]);
+  };
+</script>
+</body>
+</html>
