@@ -195,9 +195,27 @@ def test_script_lines_are_one_line_each():
 def test_an_empty_reply_ends_the_call():
     bot = lambda n, msgs: "hello" if n == 0 else ""                       # noqa: E731
     t = buyer_sim.converse(TEMPLATE, card(), RecordingProvider(bot=bot), max_turns=4, call_id="c")
-    assert [x.role for x in t.turns] == ["bot", "buyer"]
+    # a silent bot is recorded, so the judge scores the failed call
+    assert [x.role for x in t.turns] == ["bot", "buyer", "bot"] and t.turns[-1].text == buyer_sim.NO_REPLY
     silent = buyer_sim.converse(TEMPLATE, card(), RecordingProvider(buyer=lambda n, m: "  "), max_turns=4, call_id="c")
     assert [x.role for x in silent.turns] == ["bot"]
+
+
+def test_a_provider_empty_reply_error_becomes_a_recorded_silent_turn():
+    class ProviderError(Exception):  # matched by name, like loop.sarvam.ProviderError
+        pass
+
+    def bot(n, msgs):
+        if n == 1:
+            raise ProviderError("bot: the reply was empty after the length retry (max_tokens=4096)")
+        return "hello"
+    t = buyer_sim.converse(TEMPLATE, card(), RecordingProvider(bot=bot), max_turns=4, call_id="c")
+    assert [x.role for x in t.turns] == ["bot", "buyer", "bot"] and t.turns[-1].text == buyer_sim.NO_REPLY
+
+    def broken(n, msgs):
+        raise ProviderError("HTTP 400 from the chat endpoint")
+    with pytest.raises(ProviderError):  # any other provider error still stops the run
+        buyer_sim.converse(TEMPLATE, card(), RecordingProvider(bot=broken), max_turns=4, call_id="c")
 
 
 def test_max_turns_counts_bot_turns():

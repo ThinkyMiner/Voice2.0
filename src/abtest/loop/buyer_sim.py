@@ -84,6 +84,9 @@ def _seconds(text: str) -> float:
     return max(MIN_TURN_S, round(len(text.split()) / WORDS_PER_SECOND, 2))
 
 
+NO_REPLY = "[the bot gave no reply]"
+
+
 def converse(prompt_template: str, card: PersonaCard, provider: Provider, max_turns: int,
              call_id: str) -> Transcript:
     """Bot turn: provider.chat('bot', [system=render(template, card.render_vars), ...history]).
@@ -91,7 +94,8 @@ def converse(prompt_template: str, card: PersonaCard, provider: Provider, max_tu
     first. Returns a Transcript with source='bot_test', role_confidence=1.0, stt_model='text'.
 
     Up to `max_turns` bot turns, and the person answers after each one, so a full call has
-    2 * max_turns turns. A turn that comes back empty ends the call. Start and end seconds are
+    2 * max_turns turns. An empty person turn ends the call; an empty bot turn is recorded as
+    NO_REPLY and ends it, so the judge scores the failure. Start and end seconds are
     synthetic (about 150 words a minute plus a short pause), deterministic for a given text.
     """
     bot_msgs = [{"role": "system", "content": render.render(prompt_template, card.render_vars)},
@@ -107,8 +111,17 @@ def converse(prompt_template: str, card: PersonaCard, provider: Provider, max_tu
         clock = round(end + PAUSE_S, 2)
 
     for _ in range(max_turns):
-        bot_text = provider.chat("bot", bot_msgs).strip()
+        try:
+            bot_text = provider.chat("bot", bot_msgs).strip()
+        except Exception as e:  # noqa: BLE001 - only the provider's "empty reply" error is absorbed
+            if type(e).__name__ != "ProviderError" or "empty" not in str(e):
+                raise
+            bot_text = ""
         if not bot_text:
+            # A silent bot is a failed call, not a missing one: the judge sees it and scores it, so a
+            # patch that makes the bot go quiet loses its bot test instead of crashing the generation
+            # (measured 10 Oct: one real bot-test turn came back empty after the length retry).
+            say("bot", NO_REPLY)
             break
         say("bot", bot_text)
         bot_msgs.append({"role": "assistant", "content": bot_text})
