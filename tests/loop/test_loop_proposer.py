@@ -242,3 +242,14 @@ def test_prechecks_use_the_fixture_variable_sets(real_prompt, diagnosis, rubric,
     monkeypatch.setattr(render, "precheck", lambda t, p, sets, n: seen.append(list(sets)) or real(t, p, sets, n))
     propose(real_prompt, diagnosis, rubric, cfg, FakeProvider({"candidates": [append("a")]}))
     assert len(seen) == 1 and len(seen[0]) == 3
+
+
+def test_repair_anchor_restores_the_exact_template_text_only_when_unique():
+    from abtest.loop.proposer import repair_anchor
+    template = "Rule A:\ufeff bot_name \ufeff  never   claims to be human.\nRule B: be brief.\nRule B: be brief."
+    # measured 10 Oct: the model drops the BOM markers and collapses whitespace
+    assert repair_anchor(template, "Rule A: bot_name never claims to be human.") == \
+        "Rule A:\ufeff bot_name \ufeff  never   claims to be human."
+    assert repair_anchor(template, "Rule A:\ufeff bot_name \ufeff  never   claims") == "Rule A:\ufeff bot_name \ufeff  never   claims"  # already exact
+    assert repair_anchor(template, "Rule B: be brief.") == "Rule B: be brief."      # twice: no repair, the pre-check fails
+    assert repair_anchor(template, "Rule C: nothing like it") == "Rule C: nothing like it"

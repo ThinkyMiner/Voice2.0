@@ -13,6 +13,7 @@ with a note saying so (§L2.3). The model's reply is only a patch; a patch is ap
 """
 
 import logging
+import re
 from collections.abc import Mapping, Sequence
 
 import pandas as pd
@@ -203,6 +204,38 @@ def _user_prompt(base_prompt: str, diagnosis: pd.DataFrame, excerpts: Mapping[st
 
 # --- candidates -------------------------------------------------------------------------------
 
+_GAP = r"[\s\ufeff]+"  # whitespace and the template's BOM markers, which models do not copy faithfully
+
+
+def repair_anchor(template: str, anchor: str) -> str:
+    """The exact template text for an anchor the model copied approximately.
+
+    Real proposals (10 Oct) failed the exactly-once check because the dialogue model reproduced
+    `find`/`start`/`end` strings with different whitespace or without the invisible U+FEFF markers.
+    If `anchor` occurs exactly once already it is returned unchanged; else, if exactly one span of
+    the template matches it with every whitespace/marker run treated as equivalent, that span's
+    exact text is returned; otherwise the anchor is returned unchanged and the pre-check fails as
+    before. Nothing is ever guessed: no unique match, no repair."""
+    if not anchor or template.count(anchor) == 1:
+        return anchor
+    tokens = [t for t in re.split(_GAP, anchor) if t]
+    if not tokens:
+        return anchor
+    matches = list(re.finditer(_GAP.join(re.escape(t) for t in tokens), template))
+    return template[matches[0].start():matches[0].end()] if len(matches) == 1 else anchor
+
+
+def _repaired(patch: Patch, template: str) -> Patch:
+    d = patch.model_dump()
+    if d["mode"] == "replace_text":
+        d["find"] = repair_anchor(template, d["find"])
+    elif d["mode"] == "replace_section":
+        d["start"], d["end"] = repair_anchor(template, d["start"]), repair_anchor(template, d["end"])
+    else:
+        return patch
+    return _PATCH.validate_python(d)
+
+
 def _patch_from(raw: Mapping) -> Patch | None:
     mode = raw.get("mode")
     fields = {k: raw[k] for k in (_MODE_FIELDS.get(mode, ()) if isinstance(mode, str) else ())
@@ -247,6 +280,8 @@ def propose(base_prompt: str, diagnosis: pd.DataFrame, excerpts: Mapping[str, Se
     passing = 0
     for i, raw in enumerate(raws[:MAX_RAW_FACTOR * (k + 1)], start=1):
         patch = _patch_from(raw) if isinstance(raw, Mapping) else None
+        if patch is not None:
+            patch = _repaired(patch, base_prompt)
         if patch is None:
             log.warning("proposer: skipped candidate %d of generation %d (not a valid patch)", i, generation)
             continue
