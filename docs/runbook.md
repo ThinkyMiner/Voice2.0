@@ -41,10 +41,11 @@ model call is cached, so it resumes where it stopped.
    and press **Approve**, or run
    `uv run python -m abtest.ext.loop approve vani-loop-c1 --actor <your-name>`.
 2. Prompt B becomes production (v2) and cycle 2 opens on it. Cycle 2 and later grade v2's replay
-   calls: simulated conversations, but seeded with the real buyers' personas and lines, so they are
-   call content under the OpenRouter approval even though the loop runs them without the
-   `--yes-send-real-*` flag. Press **Advance the loop** on the home page for each cycle (about
-   $2–3 a cycle).
+   calls: simulated conversations, but seeded with the real buyers' personas and lines, so they count
+   as real call content and wait for the same go-ahead. Either run
+   `uv run python -m abtest.ext.loop advance --yes-send-real-transcripts` after each approval, or
+   start the platform with the go-ahead so its buttons can run them:
+   `LOOP_ALLOW_REAL=1 make platform` (about $2–3 a cycle).
 
 ## 4. Then
 

@@ -7,8 +7,9 @@ store the loop runs its experiments in), loop artifacts under models.LOOP_DIR. T
 (listen, judge, rubrics, improve) are imported per request, so a missing or broken one fails its own
 routes with 503 and the overview leaves its numbers empty; the app still serves. Real call content
 stays on this machine: bind to 127.0.0.1, answer only loopback Host names (a DNS-rebinding page
-sends its own); the web never sets allow_real; POST /api/rubrics/test grades a real transcript only
-when the server was started with LOOP_ALLOW_REAL=1.
+sends its own). Real call content (models.is_real: real calls and replays built from them) goes to the
+model provider from the web only when the server was started with LOOP_ALLOW_REAL=1, the user's go-ahead:
+POST /api/loop/advance runs the loop with it, POST /api/rubrics/test grades such a transcript with it.
 """
 
 import importlib
@@ -36,7 +37,11 @@ from abtest.ext.models import AgreementReport, CallAudit, Rubric, Stage, Transcr
 
 WEB_DIR = Path(__file__).parent / "web"
 SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")  # ids that become file names
-REAL = loop.REAL
+
+
+def _allow_real() -> bool:
+    """The user's go-ahead for real call content from the web: the server was started with LOOP_ALLOW_REAL=1."""
+    return os.environ.get("LOOP_ALLOW_REAL") == "1"
 DAY = timedelta(days=1)
 FORMULA = "priority = 100 × (3·fatal + non-fatal) / (3·audited)"
 HOSTS = ["127.0.0.1", "localhost"]
@@ -405,7 +410,7 @@ def settings() -> dict:
                       "transcripts": rel(models.TRANSCRIPTS_DIR), "audits": rel(models.AUDITS_DIR),
                       "prompts": rel(models.PROMPTS_DIR), "rubrics": rel(models.RUBRICS_DIR),
                       "custom_rubrics": rel(models.CUSTOM_RUBRICS), "llm_cache": rel(models.LLM_CACHE_DIR)},
-            "bind": "127.0.0.1:8600", "allow_real_rubric_tests": os.environ.get("LOOP_ALLOW_REAL") == "1"}
+            "bind": "127.0.0.1:8600", "allow_real": _allow_real(), "allow_real_rubric_tests": _allow_real()}
 
 
 # --- write routes --------------------------------------------------------------------------------
@@ -473,7 +478,7 @@ def rubric_test(body: RubricTestIn) -> dict:
     """Grade one transcript with a draft rubric (one model call; nothing is saved). Real customer calls
     are refused unless the server was started with LOOP_ALLOW_REAL=1."""
     t, _ = _find_call(body.call_id)
-    if t.source in REAL and os.environ.get("LOOP_ALLOW_REAL") != "1":
+    if models.is_real(t) and not _allow_real():
         raise HTTPException(403, f"{t.call_id} is a real customer call; testing a rubric on it sends it to the "
                                  "model provider. Test on a fixture or replay call, or start the server with "
                                  "LOOP_ALLOW_REAL=1 once that is approved.")
@@ -500,8 +505,8 @@ def experiment_decision(experiment_id: str, body: DecisionIn) -> dict:
 
 @router.post("/loop/advance", status_code=202)
 def loop_advance(body: AdvanceIn | None = None) -> dict:
-    """Runs loop.advance in a background thread, one at a time. allow_real stays False here: sending
-    real transcripts is the user's decision, made on the CLI (--yes-send-real-transcripts)."""
+    """Runs loop.advance in a background thread, one at a time. Stages that send real call content run only
+    when the server was started with LOOP_ALLOW_REAL=1; otherwise they wait for the CLI go-ahead."""
     until = body.until if body else None
     if loop.busy() or not _advancing.acquire(blocking=False):
         raise HTTPException(409, "the loop is already advancing")
@@ -509,7 +514,7 @@ def loop_advance(body: AdvanceIn | None = None) -> dict:
     def run() -> None:
         try:
             loop.say(f"advance requested from the platform (until {until or 'the cycle waits or ends'})")
-            c = loop.advance(until=until)
+            c = loop.advance(until=until, allow_real=_allow_real())
             loop.say(f"advance finished: cycle {c.n} at {c.stage}")
         except Exception as e:  # noqa: BLE001 - the thread's only report is the log
             loop.say(f"advance failed: {type(e).__name__}: {e}")

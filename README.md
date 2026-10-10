@@ -68,7 +68,8 @@ audited (`LOOP_CORPUS=audited`, the default). The 250-call production sample is 
 Vani; `LOOP_CORPUS=production` runs the loop on it instead.
 
 The `--yes-send-real-*` flags send real customer calls to the model provider; nothing goes out
-without them. Loop artifacts (recordings, transcripts, audits, prompt versions) live under
+without them. Replays built from real calls count as real too. The platform's buttons send real call
+content only when it was started with `LOOP_ALLOW_REAL=1 make platform`. Loop artifacts (recordings, transcripts, audits, prompt versions) live under
 `data/derived/loop/`, git-ignored like the rest of `data/`. The API is in
 [docs/loop_api.md](docs/loop_api.md); the build journey is in [skills.md](skills.md).
 
