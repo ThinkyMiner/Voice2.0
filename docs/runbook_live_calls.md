@@ -4,7 +4,8 @@ This puts the A/B split on real phone calls. Our router gives each lead A or B a
 call then goes out through Sarvam with that arm's committed agent version: version 1 holds Prompt A, version 2
 holds Prompt B, and B asks the quantity at most twice instead of three times. The outcome comes back into the
 A/B engine as a calls row, and the transcript comes back to the loop's judge. The code is
-`src/abtest/ext/sarvam_live.py`; every command below is `make calls ARGS="..."`.
+`src/abtest/ext/sarvam_live.py`; steps 1 to 4 below are `make calls ARGS="..."`, step 5 is `make judge` and step 6
+`make platform`.
 
 ## Rules
 
@@ -130,7 +131,7 @@ A/B engine as a calls row, and the transcript comes back to the loop's judge. Th
 
    ```bash
    make calls ARGS=status     # per arm: assigned, called, outcomes back, connected, dispositions
-   make calls ARGS=look       # one look of the engine now, plus data/derived/loop/live/split_vani-live-c1.md
+   make calls ARGS=look       # the engine's look if one is due (a handful of calls: none), plus data/derived/loop/live/split_vani-live-c1.md
    ```
 
    `look` runs the simulation's look chain at the current time. It takes a look only when the plan says so:
@@ -150,10 +151,15 @@ A/B engine as a calls row, and the transcript comes back to the loop's judge. Th
    Live transcripts carry the prompt version `live` (they ran an agent version, not a registry version), so
    their audits go to `data/derived/loop/audits/live/`, and the loop never takes them for v1's calls.
 
-6. **Show it**: `make platform`, then http://127.0.0.1:8600. **Experiments → vani-live-c1** shows the live
-   split and state; the API reports it as `simulated: false`, but the page's own wording about simulated
-   traffic has not been updated. **Calls** lists the live transcripts with source `live` and the judge's
-   grade; open one to see its arm.
+6. **Show it**: `make platform`, then http://127.0.0.1:8600. **Experiments** lists `vani-live-c1` under *Live
+   calls*. Its page says "Live experiment · real calls through Sarvam", shows B's one-line change as a redline,
+   which agent version each arm calls, and a **Calls per arm** card (the same counts as `status`: leads
+   assigned, calls placed and connected, outcomes). **Calls**, with the **Live** filter, lists the live
+   transcripts with the judge's grade once step 5 ran; open one to see its arm and agent version.
+
+   The arm a lead gets is fixed by a hash of the experiment id and the lead id, so the same allowlist splits
+   the same way every time: at `vani-live-c1`, `team-01` gets B and `team-02` gets A. With a handful of leads an
+   uneven split is chance; renaming leads to even it out would be choosing the arms by hand.
 
 ## When something is off
 
@@ -167,6 +173,7 @@ A/B engine as a calls row, and the transcript comes back to the loop's judge. Th
 - **"no turns found in Sarvam's transcript"**: Sarvam documents no transcript body, and this one is a shape
   the parser does not know. The raw body is in `data/derived/loop/live/raw/<attempt id>.json`; the parser is
   `_turns` in `sarvam_live.py`.
-- **Every connected call stays provisional, then ends `No Enrichment Scope`**: check in Call Logs that the
+- **Every connected call stays provisional, then ends `No Enrichment Scope`** (or `Abruptly Disconnected Call`
+  when the buyer hung up within 20 s): check in Call Logs that the
   agent fills `disposition`, and that the attempts API returns it in `agent_variables`. The docs don't say
   that it does.

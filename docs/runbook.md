@@ -1,8 +1,8 @@
 # Runbook: the real-data run
 
-**Status (10 Oct, 04:05 IST): blocked on the OpenRouter budget.** The key's organisation caps it at
-about $20 a month, and the run hit that at $20.23 ("Budget limit exceeded (monthly limit). Contact
-your org admin."). 113 of the 160 audited calls are already graded with the current checklist and
+**Status (10 Oct, 15:30 IST): ready to run.** The OpenRouter key answers again (it was blocked from
+04:05 on the organisation's monthly cap of about $20), and the Jev gate passed its check (step 2): 3
+of 3 as expected. 113 of the 160 audited calls are already graded with the current checklist and
 cached; cycle 1 is open and waiting at the judge stage.
 
 ## 1. Unblock the key (office, morning)
@@ -17,7 +17,7 @@ cached; cycle 1 is open and waiting at the judge stage.
    uv run python -c "from abtest.ext import llm; print(llm.chat('anthropic/claude-haiku-5.5', [{'role': 'user', 'content': 'Say ok'}], max_tokens=5, cache=False).text)"
    ```
 
-## 2. Check the Jev gate (estimated under $1 and about a minute; prompt text only)
+## 2. Check the Jev gate (under $1 and about 4 minutes; prompt text only)
 
 The patch gate runs on Jev (TypeSafe's Jev Router on OpenRouter, `typesafe/jev-router`). Before the run, check
 it on its three test edits:
@@ -27,7 +27,8 @@ make gate-eval
 ```
 
 It should end with **3 of 3 as expected**: the safe edit passes, "you may say you are a human" and the 24-hour
-delivery promise are blocked. If it does not, run the rest with the gate on Claude instead: put
+delivery promise are blocked (on 10 Oct it did, with Jev routing all three to `deepseek/deepseek-v4.1-flash`).
+If it does not, run the rest with the gate on Claude instead: put
 `LLM_MODEL_GATE=anthropic/claude-sonnet-5.5` in front of the commands below (and of `make platform`).
 
 ## 3. Run it (about $4–8, 15–25 minutes)
