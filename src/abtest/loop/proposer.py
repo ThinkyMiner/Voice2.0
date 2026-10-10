@@ -136,6 +136,52 @@ def _ledger_lines(ledger: Sequence[Mapping]) -> str:
     return "\n".join(lines)
 
 
+# The proposer sees the prompt's opening (global rules, persona, compliance lines) and the paragraphs
+# that mention its targets, within a budget, instead of the whole 24k-word template: the full
+# template is ~36.7k tokens, beyond sarvam-105b-conversations' 32k context (HTTP 422, 10 Oct), and on
+# the reasoning model it made the proposer exhaust 16k tokens. Patches are still validated against
+# the full template (exactly-once find, Jinja parse and render), so a `find` copied from this view
+# that is not unique in the full prompt fails its pre-check instead of being applied.
+VIEW_HEAD_CHARS = 9000
+VIEW_BUDGET_CHARS = 42000
+TARGET_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "claimed_human": ("human", "virtual assistant", "ai ", "bot"),
+    "false_assurance": ("assure", "guarantee", "price", "delivery", "promise"),
+    "wrong_language": ("language", "hindi", "telugu", "english"),
+    "looping": ("repeat", "again", "already", "same question", "ask_count"),
+    "frustration": ("irritat", "frustrat", "angry", "busy", "hurry", "not interested", "rude"),
+    "asked_for_human": ("human", "talking_to_ai", "real person", "transfer"),
+    "requirement_captured": ("quantity", "specification", "requirement", "product", "city"),
+    "closure": ("end_interaction", "closing", "next step", "transfer", "goodbye", "thank"),
+}
+
+
+def prompt_view(base_prompt: str, targets: Sequence[str], budget_chars: int = VIEW_BUDGET_CHARS) -> str:
+    """The prompt's head plus the paragraphs mentioning the targets' keywords, in prompt order,
+    with gaps marked, at most about `budget_chars` characters."""
+    if len(base_prompt) <= budget_chars:
+        return base_prompt
+    head = base_prompt[:VIEW_HEAD_CHARS]
+    rest = base_prompt[VIEW_HEAD_CHARS:]
+    paras = rest.split("\n\n")
+    keys = tuple(k for t in targets for k in TARGET_KEYWORDS.get(t, ()))
+    picked, used = [], len(head)
+    for i, para in enumerate(paras):
+        low = para.lower()
+        if keys and any(k in low for k in keys) and used + len(para) <= budget_chars:
+            picked.append(i)
+            used += len(para) + 2
+    out, last = [head], -1
+    for i in picked:
+        if i != last + 1:
+            out.append("[... section omitted ...]")
+        out.append(paras[i])
+        last = i
+    if last != len(paras) - 1:
+        out.append("[... section omitted ...]")
+    return "\n\n".join(out)
+
+
 def _user_prompt(base_prompt: str, diagnosis: pd.DataFrame, excerpts: Mapping[str, Sequence[str]],
                  rubric: Rubric, ledger: Sequence[Mapping]) -> str:
     targets = _targets(diagnosis)
@@ -148,8 +194,10 @@ def _user_prompt(base_prompt: str, diagnosis: pd.DataFrame, excerpts: Mapping[st
             parts.append(_data("excerpts", "\n---\n".join(shown), criterion=cid))
     parts.append("Patches already tried in earlier generations (do not resubmit):\n"
                  + _data("ledger", _ledger_lines(ledger)))
-    parts.append("The bot's current prompt follows. Copy `find`, `start` and `end` strings from it "
-                 "exactly.\n<prompt>\n" + base_prompt + "\n</prompt>")
+    parts.append("The bot's current prompt follows: its opening and the sections relevant to the "
+                 "targets; other sections are omitted. Copy `find`, `start` and `end` strings from it "
+                 "exactly, and choose strings that occur only once.\n<prompt>\n"
+                 + prompt_view(base_prompt, targets) + "\n</prompt>")
     return "\n\n".join(parts)
 
 

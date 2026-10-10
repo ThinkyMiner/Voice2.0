@@ -142,7 +142,11 @@ def test_one_proposer_call_with_the_diagnosis_excerpts_ledger_and_prompt(real_pr
     assert "<ledger>" in user and "g1 g1-c1 mode=append targets=looping status=bot_tested" in user
     assert "bot_test_score=0.050 live=STOPPED_HARM: tried a loop breaker" in user
     assert '[adds: "Stop repeating yourself."]' in user
-    assert user.count("<prompt>\n") == 1 and f"<prompt>\n{real_prompt}\n</prompt>" in user
+    # the proposer sees a budgeted view (head + target sections), not the whole 36.7k-token template
+    from abtest.loop.proposer import VIEW_BUDGET_CHARS, prompt_view
+    view = prompt_view(real_prompt, ["looping"])
+    assert user.count("<prompt>\n") == 1 and f"<prompt>\n{view}\n</prompt>" in user
+    assert len(view) <= VIEW_BUDGET_CHARS + 200 and view.startswith(real_prompt[:2000])
     assert schema["properties"]["candidates"]["minItems"] == 1
     assert schema["required"] == ["candidates"]
     assert schema["properties"]["candidates"]["items"]["properties"]["mode"]["enum"] == list(cfg.propose.modes)

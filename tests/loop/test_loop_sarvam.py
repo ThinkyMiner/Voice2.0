@@ -174,7 +174,7 @@ def test_each_role_takes_its_settings_from_the_config(tmp_path, base_cfg):
     p.chat("proposer", [{"role": "system", "content": "p"}])
     buyer, proposer = (r["body"] for r in api.requests)
     assert (buyer["reasoning_effort"], buyer["max_tokens"]) == ("low", 1024)
-    assert (proposer["reasoning_effort"], proposer["max_tokens"]) == ("low", 8192)
+    assert (proposer["reasoning_effort"], proposer["max_tokens"]) == ("low", 4096)
 
 
 def test_the_gate_role_borrows_the_judge_settings_and_is_deterministic(tmp_path, base_cfg):
@@ -310,9 +310,9 @@ def test_length_twice_raises(tmp_path, base_cfg):
 
 def test_length_retry_grows_to_the_ceiling_then_gives_up(tmp_path, base_cfg):
     api = FakeApi(reply(None, finish="length"), reply(None, finish="length"))
-    with pytest.raises(ProviderError, match="max_tokens=16384"):
-        make(tmp_path, api, make_cfg(base_cfg)).complete_json("proposer", "s", "u", SCHEMA)   # proposer is 8192
-    assert [r["body"]["max_tokens"] for r in api.requests] == [8192, 16384]
+    with pytest.raises(ProviderError, match="max_tokens=8192"):
+        make(tmp_path, api, make_cfg(base_cfg)).complete_json("proposer", "s", "u", SCHEMA)   # proposer is 4096
+    assert [r["body"]["max_tokens"] for r in api.requests] == [4096, 8192]
 
 
 def test_chat_length_retry_doubles_max_tokens_and_returns_the_text(tmp_path, base_cfg):
