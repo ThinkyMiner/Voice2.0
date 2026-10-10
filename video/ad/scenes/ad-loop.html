@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · ad loop</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="ad-b.css">
+<style>
+  .lab { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .lab .in { display: flex; flex-direction: column; gap: 6px; }
+  .lab i { font: 500 14px var(--f-mono); letter-spacing: .2em; font-style: normal; color: var(--teal); }
+  .lab b { font: 500 30px/1 var(--f-ui); letter-spacing: -.01em; color: var(--ink); }
+  .lab.end .in { align-items: flex-end; } .lab.mid .in { align-items: center; }
+  .ctr { position: absolute; left: 0; top: 0; width: 640px; text-align: center; }
+  .st { position: absolute; left: 0; right: 0; top: 0; transform-origin: 50% 50%; }
+  .st .eyebrow { color: var(--teal); }
+  .st h2 { margin-top: 16px; font: 400 96px/.98 var(--f-display); letter-spacing: -.025em; }
+  .st h2 .fig { font-size: 84px; }
+  .st p { margin-top: 18px; font: 400 25px/1.35 var(--f-ui); color: var(--muted); }
+  .st.intro h2 { font-size: 92px; line-height: 1.0; }
+  .diff { margin: 26px auto 0; display: inline-block; text-align: left; font: 400 19px/1.5 var(--f-mono); color: var(--ink);
+    padding: 10px 16px; border-radius: 10px; background: rgba(63, 184, 169, .08); border: 1px solid rgba(63, 184, 169, .22); }
+  .diff b { color: var(--teal); font-weight: 500; margin-right: 10px; }
+  .diff .caret { display: inline-block; width: 9px; height: 20px; margin-left: 2px; vertical-align: -3px; background: var(--teal); }
+</style>
+</head>
+<body>
+<div id="fx">
+  <canvas id="c"></canvas>
+  <div id="labs"></div>
+  <div class="ctr" id="ctr"></div>
+</div>
+<div class="grain"></div>
+<script src="../runtime.js"></script>
+<script src="ad-b.js"></script>
+<script>
+const N = 7, STEP = TAU / N, sa = (i) => -Math.PI / 2 + i * STEP;
+const R = 330, F = 1800, CX = 960, CY = 548;
+const ST = [
+  ["Listen", "Every call."], ["Judge", "On IndiaMART's own checklist."], ["Improve", "The root cause."],
+  ["Safety gate", "The fix, checked."], ["Replay", "The fix, replayed."],
+  ['Prove on <span class="fig">10%</span>', "On a tenth of traffic."], ["Approve", "Only when a person says yes."],
+];
+const FIX = "Ask the buyer for the quantity, with a unit.";
+let g, dust, T, labs, states, moves, typed, caret;
+
+function init() {
+  g = ctx2d("c");
+  dust = makeDust(11, 90);
+  // when each station lights: as the narration names it
+  T = { lit: [cue("listens"), cue("judges"), cue("root cause"), cue("safe"), cue("replays"), cue("ten percent"), cue("says yes")],
+    fix: cue("writes the fix"), person: cue("a person") };
+  T.done = T.lit[6] + 0.02;  // the comet closes the loop
+  T.pulse = T.done + 0.55;
+  // the comet: from just before Listen to each station as it is named, then once round to close the loop
+  const a0 = sa(0) - 0.9 * STEP;
+  moves = T.lit.slice(0, 6).map((tl, i) => ({ t0: tl - 0.55, d: 0.8, to: sa(i) }));
+  moves.push({ t0: T.lit[6] - 0.6, d: 0.7, to: sa(6) });
+  moves.push({ t0: T.done, d: 0.6, to: sa(0) + TAU });
+  moves.a0 = a0;
+  labs = ST.map(([name], i) => {
+    const c = Math.cos(sa(i)), el = document.createElement("div");
+    el.className = `lab ${c > 0.3 ? "start" : c < -0.3 ? "end" : "mid"}`;
+    el.innerHTML = `<div class="in"><i>0${i + 1}</i><b>${name}</b></div>`;
+    document.getElementById("labs").append(el);
+    return el;
+  });
+  const ctr = document.getElementById("ctr");
+  const mk = (cls, html) => { const d = document.createElement("div"); d.className = `st ${cls}`; d.innerHTML = html; ctr.append(d); return d; };
+  states = [{ el: mk("intro", `<h2>A loop that<br>never <em>sleeps</em>.</h2>`), a: 0.25 }];
+  ST.forEach(([name, sub], i) => states.push({ el: mk("", `<div class="eyebrow">0${i + 1} / 07</div><h2>${name}</h2><p>${sub}</p>`
+    + (i === 2 ? `<div class="diff" id="diff"><b>+</b><span id="typed"></span><span class="caret" id="caret"></span></div>` : "")), a: T.lit[i] - 0.05 }));
+  states.forEach((s, i) => (s.b = states[i + 1] ? states[i + 1].a - 0.25 : Infinity));
+  typed = document.getElementById("typed"); caret = document.getElementById("caret");
+}
+
+function cometA(t) {
+  let a = moves.a0;
+  for (const m of moves) a = lerp(a, m.to, prog(t, m.t0, m.d, E.inOutCubic));
+  return a;
+}
+
+function render(t) {
+  stage(t);
+  const dur = AD.dur;
+  // the camera: arrives oblique and settles, pushing in; faces the ring when a person says yes
+  const tilt = lerp(lerp(1.1, 0.42, prog(t, 0, 7, E.inOutCubic)), 0.16, prog(t, T.person - 0.4, 2.2, E.inOutCubic));
+  const zoom = lerp(1.22, 0.97, prog(t, 0, 7.5, E.inOutCubic)) + 0.05 * sine((t - 7.5) / (dur - 7.5));
+  const rot = -0.16 + 0.3 * sine(t / dur);
+  const ct = Math.cos(tilt), stl = Math.sin(tilt);
+  const P = (a, r) => {  // ring space (angle, radius) to the screen, and its depth
+    const x = r * Math.cos(a + rot), y = r * Math.sin(a + rot), z = -y * stl, s = (F / (F + z)) * zoom;
+    return [CX + x * s, CY + y * ct * s, z];
+  };
+  const fade = (z) => 1 - 0.55 * clamp(z / R);  // the far side, dimmer
+
+  g.clearRect(0, 0, 1920, 1080);
+  drawDust(g, dust, t, -rot * 300, tilt * 80, 0.9);
+
+  const cA = cometA(t), a0 = moves.a0;
+  const phase = 0.8 + t * 1.15;
+  const pulse = Math.exp(-(((t - T.pulse) / 0.4) ** 2));
+  const closed = prog(t, T.done, 0.6, E.inOutCubic);
+
+  bloom(g, CX, CY, 560 * zoom, RGB.teal, 0.035 + 0.05 * closed + 0.06 * pulse);
+  // the guide: a fine dotted circle
+  g.save(); g.fillStyle = `rgba(${RGB.ink},.16)`;
+  for (let i = 0; i < 180; i++) { const [x, y, z] = P((i / 180) * TAU, R); g.globalAlpha = fade(z); g.fillRect(x - 1, y - 1, 2, 2); }
+  g.restore();
+
+  // the ring: the whole wave faint, the stretch the comet has travelled bright; in chunks, so the far side dims
+  const pts = (from, to, rr, ph, amp, n) => Array.from({ length: n + 1 }, (_, i) => { const a = from + ((to - from) * i) / n; return P(a, ringR(a, rr, ph, cA, amp)); });
+  const chunks = (arr, k, fn) => { for (let i = 0; i < arr.length - 1; i += k) { const seg = arr.slice(i, i + k + 1); fn(poly(seg), fade(seg[seg.length >> 1][2])); } };
+  chunks(pts(0, TAU, R - 16, -phase * 0.8 + 2, 0.7, 240), 8, (p, f) => glow(g, p, RGB.teal, 0.22 * f * (1 + pulse), 1.1, 0.5));
+  chunks(pts(0, TAU, R, phase, 1.25, 360), 8, (p, f) => glow(g, p, RGB.ink, (0.24 + 0.25 * closed) * f * (1 + 1.5 * pulse), 1.5));
+  if (cA > a0 + 0.01) {
+    const n = Math.max(8, Math.ceil(((cA - a0) / TAU) * 360));
+    chunks(pts(a0, cA, R, phase, 1.25, n), 6, (p, f) => glow(g, p, RGB.tealHi, (0.75 + pulse) * f, 1.9));
+  }
+  // the pulse: a ring of light leaving the loop when it closes
+  const pk = prog(t, T.pulse - 0.1, 1.6, E.outCubic);
+  if (pk > 0 && pk < 1) chunks(pts(0, TAU, R * (1 + 0.32 * pk), phase, 0.4 * (1 - pk), 180), 6, (p, f) => glow(g, p, RGB.teal, 0.8 * (1 - pk) ** 1.5 * f, 1.2));
+
+  // the comet: a warm head, its tail along the ring
+  const SEG = 34, TAIL = 1.0;
+  for (let j = 0; j < SEG; j++) {
+    const k = 1 - j / SEG, aa = cA - (j / SEG) * TAIL, ab = cA - ((j + 1) / SEG) * TAIL;
+    if (ab < a0 - 0.6) break;
+    const p1 = P(aa, ringR(aa, R, phase, cA, 1.25)), p2 = P(ab, ringR(ab, R, phase, cA, 1.25));
+    g.strokeStyle = `rgba(${RGB.amberHi},${(k ** 1.8 * 0.9 * fade(p1[2])).toFixed(3)})`;
+    g.lineWidth = 0.8 + 5 * k; g.lineCap = "round";
+    g.beginPath(); g.moveTo(p1[0], p1[1]); g.lineTo(p2[0], p2[1]); g.stroke();
+  }
+  const H = P(cA, ringR(cA, R, phase, cA, 1.25));
+  const ha = prog(t, 0.15, 0.8);
+  bloom(g, H[0], H[1], 70, RGB.amber, 0.35 * ha);
+  bloom(g, H[0], H[1], 16, RGB.amberHi, 0.9 * ha);
+  g.fillStyle = `rgba(255,240,215,${ha})`; g.beginPath(); g.arc(H[0], H[1], 5.5, 0, TAU); g.fill();
+
+  // the stations: hollow until named, then lit with a ring of light leaving them
+  T.lit.forEach((tl, i) => {
+    const [x, y, z] = P(sa(i), R), f = fade(z), on = prog(t, tl, 0.5), cur = i === 6 ? 1 : 1 - prog(t, T.lit[i + 1] ?? 99, 0.6);
+    const hk = prog(t, tl, 1.3, E.outCubic);
+    if (hk > 0 && hk < 1) { g.strokeStyle = `rgba(${RGB.teal},${(0.7 * (1 - hk)).toFixed(3)})`; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 10 + 46 * hk, 0, TAU); g.stroke(); }
+    if (on > 0) bloom(g, x, y, 46, RGB.teal, 0.28 * on * f * (0.6 + 0.4 * cur + pulse));
+    g.fillStyle = "#0B0B0C"; g.beginPath(); g.arc(x, y, 9, 0, TAU); g.fill();
+    g.lineWidth = 2; g.strokeStyle = `rgba(${on > 0 ? RGB.tealHi : RGB.ink},${((0.3 + 0.7 * on) * f).toFixed(3)})`; g.stroke();
+    if (on > 0) { g.fillStyle = `rgba(${RGB.tealHi},${(on * f * (0.55 + 0.45 * cur)).toFixed(3)})`; g.beginPath(); g.arc(x, y, 5.5, 0, TAU); g.fill(); }
+    // its label flies in from outside the ring
+    const [lx, ly] = P(sa(i), R + 62), el = labs[i], c = Math.cos(sa(i)), s = Math.sin(sa(i));
+    const k = prog(t, tl - 0.08, 1.0, E.outQuint);
+    const ox = c * 40 * (1 - k), oy = s * 40 * (1 - k);
+    const ax = c > 0.3 ? 0 : c < -0.3 ? -100 : -50, ay = s < -0.5 ? -100 : s > 0.5 ? 0 : -50;
+    el.style.transform = `translate3d(${(lx + ox).toFixed(1)}px, ${(ly + oy).toFixed(1)}px, 0) translate(${ax}%, ${ay}%)`;
+    el.style.opacity = (k * (0.45 + 0.55 * f) * (0.55 + 0.45 * Math.max(cur, closed))).toFixed(3);
+    el.style.filter = k < 0.99 ? `blur(${(8 * (1 - k)).toFixed(2)}px)` : "none";
+  });
+
+  // the centre: what the loop is doing now
+  const ctr = document.getElementById("ctr");
+  const my = (P(-Math.PI / 2 - rot, R)[1] + P(Math.PI / 2 - rot, R)[1]) / 2;
+  ctr.style.transform = `translate3d(${CX - 320}px, ${(my - 128).toFixed(1)}px, 0) scale(${(0.94 + 0.06 * zoom).toFixed(4)})`;
+  states.forEach((s, i) => show(s.el, t, s.a, s.b, { dy: 22, blur: 12, d: 0.9, d2: 0.45 }));
+  states[0].el.style.top = "40px";
+  // the fix, typed as it is written
+  const n = Math.round(FIX.length * prog(t, T.fix + 0.1, 1.5, E.inOutCubic));
+  typed.textContent = FIX.slice(0, n);
+  caret.style.opacity = n < FIX.length || Math.floor((t - T.fix) * 2.2) % 2 === 0 ? 1 : 0;
+  document.getElementById("diff").style.opacity = prog(t, T.fix - 0.1, 0.5).toFixed(3);
+}
+
+scene({ init, render, sfx: () => [...T.lit.map((tl) => [tl, "tick", 0.55]), [T.fix + 0.1, "tick", 0.25], [T.pulse - 0.1, "hit", 0.5]] });
+</script>
+</body>
+</html>

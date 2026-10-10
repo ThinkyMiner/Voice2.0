@@ -129,6 +129,7 @@
   // ---- captions: [[from, to, text], ...] in seconds from start()
   function captions(list) {
     host();
+    if (!list.length) return;  // a clean take (VIDEO_CLEAN=1)
     const s0 = performance.now();
     let shown = -1;
     const tick = () => {
