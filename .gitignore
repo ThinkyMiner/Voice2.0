@@ -10,3 +10,4 @@ __pycache__/
 .env
 reports/qa_audit_sample.csv
 logs/
+video/out/

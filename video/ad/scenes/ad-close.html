@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · ad close</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="ad-b.css">
+<style>
+  #fx { transform-origin: 960px 480px; }
+  .line { left: 0; width: 1920px; top: 760px; text-align: center; font: 400 66px/1.1 var(--f-display); letter-spacing: -.02em; }
+  .line em.h { color: var(--amber-hi); } .line em.t { color: #5FD0C1; }
+  .wm { left: 0; top: 0; font: 400 156px/1 var(--f-display); letter-spacing: -.025em; white-space: nowrap;
+    background: linear-gradient(100deg, var(--ink) 0 42%, #FFF6E6 50%, var(--ink) 58% 100%); background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tagline { left: 0; width: 1920px; top: 612px; text-align: center; font: 400 46px/1.2 var(--f-display); letter-spacing: -.01em; color: rgba(237, 234, 226, .86); }
+  .team { left: 0; width: 1920px; top: 700px; text-align: center; font: 500 17px var(--f-mono); letter-spacing: .32em; text-transform: uppercase; color: var(--muted); }
+  #black { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 60; }
+</style>
+</head>
+<body>
+<div id="fx">
+  <canvas id="c"></canvas>
+  <div class="line abs" id="l0">The hare ships a prompt change on a <em class="h">hunch</em>.</div>
+  <div class="line abs" id="l1">The tortoise ships it on <em class="t">evidence</em>.</div>
+  <div class="wm abs" id="wm">Vani <em>Lab</em></div>
+  <div class="tagline abs" id="tag">Every prompt change, proven before it ships.</div>
+  <div class="team abs" id="team">Team Hare &amp; Tortoise</div>
+</div>
+<div class="grain"></div>
+<div id="black"></div>
+<script src="../runtime.js"></script>
+<script src="ad-b.js"></script>
+<script>
+const C = { x: 960, y: 470 }, R = 170, X0 = -60, RG = 50, GAP = 34, LY = 470;
+const L1 = C.x - X0, L2 = TAU * R, L = L1 + L2;
+let g, T, G, dust;
+
+/** A steady pace: a trapezoid speed profile, soft only at the very start and end. */
+function steady(u, r = 0.1) {
+  u = clamp(u); const v = 1 / (1 - r);
+  return u < r ? (v * u * u) / (2 * r) : u > 1 - r ? 1 - (v * (1 - u) ** 2) / (2 * r) : v * (u - r / 2);
+}
+/** The tortoise's track: along the top tangent, then clockwise round the ring from its top. */
+function along(s) {
+  if (s <= L1) return [X0 + s, C.y - R];
+  const a = -Math.PI / 2 + (s - L1) / R;
+  return [C.x + R * Math.cos(a), C.y + R * Math.sin(a)];
+}
+
+function init() {
+  g = ctx2d("c");
+  dust = makeDust(51, 70);
+  T = { hare: cue("The hare ships"), hunch: cue("on a hunch"), tort: cue("The tortoise ships"), ev: cue("on evidence"),
+    lab: cue("Vani Lab"), team: cue("By Hare and Tortoise") };
+  T.start = 0.45; T.closed = T.lab - 0.5; T.lock = T.closed + 0.75;  // lock: the glyph starts to slide
+  // the lockup: the ring glyph, then the wordmark, centred together
+  const wm = document.getElementById("wm"), w = wm.offsetWidth, total = 2 * RG + GAP + w;
+  G = { x: 960 - total / 2 + RG, y: LY };
+  wm.style.left = `${G.x + RG + GAP}px`; wm.style.top = `${LY - 0.56 * 156}px`;
+}
+
+function render(t) {
+  stage(t);
+  const dur = AD.dur;
+  const fx = document.getElementById("fx");
+  fx.style.transform = `scale(${(1 + 0.035 * prog(t, T.lock, dur - T.lock, (x) => sine(x))).toFixed(5)})`;
+  document.getElementById("black").style.opacity = prog(t, dur - 1.45, 1.4, E.inOutCubic).toFixed(3);
+  g.clearRect(0, 0, 1920, 1080);
+  drawDust(g, dust, t, 0, 0, 0.7 * (1 - prog(t, T.lock, 1.5)));
+
+  // the track: a faint rule the two of them run along, gone once the ring is made
+  const tr = life(t, 0.2, 1.2, T.closed - 0.3, 0.9) * 0.5;
+  if (tr > 0) { g.fillStyle = `rgba(${RGB.ink},${(0.32 * tr).toFixed(3)})`; for (let x = 0; x < 1920; x += 9) g.fillRect(x, C.y - R - 0.5, 2, 1); }
+
+  // the hare: a fast streak that flickers out
+  const hk = prog(t, T.hunch - 0.3, 0.75, E.outCubic), hx = lerp(-300, 1480, hk);
+  const flick = t > T.hunch + 0.25 ? (hash(Math.floor(t * 30)) > 0.42 ? 1 : 0.12) : 1;
+  const ha = (1 - prog(t, T.hunch + 0.25, 0.65, E.inCubic)) * flick * (t >= T.hunch - 0.3 ? 1 : 0);
+  if (ha > 0.01 && hk > 0) {
+    const tail = 160 + 1100 * (1 - hk) ** 1.2, y = C.y - R - 44;  // its own lane, just above
+    const gr = g.createLinearGradient(hx - tail, 0, hx, 0);
+    gr.addColorStop(0, `rgba(${RGB.amberHi},0)`); gr.addColorStop(1, `rgba(${RGB.amberHi},${ha})`);
+    g.save(); g.globalCompositeOperation = "lighter"; g.lineCap = "round";
+    for (const [w, a] of [[24, 0.07], [8, 0.24], [2.4, 1]]) { g.globalAlpha = a; g.strokeStyle = gr; g.lineWidth = w; g.beginPath(); g.moveTo(hx - tail, y); g.lineTo(hx, y); g.stroke(); }
+    g.restore();
+    bloom(g, hx, y, 50, RGB.amber, 0.45 * ha); bloom(g, hx, y, 10, RGB.amberHi, ha);
+  }
+
+  // the tortoise: a slow, steady line that keeps going, and becomes the ring
+  const sh = L * steady((t - T.start) / (T.closed - T.start));
+  const st = L1 * prog(t, T.closed - 0.15, 0.8, E.inOutCubic);           // once round, the lead-in draws into the ring
+  const lock = prog(t, T.closed + 0.25, 0.95, E.inOutCubic);             // then the ring becomes the glyph
+  const slide = prog(t, T.lock, 1.15, E.inOutCubic);                     // and steps aside for the name
+  const cx = lerp(C.x, G.x, slide), cy = lerp(C.y, G.y, slide), rr = lerp(R, RG, lock);
+  const amp = lerp(1.15 * prog(t, T.closed, 1.0, E.inOutCubic), 0.72, lock), ph = 1.1 + 0.35 * Math.sin(t * 0.6);
+  const ta = prog(t, T.start - 0.2, 0.6);
+  if (sh > 0) {
+    const pts = st < Math.min(sh, L1) ? [along(st), along(Math.min(sh, L1))] : [];
+    const span = Math.min(TAU, Math.max(0, sh - L1) / R);
+    if (span > 0) {
+      const n = Math.max(2, Math.ceil((span / TAU) * 360));
+      for (let i = 0; i <= n; i++) { const a = -Math.PI / 2 + (span * i) / n, r = ringR(a, rr, ph, -Math.PI / 2, amp); pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+    }
+    if (pts.length > 1) glow(g, poly(pts, span >= TAU - 1e-6 && st >= L1 - 1e-6), RGB.tealHi, ta * (0.85 + 0.25 * (1 - lock)), lerp(2.2, 2.4, lock), lerp(1, 0.6, lock));
+    // the head: the logo's warm dot
+    const [x, y] = sh >= L - 1 ? [cx, cy - ringR(-Math.PI / 2, rr, ph, -Math.PI / 2, amp)] : along(sh);
+    const dr = lerp(7, 0.23 * RG, lock);
+    bloom(g, x, y, lerp(70, 40, lock), RGB.amber, 0.4 * ta);
+    g.fillStyle = `rgba(${RGB.amber},${ta})`; g.beginPath(); g.arc(x, y, dr, 0, TAU); g.fill();
+    g.fillStyle = `rgba(255,236,200,${(ta * (1 - 0.6 * lock)).toFixed(3)})`; g.beginPath(); g.arc(x, y, dr * 0.55, 0, TAU); g.fill();
+  }
+  // a pulse of light as the ring closes
+  const pk = prog(t, T.closed, 1.3, E.outCubic);
+  if (pk > 0 && pk < 1) { g.strokeStyle = `rgba(${RGB.teal},${(0.55 * (1 - pk) ** 1.6).toFixed(3)})`; g.lineWidth = 1.5; g.beginPath(); g.arc(C.x, C.y, R * (1 + 0.5 * pk), 0, TAU); g.stroke(); }
+
+  // the last warm glow behind the lockup
+  const warm = prog(t, T.lock + 0.6, 3.0, E.inOutCubic) * (0.92 + 0.08 * Math.sin(t * 1.3));
+  bloom(g, 960, 500, 820, RGB.amber, 0.075 * warm);
+  bloom(g, 960, 470, 380, RGB.amberHi, 0.035 * warm);
+
+  // the type
+  show(document.getElementById("l0"), t, T.hare - 0.05, T.tort - 0.45, { dy: 24, blur: 12, d: 1.0, d2: 0.5 });
+  show(document.getElementById("l1"), t, T.tort - 0.05, T.closed + 0.15, { dy: 24, blur: 12, d: 1.0, d2: 0.5 });
+  const wm = document.getElementById("wm");
+  show(wm, t, T.lock + 0.1, Infinity, { dy: 0, dx: -70, blur: 14, d: 1.4 });
+  // the name comes out from behind the glyph: nothing of it shows left of the glyph's edge
+  const edge = cx + rr * 1.3 - (parseFloat(wm.style.left) - 70 * (1 - prog(t, T.lock + 0.1, 1.4, E.outQuint)));
+  wm.style.clipPath = `inset(-20% -5% -20% ${Math.max(0, edge).toFixed(1)}px)`;
+  wm.style.backgroundPosition = `${lerp(100, 0, prog(t, T.lock + 1.0, 1.8, E.inOutCubic)).toFixed(2)}% 0`;
+  show(document.getElementById("tag"), t, T.lock + 0.9, Infinity, { dy: 16, blur: 10, d: 1.3 });
+  show(document.getElementById("team"), t, Math.max(T.team, T.lock + 1.3), Infinity, { dy: 10, blur: 6, d: 1.3 });
+}
+
+scene({ init, render, sfx: () => [[T.hunch - 0.3, "tick", 0.3], [T.closed, "tick", 0.35], [T.lock, "swell", 0.9]] });
+</script>
+</body>
+</html>

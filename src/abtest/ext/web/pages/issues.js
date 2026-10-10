@@ -14,13 +14,12 @@ const TOP = 3;  // causes drawn as full cards; the rest are one line each, opene
 function noCauses(v, pv, c) {
   if (pv?.fix_id) {
     return empty({ title: `${v} has no calls of its own yet`, glyph: "doc",
-      body: `${v} is ${pv.status === "candidate" ? "an untested candidate" : `a ${pv.status} version`} written by fix ${pv.fix_id}. Root causes come from a version's own judged calls, and ${v} has none until its replay or A/B test runs.`,
+      body: `${v} is ${pv.status === "candidate" ? "an untested candidate" : `a ${pv.status} version`} from fix ${pv.fix_id}; its causes come once its own calls are judged.`,
       action: html`<div class="row" style="justify-content:center"><a class="btn sm" href="#/fixes/${enc(pv.fix_id)}">Open the fix</a><a class="btn sm ghost" href="#/issues">Production's root causes</a></div>` });
   }
   const mine = c?.production_version === v ? c : null;
   return empty({ title: `Nothing ranked for ${v} yet`, glyph: "ring", action: html`<a class="btn sm" href="#/">Open the Loop page</a>`,
-    body: mine ? `Root causes are ranked at the Improve stage, from the judge's failed checks. ${cycleAt(mine)}`
-      : `Root causes are ranked at the Improve stage of a loop cycle, from the judge's failed checks. ${c ? `The loop is in cycle ${c.n}, on ${c.production_version}.` : "No cycle has started yet: advance the loop from the Loop page."}` });
+    body: `Causes are ranked at the Improve stage. ${mine ? cycleAt(mine) : c ? `The loop is in cycle ${c.n}, on ${c.production_version}.` : "No cycle has started yet."}` });
 }
 
 export async function render(el, { params }) {
@@ -37,7 +36,7 @@ export async function render(el, { params }) {
   const tabs = html`<div class="seg" role="group" aria-label="Prompt version">${(versions.length ? versions : [v]).map((x) =>
     html`<a href="#/issues?version=${enc(x)}" aria-current="${x === v}">${x}${x === pr.production ? " · production" : ""}</a>`)}</div>`;
   const head = (title) => html`<div class="page-head"><div><div class="eyebrow">Improve · Prompt ${v}</div><h1 class="title">${title}</h1>
-    <p class="lede">The judge's failed checks, grouped by what went wrong and ranked by what they cost. The loop fixes the top untried prompt or flow cause; speech, catalogue and platform causes need engineering work.</p></div>${tabs}</div>`;
+    <p class="lede">The judge's failed checks, grouped by what went wrong and ranked by what they cost.</p></div>${tabs}</div>`;
   if (!items.length) return mount(el, html`${head("Root causes")}${noCauses(v, pv, cycles[0])}`);
 
   const rubric = Object.fromEntries(rb.items.map((x) => [x.id, x]));
@@ -46,7 +45,6 @@ export async function render(el, { params }) {
   const fixOf = {};
   for (const f of fx.items) fixOf[f.root_cause_id] ??= f;  // newest first: the latest try at each cause
   const candOf = Object.fromEntries(pr.items.filter((p) => p.fix_id).map((p) => [p.fix_id, p.version]));
-  const under = {}, nth = items.map((i) => (under[i.rubric_id] = (under[i.rubric_id] || 0) + 1));
   const byId = Object.fromEntries(items.map((i) => [i.id, i]));
   const ranked = [...cycles].reverse().find((c) => c.production_version === v);  // the first cycle on v ranked them
   const cur = cycles[0]?.production_version === v && cycles[0].root_cause_id && !cycles[0].outcome ? cycles[0] : null;
@@ -67,22 +65,22 @@ export async function render(el, { params }) {
     if (f) {
       const st = fixSteps(f, cycles.find((c) => c.fix_id === f.id));
       const tone = st.some((s) => s.state === "fail") ? "fail" : st.some((s) => s.state === "now") ? "now" : "done";
-      return html`<a class="ix-status ${tone}" href="#/fixes/${enc(f.id)}"><i aria-hidden="true"></i><span>Fix drafted${candOf[f.id] ? ` (${candOf[f.id]})` : ""}: ${fixPhrase(st)}</span><b>Open the fix →</b></a>`;
+      return html`<a class="ix-status ${tone}" href="#/fixes/${enc(f.id)}"><i aria-hidden="true"></i><span>Fix${candOf[f.id] ? ` ${candOf[f.id]}` : ""}: ${fixPhrase(st)}</span><b>Open the fix →</b></a>`;
     }
-    return FIXABLE.includes(i.type) ? html`<div class="ix-status"><i aria-hidden="true"></i><span>Not tried yet: the loop takes untried prompt and flow causes in this order</span></div>`
-      : html`<div class="ix-status ix-eng"><i aria-hidden="true"></i><span>Needs ${WORK[i.type] || i.type} work: the loop does not edit the prompt for this</span></div>`;
+    return FIXABLE.includes(i.type) ? html`<div class="ix-status" title="The loop takes untried prompt and flow causes in rank order."><i aria-hidden="true"></i><span>Not tried yet</span></div>`
+      : html`<div class="ix-status ix-eng" title="The loop does not edit the prompt for this."><i aria-hidden="true"></i><span>Needs ${WORK[i.type] || i.type} work</span></div>`;
   };
   const callRow = (i, id, j) => {  // example_call_ids are fatal first, so when the list is whole its index gives the grade
     const g = (i.example_call_ids.length === i.n_calls) ? (j < i.n_fatal ? "fatal" : "non_fatal") : null, c = call[id];
     return html`<a class="ix-call ${g ? "" : "nog"}" href="#/calls/${enc(id)}">${g ? grade(g) : ""}<span class="mono">${id}</span><span class="sum">${c?.summary || ""}</span></a>`;
   };
-  const meta = (i, k, chip = true) => {
+  const meta = (i, chip = true) => {
     const rub = rubric[i.rubric_id];
-    return html`<div class="ix-meta">${chip ? typeChip(i.type) : ""}${rub ? html`<a href="#/rubrics/${enc(i.rubric_id)}">${rub.name}</a>` : html`<span>${i.rubric_id}</span>`}${under[i.rubric_id] > 1 ? html`<span class="muted">cause ${nth[k]} of ${under[i.rubric_id]} under this rubric</span>` : ""}</div>`;
+    return html`<div class="ix-meta">${chip ? typeChip(i.type) : ""}${rub ? html`<a href="#/rubrics/${enc(i.rubric_id)}">${rub.name}</a>` : html`<span>${i.rubric_id}</span>`}</div>`;
   };
   const body = (i) => {
     const ids = i.example_call_ids || [];
-    return html`<p class="ix-desc">${i.description}</p>
+    return html`<p class="ix-desc" title="${i.description}">${i.description}</p>
       <div class="ix-facts">${status(i)}${trust(i.rubric_id)}</div>
       ${ids.length ? html`<div class="ix-ex"><div class="eyebrow">${ids.length > 3 ? "Open these first" : ids.length === 1 ? "The call" : "The calls"}</div>${ids.slice(0, 3).map((id, j) => callRow(i, id, j))}
         ${ids.length > 3 ? html`<details class="ix-all" data-id="${i.id}"><summary>See the other ${int(ids.length - 3)} calls</summary><div class="ix-more"></div></details>` : ""}</div>` : ""}`;
@@ -92,14 +90,14 @@ export async function render(el, { params }) {
     const fb = i.n_calls ? (100 * i.n_fatal) / i.n_calls : 0;
     return html`<article class="cause" id="${i.id}">
       <div class="rank">${k + 1}</div>
-      <div class="ix-head">${meta(i, k)}<h3>${i.name}</h3></div>
+      <div class="ix-head">${meta(i)}<h3>${i.name}</h3></div>
       <div class="ix-mets">
         <div><div class="lbl">Calls affected</div><div class="val"><b>${int(i.n_calls)}</b> of ${int(i.n_audited)} · ${pct(i.frequency)}</div><div class="bar"><span class="s-a" style="flex-basis:${(i.frequency * 100).toFixed(1)}%"></span></div></div>
         <div><div class="lbl">How bad</div><div class="val"><b>${int(i.n_fatal)}</b> fatal · <b>${int(i.n_non_fatal)}</b> non-fatal</div>
           <div class="bar" role="img" aria-label="${int(i.n_fatal)} fatal, ${int(i.n_non_fatal)} non-fatal">${fb > 0 ? html`<span class="s-fatal" style="flex-basis:${fb.toFixed(1)}%"></span>` : ""}${fb < 100 ? html`<span class="s-non_fatal" style="flex-basis:${(100 - fb).toFixed(1)}%"></span>` : ""}</div></div>
       </div>
       <div class="ix-pri" title="As costly as ${fix(i.priority, 1)} fatal calls in every 100 judged; a non-fatal counts as a third.">
-        <div class="eyebrow">Priority</div><div class="big ${k === 0 ? "accent" : ""}">${fix(i.priority, 1)}</div><div class="cap">fatal-call equivalents per 100 calls</div>${priBar(i)}</div>
+        <div class="eyebrow">Priority</div><div class="big ${k === 0 ? "accent" : ""}">${fix(i.priority, 1)}</div><div class="cap">fatal-equivalents per 100</div>${priBar(i)}</div>
       <div class="ix-body">${body(i)}</div>
     </article>`;
   };
@@ -110,28 +108,30 @@ export async function render(el, { params }) {
       <span class="nm"><b>${i.name}</b><small>${typeChip(i.type)}<span>${rubric[i.rubric_id]?.name || i.rubric_id}</span><span>· ${where}</span></small></span>
       <span class="n"><b>${int(i.n_calls)}</b> of ${int(i.n_audited)} calls<small>${int(i.n_fatal)} fatal · ${int(i.n_non_fatal)} non-fatal</small></span>
       <span class="p" title="Priority: as costly as ${fix(i.priority, 1)} fatal calls in every 100 judged"><b>${fix(i.priority, 1)}</b>${priBar(i)}</span>
-    </summary><div class="ix-row-body">${meta(i, k, false)}${body(i)}</div></details>`;
+    </summary><div class="ix-row-body">${meta(i, false)}${body(i)}</div></details>`;
   };
   const list = () => {
     const shown = items.map((i, k) => ({ i, k })).filter(({ i }) => !type || i.type === type);
     const top = shown.slice(0, TOP), rest = shown.slice(TOP);
     return html`${top.map(card)}
-      ${rest.length ? html`<section class="ix-rest" aria-label="More root causes"><div class="ix-rest-head"><h3>${int(rest.length)} more cause${rest.length === 1 ? "" : "s"}, ranked</h3><span>Open one to see what went wrong and its calls.</span></div>
+      ${rest.length ? html`<section class="ix-rest" aria-label="More root causes"><div class="ix-rest-head"><h3>${int(rest.length)} more cause${rest.length === 1 ? "" : "s"}, ranked</h3></div>
         <div class="ix-cols" aria-hidden="true"><span>#</span><span>Cause</span><span>Calls affected</span><span>Priority</span></div>${rest.map(row)}</section>` : ""}`;
   };
 
   mount(el, html`${head(html`${int(items.length)} root causes, <em>ranked</em>`)}
     <div class="ix-context">
-      <p>Ranked from the judge's grades of <b>${int(n0)} ${src === "production" ? "production calls" : src === "replay" ? "simulated replay calls" : "calls"}</b> on ${v}${src === "audited" ? ", the buyer-side calls IndiaMART's QA team audited" : ""}${ranked ? html`, in <a href="#/">cycle ${ranked.n}</a> (opened ${when(ranked.started_ts)})` : ""}.${src === "production" ? " IndiaMART's QA-audited calls stay out of the ranking: they are kept to check the judge." : ""}</p>
-      ${ag ? html`<p class="warn"><span>The judge gives the same overall grade as IndiaMART's QA auditors on <b>${pct(ag.overall_accuracy, 0)}</b> of ${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls (κ ${fix(ag.overall_kappa)}, ${kappaWord(ag.overall_kappa)}${ag.calibrated ? `; calibrated on ${int(ag.n_tuning)} other calls` : ""}). Treat each cause as a lead to confirm by listening.</span> <a href="#/audit">Agreement by rubric</a></p>`
-        : html`<p class="warn"><span>The judge has not been compared with IndiaMART's QA auditors yet, so nothing here is checked by a person.</span></p>`}
-      ${cur && curK >= 0 ? html`<p class="now"><span>Now: cycle ${cur.n} is working on <a href="#/issues?version=${enc(v)}&rc=${enc(cur.root_cause_id)}">#${curK + 1}, ${items[curK].name}</a>${curFix ? ` (${fixPhrase(fixSteps(curFix, cur))})` : ` (${stageName(cur.stage)})`}.</span>${curFix ? html` <a href="#/fixes/${enc(curFix.id)}">Open the fix</a>` : ""}</p>` : ""}
+      <p title="${ranked ? `Cycle ${ranked.n} opened ${when(ranked.started_ts)}.` : ""}${src === "production" ? " IndiaMART's QA-audited calls stay out of the ranking: they are kept to check the judge." : ""}">Ranked from <b>${int(n0)} ${src === "production" ? "production calls" : src === "replay" ? "simulated replay calls" : src === "audited" ? "QA-audited calls" : "calls"}</b> on ${v}${ranked ? html` · <a href="#/">cycle ${ranked.n}</a>` : ""}</p>
+      ${ag ? html`<p class="warn" title="Each cause shows how well the judge agrees with QA on its own check.${ag.calibrated ? ` Calibrated on ${int(ag.n_tuning)} other calls.` : ""} Treat each cause as a lead to confirm by listening."><span>${ag.overall_kappa != null && ag.overall_kappa < 0.4
+        ? html`Overall grade not reliable yet: the judge matches QA on <b>${int(Math.round(ag.overall_accuracy * ag.n_calls))}</b> of ${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls (κ ${fix(ag.overall_kappa)}, ${kappaWord(ag.overall_kappa)}).`
+        : html`The judge matches QA's overall grade on <b>${pct(ag.overall_accuracy, 0)}</b> of ${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls (κ ${fix(ag.overall_kappa)}, ${kappaWord(ag.overall_kappa)}).`}</span> <a href="#/audit">Agreement by check</a></p>`
+        : html`<p class="warn"><span>Not yet compared with IndiaMART's QA auditors: nothing here is checked by a person.</span></p>`}
+      ${cur && curK >= 0 ? html`<p class="now"><span>Now: cycle ${cur.n} is on <a href="#/issues?version=${enc(v)}&rc=${enc(cur.root_cause_id)}">#${curK + 1}, ${items[curK].name}</a>${curFix ? "" : ` (${stageName(cur.stage)})`}.</span>${curFix ? html` <a href="#/fixes/${enc(curFix.id)}">Open the fix</a>` : ""}</p>` : ""}
     </div>
     <div class="ix-tools">
       ${Object.keys(count).length > 1 ? html`<div class="row" id="ix-type"><span class="muted" style="font-size:12.5px">Show</span>${seg([["", `All ${items.length}`], ...TYPES.filter(([t]) => count[t]).map(([t, l]) => [t, `${l} ${count[t]}`])], type)}</div>` : html`<span></span>`}
       <details class="ix-how"><summary>How ranking works</summary><div>
-        <p>Priority = 100 × (3 × fatal + non-fatal) ÷ (3 × calls judged). A fatal failure counts three times a non-fatal one, and every cause is divided by all ${int(n0)} judged calls, so causes compare across rubrics: one that hurts many calls a little can outrank one that hurts a few calls badly.</p>
-        <p>Priority ${fix(items[0].priority, 1)} means as costly as ${int(items[0].priority)} fatal calls in every 100.</p>${r.formula ? html`<code>${r.formula}</code>` : ""}</div></details>
+        <p>Priority = 100 × (3 × fatal + non-fatal) ÷ (3 × calls judged). A fatal counts three times a non-fatal, and every cause is divided by all ${int(n0)} judged calls, so causes compare across rubrics.</p>
+        <p>Priority ${fix(items[0].priority, 1)}: as costly as ${int(items[0].priority)} fatal calls in every 100.</p>${r.formula ? html`<code>${r.formula}</code>` : ""}</div></details>
     </div>
     <div id="ix-list">${list()}</div>`);
 

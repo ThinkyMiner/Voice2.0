@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · ad · open</title>
+<link rel="stylesheet" href="ad.css">
+<style>
+  #num { top: 268px; font-size: 300px; font-weight: 160; line-height: 1; text-shadow: 0 0 60px rgba(237, 234, 226, .10); }
+  #sub { top: 612px; font-size: 60px; line-height: 1; color: var(--ink-2); }
+  #sub em { color: var(--ink); }
+  #sub > * { display: inline-block; }
+  #days { left: 540px; width: 840px; top: 722px; height: 60px; }
+  #days .rail { position: absolute; left: 0; right: 0; top: 10px; height: 1px; background: var(--hair); transform-origin: 0 50%; }
+  #days .lit { position: absolute; left: 0; top: 10px; height: 1px; width: 840px; transform-origin: 0 50%;
+    background: linear-gradient(90deg, rgba(63, 184, 169, 0), rgba(63, 184, 169, .55) 70%, #7FE0D3); }
+  #days .head { position: absolute; top: 10px; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+    background: #7FE0D3; box-shadow: 0 0 18px 6px rgba(63, 184, 169, .45), 0 0 4px 1px #fff; }
+  #days .d { position: absolute; top: 0; width: 80px; margin-left: -40px; text-align: center; }
+  #days .d i { display: block; width: 5px; height: 5px; margin: 8px auto 16px; border-radius: 50%; background: var(--ink-3); }
+  #days .d b { font: 400 15px var(--f-mono); letter-spacing: .22em; text-transform: uppercase; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div id="world">
+  <h1 id="num" class="fig center-x">30,000</h1>
+  <p id="sub" class="serif center-x"><span id="sub-a">conversations,</span> <em id="sub-b">every week.</em></p>
+  <div id="days"><div class="rail"></div><div class="lit"></div><div class="head"></div></div>
+</div>
+<script src="../runtime.js"></script>
+<script src="ad-kit.js"></script>
+<script>
+// Thirty thousand points of light, one per conversation, build out of the dark in a slow push; "30,000" lands on
+// "Thirty thousand" and a pulse runs through them; a light sweeps the seven days on "Every week"; on "One voice"
+// they stream into one living three-strand waveform; on "And one prompt" it flattens and the same points assemble
+// into the prompt's line of text, which goes crisp, a caret blinking, a light passing over "every word".
+const N = 30000, NI = 24000, NT = 28500;           // [0, NI) warm white, [NI, NT) teal, [NT, N) amber
+const F = 820, FOCUS = 1350, CX = 960, CY = 540;
+const PROMPT = "Politely ask the buyer for the quantity, with a unit.", PFONT = '400 44px "Geist Mono"', PY = 556;
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+let ctx, X, Y, S, A, P, nums, subA, subB, days, rail, lit, head, dayEls;
+let tn, tc, tw7, tv, tp, tw, dur;
+
+function init(AD) {
+  dur = AD.dur;
+  tn = cue("Thirty thousand"); tc = cue("conversations"); tw7 = cue("Every week"); tv = cue("One voice");
+  tp = cue("And one prompt"); tw = cue("every word");
+  const world = K.stage();
+  ctx = K.canvas(world);
+  world.prepend(ctx.canvas);
+  nums = K.chars(document.getElementById("num"));
+  subA = document.getElementById("sub-a"); subB = document.getElementById("sub-b");
+  days = document.getElementById("days");
+  rail = days.querySelector(".rail"); lit = days.querySelector(".lit"); head = days.querySelector(".head");
+  dayEls = DAYS.map((d, i) => {
+    const el = document.createElement("div"); el.className = "d"; el.style.left = `${(i + 0.5) * 120}px`;
+    el.innerHTML = `<i></i><b>${d}</b>`; days.append(el); return el;
+  });
+
+  // the points: a star in 3D, a place on the waveform, a pixel of the prompt's text
+  const r = rng(30000);
+  P = { x: new Float32Array(N), y: new Float32Array(N), z: new Float32Array(N), b: new Float32Array(N), t0: new Float32Array(N),
+        u: new Float32Array(N), j: new Float32Array(N), d: new Float32Array(N), tx: new Float32Array(N), ty: new Float32Array(N) };
+  for (let i = 0; i < N; i++) {
+    P.x[i] = (r() * 2 - 1) * 2500; P.y[i] = (r() * 2 - 1) * 1450; P.z[i] = 320 + r() ** 0.85 * 3900;
+    P.b[i] = r() ** 5; P.u[i] = r(); P.d[i] = r();
+    const g = r() < 0.08 ? 7 : 1.1;  // most sit on the strand, a few float as dust around it
+    P.j[i] = (r() + r() + r() - 1.5) * g;
+  }
+  // they appear brightest first, slowly, then all at once: n(t) ~ N ((t - 0.3) / 2.1)^2.4
+  const order = [...Array(N).keys()].map((i) => [i, P.b[i] * (0.55 + 0.45 * r())]).sort((a, b) => b[1] - a[1]);
+  order.forEach(([i], k) => (P.t0[i] = 0.3 + (tn - 0.35) * (k / N) ** (1 / 2.4)));
+  // text targets, ordered left to right, so the line folds into its own letters
+  const tp_ = K.textPts(PROMPT, PFONT, CX, PY, { step: 2 });
+  const pts = [];
+  for (let k = 0; k < tp_.length; k += 2) pts.push([tp_[k], tp_[k + 1]]);
+  pts.sort((a, b) => a[0] - b[0]);
+  for (let i = 0; i < N; i++) { const q = pts[Math.min(pts.length - 1, Math.floor(P.u[i] * pts.length))]; P.tx[i] = q[0]; P.ty[i] = q[1]; }
+  X = new Float32Array(N); Y = new Float32Array(N); S = new Float32Array(N); A = new Float32Array(N);
+}
+
+// three strands of one voice: a speech-like envelope moving along a tapered line
+function wave(u, t, s) {
+  const env = Math.sin(Math.PI * u) ** 1.6;
+  const talk = 0.25 + 0.75 * noise(u * 5.5 - t * 1.9, 3 + s) ** 1.5;
+  const ph = [0, 2.1, 4.0][s], amp = [1, 0.62, 0.38][s];
+  return amp * env * talk * (92 * Math.sin(u * 31 + t * 4.6 + ph) + 38 * Math.sin(u * 67 - t * 6.7 + ph * 1.7) + 16 * Math.sin(u * 131 + t * 10.3));
+}
+
+function render(t) {
+  K.frame(t, dur);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, K.W, K.H);
+  type(t);
+
+  // the camera: a slow push into the field, a slight roll; later a push in on the line of text
+  const cz = 30 * t, roll = 0.014 * t, cr = Math.cos(roll), sr = Math.sin(roll);
+  const conv0 = tv - 0.5, form0 = tp + 0.5;
+  const amp = K.smooth(tv - 0.1, tv + 0.75, t) * (1 - K.smooth(tp + 0.1, tp + 0.75, t));
+  const lineW = 1540 - 140 * K.smooth(tp + 0.1, tp + 0.75, t);
+  const pulse = t > tn - 0.1 && t < tn + 2;
+  for (let i = 0; i < N; i++) {
+    const zr = P.z[i] - cz;
+    // the star
+    let x = CX, y = CY, s = 1, a = 0;
+    if (zr > 40) {
+      const px = P.x[i] * cr - P.y[i] * sr, py = P.x[i] * sr + P.y[i] * cr;
+      x = CX + (px * F) / zr; y = CY + (py * F) / zr;
+      const blur = zr < FOCUS ? 2600 * (1 / zr - 1 / FOCUS) : 520 * (1 / FOCUS - 1 / zr);
+      s = 1.05 + 0.9 * P.b[i] + blur;
+      a = (0.09 + 0.91 * P.b[i]) * Math.min(1, ((2.1 + 0.9 * P.b[i]) / s) ** 1.7) * clamp(1.5 - zr / 3600) * K.smooth(40, 220, zr);
+      a *= prog(t, P.t0[i], 0.6) * (0.82 + 0.18 * Math.sin(t * (1.3 + 2.4 * P.d[i]) + i));
+      if (pulse) { const dd = Math.hypot(x - CX, y - 430), w = (dd - 1700 * (t - tn + 0.05)) / 150; a *= 1 + 1.7 * Math.exp(-w * w) * (1 - prog(t, tn + 0.6, 1.2)); }
+    }
+    // the waveform
+    const k = E.inOutCubic(clamp((t - conv0 - 0.4 * P.d[i]) / 0.95));
+    if (k > 0) {
+      const g = i < NI ? 0 : i < NT ? 1 : 2, u = P.u[i];
+      const wx = CX + (u - 0.5) * lineW, wy = CY + amp * wave(u, t, g) + P.j[i] * (1 + 2 * amp);
+      x = lerp(x, wx, k); y = lerp(y, wy, k); s = lerp(s, 1.35, k);
+      a = lerp(a, (0.1 + 0.22 * P.b[i]) * (g ? 1.25 : 0.9), k);
+    }
+    // the prompt's letters
+    const q = E.inOutCubic(clamp((t - form0 - 0.42 * P.u[i]) / 0.95));
+    if (q > 0) { x = lerp(x, P.tx[i], q); y = lerp(y, P.ty[i], q); s = lerp(s, 1.2, q); a *= 1 - 0.8 * clamp((t - form0 - 0.42 * P.u[i] - 0.8) / 0.6); }
+    X[i] = x; Y[i] = y; S[i] = s; A[i] = a;
+  }
+
+  const zoom = 1 + 0.06 * E.inOutCubic(clamp((t - tp) / (dur - tp)));
+  ctx.setTransform(zoom, 0, 0, zoom, CX * (1 - zoom), CY * (1 - zoom));
+  ctx.globalCompositeOperation = "lighter";
+  const wk = K.smooth(conv0, tv + 0.9, t), tk = K.smooth(form0, tp + 1.7, t);
+  const inkC = K.mix(K.mix(K.C.ink, K.C.tealHi, 0.55 * wk), K.C.ink, tk);
+  K.dots(ctx, X, Y, S, A, 0, NI, inkC);
+  K.dots(ctx, X, Y, S, A, NI, NT, K.mix(K.C.teal, "#BFEFE8", 0.5 * tk));
+  K.dots(ctx, X, Y, S, A, NT, N, K.mix(K.C.amberHi, "#F5E6CC", tk));
+
+  // the line itself, crisp, with a light that passes over its words
+  // it goes crisp behind the front where its points have landed (left to right, as they arrive)
+  const front = (t - form0 - 0.75) / 0.42, c = clamp(front + 0.3);
+  if (c > 0) {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.font = PFONT; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    const tw0 = ctx.measureText(PROMPT).width, x0 = CX - tw0 / 2, mask = ctx.createLinearGradient(x0, 0, x0 + tw0, 0);
+    for (let k = 0; k <= 10; k++) mask.addColorStop(k / 10, `rgba(237,234,226,${K.smooth(-0.25, 0.05, front - k / 10).toFixed(3)})`);
+    ctx.globalAlpha = 1; ctx.fillStyle = mask; ctx.fillText(PROMPT, CX, PY);
+    const sw = prog(t, tw - 0.15, 1.5, E.inOutCubic);
+    if (sw > 0 && sw < 1) {
+      const hx = CX - 820 + sw * 1640, g = ctx.createLinearGradient(hx - 220, 0, hx + 220, 0);
+      g.addColorStop(0, "rgba(127,224,211,0)"); g.addColorStop(0.5, "rgba(170,240,230,.95)"); g.addColorStop(1, "rgba(127,224,211,0)");
+      ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = g; ctx.fillText(PROMPT, CX, PY);
+    }
+    // the eyebrow and the caret
+    ctx.globalCompositeOperation = "source-over";
+    ctx.font = '400 15px "Geist Mono"'; ctx.letterSpacing = "4px"; ctx.fillStyle = K.C.teal;
+    ctx.globalAlpha = K.smooth(tp + 1.5, tp + 2.1, t) * 0.9; ctx.fillText("THE PROMPT", CX, PY - 92);
+    ctx.letterSpacing = "0px";
+    const w = (() => { ctx.font = PFONT; return ctx.measureText(PROMPT).width; })();
+    ctx.globalAlpha = c * (Math.floor((t - tp) * 1.8) % 2 ? 0.15 : 0.95); ctx.fillStyle = K.C.tealHi;
+    ctx.fillRect(CX + w / 2 + 10, PY - 38, 3, 48);
+    ctx.globalAlpha = 1;
+  }
+  K.bloom(ctx, 0.55 - 0.25 * tk, 0.6);
+}
+
+// the type: 30,000 rises letter by letter, "conversations, every week.", the days swept
+function type(t) {
+  const out = prog(t, tv - 0.5, 0.55, E.inOutCubic);
+  nums.forEach((el, j) => K.rise(el, E.outCubic(clamp((t - (tn - 0.22) - 0.055 * j) / 0.95)) * (1 - out), { y: 46 - 70 * out, blur: 16 }));
+  const num = document.getElementById("num");
+  num.style.transform = `scale(${1 + 0.03 * clamp((t - tn) / 3)})`;
+  K.rise(subA, prog(t, tc - 0.12, 0.8) * (1 - out), { y: 18 - 40 * out, blur: 8 });
+  K.rise(subB, prog(t, tw7 - 0.1, 0.8) * (1 - out), { y: 18 - 40 * out, blur: 8 });
+  const sweep = prog(t, tw7 - 0.05, 1.15, E.inOutCubic), shown = prog(t, tw7 - 0.3, 0.6);
+  days.style.opacity = (shown * (1 - out)).toFixed(3);
+  rail.style.transform = `scaleX(${shown})`;
+  lit.style.transform = `scaleX(${sweep})`; lit.style.opacity = 1 - 0.6 * prog(t, tw7 + 1.2, 0.6);
+  head.style.left = `${sweep * 840}px`; head.style.opacity = sweep > 0 ? 1 - prog(t, tw7 + 1.1, 0.4) : 0;
+  dayEls.forEach((el, i) => {
+    const on = K.smooth(0, 0.06, sweep - (i + 0.5) / 7);
+    el.querySelector("i").style.background = K.mix("#4A4945", K.C.tealHi, on);
+    el.querySelector("i").style.boxShadow = on > 0.5 ? `0 0 10px 2px rgba(63,184,169,${0.5 * (1 - prog(t, tw7 + 1.3, 0.5))})` : "none";
+    el.querySelector("b").style.color = K.mix("#5A5852", "#CFCBC2", on);
+  });
+}
+
+scene({
+  init, render,
+  sfx: () => [[0.3, "shimmer", 0.35], [cue("Thirty thousand", -0.05), "hit", 0.6], [cue("Every week"), "tick", 0.35],
+    [cue("One voice", -0.3), "whoosh", 0.45], [cue("And one prompt", 0.4), "shimmer", 0.5]],
+});
+</script>
+</body>
+</html>

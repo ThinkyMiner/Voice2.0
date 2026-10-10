@@ -280,7 +280,7 @@ def _listen(call: dict, source: CallSource, model: str | None) -> Transcript:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="python -m abtest.ext.listen",
+    p = argparse.ArgumentParser(prog="python -m abtest.ext.listen", allow_abbrev=False,  # no prefix of a --yes-* flag
                                 description="Download and transcribe Vani call recordings.")
     p.add_argument("--source", choices=["production", "audited"], required=True)
     p.add_argument("--limit", type=int, help="the first N calls of the source only")

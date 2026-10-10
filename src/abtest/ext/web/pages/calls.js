@@ -2,12 +2,12 @@
 // here. #/calls/<id>: why the judge graded the call so, the recording, the transcript with the
 // judge's margin notes, and the scorecard beside IndiaMART's human QA grades.
 import { get, state } from "../api.js";
-import { $, $$, html, raw, esc, mount, int, pct, clock, mmss, cap, grade, flagChips, FLAGS, GRADE, empty, enc, toast, reducedMotion } from "../ui.js";
+import { $, $$, html, raw, esc, mount, int, pct, clock, mmss, cap, grade, flagChips, FLAGS, GRADE, empty, enc, toast, reducedMotion, kappaWord } from "../ui.js";
 import { decodePeaks, drawWave } from "../viz.js";
 
 const PAGE = 25;
 const LANG = { hi: "Hindi", en: "English", te: "Telugu", mixed: "Hinglish" };
-const SOURCE = { production: "Production", audited: "Audited", replay: "Replay", fixture: "Fixture" };
+const SOURCE = { production: "Production", audited: "Audited", replay: "Replay", fixture: "Fixture", live: "Live" };
 const SEV = { fatal: 2, non_fatal: 1, pass: 0 };
 const ACTION = "action";  // pseudo-flag: any flag but low confidence (the ones a QA lead acts on)
 const sev = (g) => SEV[g] ?? -1;
@@ -60,8 +60,8 @@ const SORTS = {  // one sensible direction each; ties fall back to the call id
 };
 const LABELS = { source: "Source", overall: "Judge grade", human: "QA grade", vs: "Judge vs QA", flag: "Flag", disp: "Disposition" };
 const GRADES = [["", "Any"], ["fatal", "Fatal"], ["non_fatal", "Non-fatal"], ["pass", "Pass"]];
-const SEGS = { source: [["", "All"], ["production", "Production"], ["audited", "Audited"], ["replay", "Replay"]], overall: GRADES };
-const REPLAY_NOTE = "Simulated replay conversations are not listed here: open Audit and pick the candidate prompt version.";
+const SEGS = { source: [["", "All"], ["production", "Production"], ["audited", "Audited"], ["replay", "Replay"], ["live", "Live"]], overall: GRADES };
+const REPLAY_NOTE = "Replay conversations are on Audit, under the candidate prompt version.";
 
 function readParams(params) {
   const f = Object.fromEntries(KEYS.map((k) => [k, params.get(k) || ""]));
@@ -84,7 +84,7 @@ const callRow = (c) => html`<tr class="link" data-id="${c.call_id}">
   <td class="c-judge"><span class="lbl">Judge</span>${c.overall ? grade(c.overall) : html`<span class="muted">not judged</span>`}${c.n_fatal + c.n_non_fatal ? html`<div class="sub">${paramsLine(c)}</div>` : ""}</td>
   <td class="c-qa${c.human_overall ? "" : " none"}"><span class="lbl">QA</span>${c.human_overall ? grade(c.human_overall) : html`<span class="muted">not audited</span>`}</td>
   <td class="c-vs">${vsMark(c)}</td>
-  <td class="c-sum">${c.disposition ? html`<span class="disp">${c.disposition}</span>` : ""}<div class="sum">${c.summary || ""}</div>${c.risk_flags.length ? html`<div class="flags">${flagChips(c.risk_flags)}</div>` : ""}</td></tr>`;
+  <td class="c-sum"><div class="sum">${c.summary || ""}</div>${c.disposition ? html`<span class="disp">${c.disposition}</span>` : ""}${c.risk_flags.length ? html`<div class="flags">${flagChips(c.risk_flags)}</div>` : ""}</td></tr>`;
 const sortTh = (f, key, label) => html`<th aria-sort="${f.sort === key ? (key === "id" ? "ascending" : "descending") : "none"}"><button type="button" class="th-sort" data-sort="${key}" title="Sort: ${SORTS[key][0]}">${label}<span aria-hidden="true">${f.sort === key ? " ↓" : ""}</span></button></th>`;
 const pager = (p, n) => html`<nav class="pager" aria-label="Pages"><button type="button" class="btn sm" data-page="${p - 1}" ${p <= 1 ? raw("disabled") : ""}>‹ Previous</button>
   <span>Page ${p} of ${n}</span><button type="button" class="btn sm" data-page="${p + 1}" ${p >= n ? raw("disabled") : ""}>Next ›</button></nav>`;
@@ -116,9 +116,9 @@ export async function renderList(el, { params }) {
   const f = readParams(params), kp = state.overview?.kpis;
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Listen</div><h1 class="title">Calls</h1>
-      <p class="lede">Every call with a transcript, worst first: the judge's grade and, where IndiaMART's QA team audited the call, their grade beside it.${kp?.agreement_overall != null
-        ? html` The judge matches QA on ${pct(kp.agreement_overall, 0)} of audited calls${kp.agreement_kappa != null && kp.agreement_kappa < 0.4 ? ", about chance, so treat its grades as a first pass" : ""} (<a href="#/audit">Audit</a>).` : ""}</p>
-      <p class="calls-start">Start with the <a href="#/calls?overall=fatal">fatal calls</a>, the <a href="#/calls?vs=disagree">calls where the judge and QA disagree</a> or the <a href="#/calls?flag=human_request">callers who asked for a human</a>.</p></div></div>
+      <p class="lede">Every transcribed call, worst first, with the judge's grade beside QA's.${kp?.agreement_overall != null
+        ? html` The judge matches QA's overall grade on ${pct(kp.agreement_overall, 0)} of ${kp.agreement_n != null ? int(kp.agreement_n) : "the"} ${kp.agreement_held_out ? "held-out " : ""}calls${kp.agreement_kappa != null && kp.agreement_kappa < 0.4 ? `, ${kappaWord(kp.agreement_kappa)}: a first pass only` : ""} (<a href="#/audit">Audit</a>).` : ""}</p>
+      <p class="calls-start">Start with <a href="#/calls?overall=fatal">fatal calls</a>, <a href="#/calls?vs=disagree">judge and QA disagree</a> or <a href="#/calls?flag=human_request">asked for a human</a>.</p></div></div>
     <div class="calls-tools">
       <label class="search"><span class="sr-only">Search calls</span><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.5 10.5L14 14"/></svg>
         <input class="input" id="q" type="search" placeholder="Search call id, summary or disposition" value="${f.q}" autocomplete="off"></label>
@@ -153,7 +153,7 @@ export async function renderList(el, { params }) {
     if (!rows.length) {
       mount(host, items.length
         ? empty({ title: "No calls match these filters", body: f.source === "replay" ? REPLAY_NOTE : "Loosen a filter or change the search.", compact: true, glyph: "wave", action: html`<button type="button" class="btn sm" data-clear>Clear filters</button>` })
-        : html`${empty({ title: "No transcripts yet", body: "Listen turns the call recordings into transcripts the judge can read; they appear here.", glyph: "wave" })}${forEngineers("make listen")}`);
+        : html`${empty({ title: "No transcripts yet", body: "Transcribed calls appear here.", glyph: "wave" })}${forEngineers("make listen")}`);
     } else {
       mount(host, html`<div class="calls-bar"><p class="calls-count" tabindex="-1"><b>${int(rows.length)}</b> ${rows.length === 1 ? "call" : "calls"}${KEYS.some((k) => f[k]) ? " match" : ""} · showing ${int(from + 1)}–${int(from + shown.length)}${total > items.length ? ` · searching the first ${int(items.length)} of ${int(total)}` : ""}</p>
           <label class="fsel"><span class="flbl">Sort</span><select class="select" data-sort-sel>${Object.entries(SORTS).map(([k, [l]]) => html`<option value="${k}" ${k === f.sort ? raw("selected") : ""}>${l}</option>`)}</select></label>
@@ -197,7 +197,7 @@ export async function renderList(el, { params }) {
 }
 
 // ------------------------------------------------------------------------------------- one call
-const SRC_LONG = { production: "Production call", audited: "Audited by IndiaMART QA", replay: "Simulated replay conversation", fixture: "Test fixture" };
+const SRC_LONG = { production: "Production call", audited: "Audited by IndiaMART QA", replay: "Simulated replay conversation", fixture: "Test fixture", live: "Live call" };
 const VENDOR = { SQUADSTACK: "SquadStack", SARVAM: "Sarvam" };
 const META_KEY = { bot: "Bot", hotlead_type: "Lead type" };
 const spaced = (s) => String(s).replaceAll("_", " ");
@@ -225,7 +225,7 @@ function missing(el, id) {
   const m = readMemo(), back = m?.hash?.startsWith("#/calls") ? m.hash : "#/calls";
   return mount(el, html`<div class="call-head"><div class="eyebrow">Call</div></div>
     ${empty({ title: `Call ${id} isn't in this dataset`, glyph: "wave", action: html`<a class="btn sm" href="${back}">Back to calls</a>`,
-      body: state.demo ? "The app is showing invented demo data, which holds only the sample calls." : "The id may be mistyped, or this call was never transcribed on this machine." })}`);
+      body: state.demo ? "The demo data holds only the sample calls." : "The id may be mistyped, or the call was never transcribed here." })}`);
 }
 
 export async function renderCall(el, { id }) {
@@ -256,7 +256,7 @@ export async function renderCall(el, { id }) {
   const shown = rows.filter(applies), notApplied = rows.filter((r) => !applies(r));
   const failing = verdicts.filter((v) => v.grade === "fatal" || v.grade === "non_fatal").sort((x, y) => byRank(x.grade, y.grade));
   const naSide = (r) => (r.v.grade === "na" ? 2 : r.hg === "na" ? 1 : 0);  // real grade clashes before "did it apply" ones
-  const qaDiff = h ? rows.filter((r) => r.v && r.hg && r.v.grade !== r.hg).sort((x, y) => naSide(x) - naSide(y)) : [];
+  const qaDiff = h ? rows.filter((r) => r.v && r.hg && r.v.grade !== r.hg && !meta[r.rid]?.needs_audio).sort((x, y) => naSide(x) - naSide(y)) : [];
   const tEnd = turns.reduce((mx, x) => Math.max(mx, x.end_s ?? x.start_s ?? 0), 0);
   const total = t.duration_s || tEnd || 0;
   const m = readMemo(), at = m?.ids?.indexOf(t.call_id) ?? -1;
@@ -269,12 +269,13 @@ export async function renderCall(el, { id }) {
     ${at >= 0 ? html`<nav class="queue" aria-label="Your list"><a class="btn sm ghost" href="${m.hash}">← ${m.label || "Back"}</a>
       <span class="muted">${int(at + 1)} of ${int(m.ids.length)}</span>${step(prev, "‹ Previous")}${step(next, "Next ›")}</nav>` : ""}
     <div class="call-head">
-      <div class="eyebrow">${SRC_LONG[t.source] || t.source}${t.vendor ? ` · ${VENDOR[t.vendor] || t.vendor}` : ""}${t.language ? ` · ${LANG[t.language] || t.language}` : ""}</div>
-      <h1 class="title">${a?.disposition || (sim ? "Simulated conversation" : "Call")} <span class="mono">${t.call_id}</span></h1>
-      ${a?.summary ? html`<p class="call-sum">${a.summary}</p>` : ""}
+      <div class="eyebrow">${SRC_LONG[t.source] || t.source}${t.vendor ? ` · ${VENDOR[t.vendor] || t.vendor}` : ""}${t.language ? ` · ${LANG[t.language] || t.language}` : ""} · ${t.call_id}</div>
+      <h1 class="title${a?.summary ? " sum" : ""}">${a?.summary || a?.disposition || (sim ? "Simulated conversation" : "Call")}</h1>
       <div class="meta">${t.duration_s || tEnd ? html`<span id="call-len">${t.duration_s ? html`<b>${mmss(t.duration_s)}</b> recording` : html`<b>${mmss(tEnd)}</b> of transcript`}</span>` : ""}
+        ${a?.disposition ? html`<span>Disposition <b>${a.disposition}</b></span>` : ""}
         <span>Prompt <b class="mono">${t.prompt_version}</b>${t.variant ? ` · variant ${t.variant}` : ""}</span>
-        ${t.provider ? html`<span>${sim ? "Buyer simulated by" : "Transcribed by"} <b>${modelName(t.provider)}</b></span>` : ""}${a ? html`<span>Judged by <b>${modelName(a.model)}</b></span>` : ""}
+        ${t.provider === "fixture" ? html`<span>Transcript <b>${state.demo ? "invented for the demo" : "a test fixture"}</b></span>`
+          : t.provider ? html`<span>${sim ? "Buyer simulated by" : "Transcribed by"} <b>${modelName(t.provider)}</b></span>` : ""}${a ? html`<span>Judged by <b>${modelName(a.model)}</b></span>` : ""}
         ${Object.entries(t.meta || {}).filter(([k]) => !SIM_META.test(k)).map(([k, v]) => html`<span>${META_KEY[k] || cap(spaced(k))} <b>${META_KEY[k] ? cap(spaced(v)) : v}</b></span>`)}
         <details class="more"><summary>Details</summary><dl>
           <dt>Transcriber</dt><dd class="mono">${t.provider || "—"}</dd>${a ? html`<dt>Judge model</dt><dd class="mono">${a.model}</dd><dt>Rubric set</dt><dd class="mono">${a.rubric_set_hash}</dd>${a.cost_usd != null ? html`<dt>Judging cost</dt><dd class="mono">$${a.cost_usd.toFixed(3)}</dd>` : ""}` : ""}
@@ -282,7 +283,7 @@ export async function renderCall(el, { id }) {
       <div class="verdict-pair">
         <span class="vbox">Judge ${a ? grade(a.overall) : html`<span>not judged</span>`}</span>
         <span class="vbox">IndiaMART QA ${h ? grade(h.overall) : html`<span>${sim ? "not a real call" : "not audited"}</span>`}</span>
-        ${agree != null ? html`<span class="agree ${agree ? "y" : "n"}">${agree ? "✓ Judge and QA agree on the overall grade" : "✕ Judge and QA disagree on the overall grade"}</span>` : ""}
+        ${agree != null ? html`<span class="agree ${agree ? "y" : "n"}">${agree ? "✓ Judge and QA agree" : "✕ Judge and QA disagree"}</span>` : ""}
         ${flagChips(a?.risk_flags || [])}
       </div>
       ${a ? html`<div class="why-strip"><span class="flbl">Why ${GRADE[a.overall] || "this grade"}</span>${failing.length
@@ -295,7 +296,7 @@ export async function renderCall(el, { id }) {
     <div class="listen">
       <div class="player-dock"><div class="card flush" id="player"></div></div>
       <section class="section" id="transcript">
-        <div class="section-head"><h2>Transcript, <em>as ${sim ? "simulated" : "recorded"}</em></h2><div class="row"><p>${turns.length} turns · the judge's notes sit beside the turn they quote</p>
+        <div class="section-head"><h2>Transcript, <em>as ${sim ? "simulated" : "recorded"}</em></h2><div class="row"><p>${turns.length} turns · judge's notes beside the turns they quote</p>
           ${passNotes ? html`<button type="button" class="btn sm ghost" id="show-pass" aria-pressed="false">Show ${passNotes} pass note${passNotes === 1 ? "" : "s"}</button>` : ""}</div></div>
         ${turns.length ? html`<div class="record" id="record">${turns.map((tu, k) => html`
           <div class="turn ${tu.speaker}" data-k="${k}" data-s="${tu.start_s ?? ""}">
@@ -310,13 +311,13 @@ export async function renderCall(el, { id }) {
     </div>
 
     <section class="section" id="scorecard">
-      <div class="section-head"><h2>Scorecard</h2><p>${a ? `${shown.length} of ${rows.length} rubrics applied to this call${h ? " · IndiaMART QA's grades beside the judge's" : ""}` : "Not judged yet"}</p></div>
+      <div class="section-head"><h2>Scorecard</h2><p>${a ? `${shown.length} of ${rows.length} rubrics applied` : "Not judged yet"}</p></div>
       ${rows.length ? html`<div class="card score-card"><table class="table scorecard${h ? "" : " no-qa"}">
         <thead><tr><th>Rubric</th><th>Judge</th>${h ? html`<th>IndiaMART QA</th><th>Agree?</th>` : ""}<th>Why</th></tr></thead>
         <tbody>${shown.map((r) => scoreRow(r, { h, name, meta, firstTurn }))}</tbody>
         ${notApplied.length ? html`<tbody id="na-rows" hidden>${notApplied.map((r) => scoreRow(r, { h, name, meta, firstTurn }))}</tbody>` : ""}
       </table>${notApplied.length ? html`<button type="button" class="na-toggle" aria-expanded="false" aria-controls="na-rows">Show the ${notApplied.length} rubric${notApplied.length === 1 ? "" : "s"} that did not apply</button>` : ""}</div>`
-        : html`${empty({ title: "Not judged yet", body: "The judge grades every call with every active rubric; the scorecard appears here.", compact: true, glyph: "doc" })}${forEngineers("make judge")}`}
+        : html`${empty({ title: "Not judged yet", body: "The scorecard appears once the judge grades this call.", compact: true, glyph: "doc" })}${forEngineers("make judge")}`}
     </section>`);
 
   if (at >= 0 && m.hash.startsWith("#/calls")) $('#crumbs a[href="#/calls"]')?.setAttribute("href", m.hash);  // the crumb keeps the filters
@@ -361,7 +362,7 @@ export async function renderCall(el, { id }) {
 const SIM_META = /^(sample|replay_of|fix_id|persona_.*)$/;  // shown in the simulation note, not the meta line
 function simNote(t) {
   const mt = t.meta || {}, persona = Object.entries(mt).filter(([k]) => k.startsWith("persona_") && k !== "persona_need");
-  return html`<div class="note sim-note"><div><b>Simulated conversation.</b> The replay test had a simulated buyer talk to ${/^v\d+$/.test(t.prompt_version) ? `prompt ${t.prompt_version}` : "the candidate prompt"}${mt.replay_of ? html`, replaying real call <a href="#/calls/${enc(mt.replay_of)}">${mt.replay_of}</a>` : ""}${mt.fix_id ? html` to test fix <a href="#/fixes/${enc(mt.fix_id)}">${mt.fix_id}</a>` : ""}. No real customer was on this call, and there is no recording.
+  return html`<div class="note sim-note"><div><b>Simulated conversation.</b> A simulated buyer talked to ${/^v\d+$/.test(t.prompt_version) ? `prompt ${t.prompt_version}` : "the candidate prompt"}${mt.replay_of ? html`, replaying call <a href="#/calls/${enc(mt.replay_of)}">${mt.replay_of}</a>` : ""}${mt.fix_id ? html` for fix <a href="#/fixes/${enc(mt.fix_id)}">${mt.fix_id}</a>` : ""}. No real customer, no recording.
     ${persona.length ? html`<div class="persona">The simulated buyer: ${persona.map(([k, v]) => html`<span>${spaced(k.slice(8))} <b>${v}</b></span>`)}</div>` : ""}
     ${mt.persona_need ? html`<details class="brief"><summary>The buyer's brief</summary><p>${mt.persona_need}</p></details>` : ""}</div></div>`;
 }
@@ -374,7 +375,7 @@ function scoreRow({ rid, v, hg, remark }, { h, name, meta, firstTurn }) {
     ${h ? html`<td class="sc-qa"><span class="lbl">QA</span>${hg ? grade(hg) : html`<span class="muted">—</span>`}</td>
       <td class="sc-agree">${v && hg ? (meta[rid]?.needs_audio ? html`<span class="muted" title="Heard, not read: the judge cannot grade this from a transcript, so there is nothing to compare">—</span>`
         : v.grade === hg ? html`<span class="agree y">✓ Yes</span>` : html`<span class="agree n">✕ No</span>`) : ""}</td>` : ""}
-    <td class="sc-why">${v?.reason || ""}${remark ? html`<div class="qa-remark"><b>QA:</b> ${remark}</div>` : ""}${turn != null ? html`<button type="button" class="link-btn" data-turn="${turn}">Turn ${turn + 1} →</button>` : ""}</td></tr>`;
+    <td class="sc-why">${v?.reason ? html`<span class="sc-r" title="${v.reason}">${v.reason}</span>` : ""}${remark ? html`<div class="qa-remark"><b>QA:</b> ${remark}</div>` : ""}${turn != null ? html`<button type="button" class="link-btn" data-turn="${turn}">Turn ${turn + 1} →</button>` : ""}</td></tr>`;
 }
 
 // ---------------------------------------------------------------------------------- the player
@@ -391,9 +392,9 @@ function mountPlayer(host, page, { url, turns, total, tEnd, sim, vendor }) {
     <div class="wave-area no-audio"><div class="wave-top"><span>${title}</span>${legend}<span>${total ? mmss(total) : ""}</span></div>
       <div class="flat"></div><div class="lane">${raw(laneHTML(total))}</div><p>${body}</p></div></div>`);
   if (!url) {
-    noAudio("No recording", sim ? "A simulated conversation has no audio: the replay test wrote it turn by turn."
-      : state.demo ? "Invented sample calls have no recordings, except sample-0001's synthetic placeholder."
-        : `No recording of this call on this machine${/sarvam/i.test(vendor || "") ? " (Sarvam recordings are not downloadable)" : ""}.`);
+    noAudio("No recording", sim ? "A simulated conversation has no audio."
+      : state.demo ? "Invented demo calls have no recording."
+        : `No recording on this machine${/sarvam/i.test(vendor || "") ? " (Sarvam recordings are not downloadable)" : ""}.`);
     return () => {};
   }
   mount(host, html`<div class="player"><button class="play" id="play" type="button" aria-label="Play">${raw(PLAY)}</button>
@@ -401,7 +402,7 @@ function mountPlayer(host, page, { url, turns, total, tEnd, sim, vendor }) {
       <div class="wave-box" id="wave" role="slider" tabindex="0" aria-label="Seek in the recording" aria-valuemin="0" aria-valuemax="${Math.round(total)}" aria-valuenow="0"><canvas></canvas><span class="hover-t" hidden></span></div>
       <div class="lane" id="lane">${raw(laneHTML(total))}</div>
       <p class="approx" id="approx" hidden></p>
-      ${state.demo ? html`<p class="muted" style="font-size:11.5px">Synthetic placeholder audio for an invented call: a murmur timed to the transcript, not speech.</p>` : ""}</div></div>`);
+      ${state.demo ? html`<p class="muted" style="font-size:11.5px">Placeholder audio: a murmur timed to the transcript, not speech.</p>` : ""}</div></div>`);
   const mini = document.createElement("div");  // on <body>: the page wrapper animates a transform, which would trap position:fixed
   mini.className = "mini-player";
   mini.hidden = true;
@@ -463,14 +464,14 @@ function mountPlayer(host, page, { url, turns, total, tEnd, sim, vendor }) {
     if (tEnd && Math.abs(tEnd - len) / len > 0.1) {
       const n = $("#approx", host);
       n.hidden = false;
-      n.textContent = `Turn times are approximate: the transcript ends at ${mmss(tEnd)}, the recording runs ${mmss(len)}.`;
+      n.textContent = `Turn times are approximate (transcript ${mmss(tEnd)}, recording ${mmss(len)}).`;
     }
     draw();
   });
   audio.addEventListener("error", () => {
     if (!alive) return;
     dispose();  // the controls are about to go: stop everything that draws into them
-    noAudio("Recording unavailable", "The recording could not be loaded: the file is missing on this machine.");
+    noAudio("Recording unavailable", "The recording file is missing on this machine.");
   });
   const seekTo = (clientX, box = wave) => { const r = box.getBoundingClientRect(); audio.currentTime = Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * length(); draw(); };
   let dragging = false;
@@ -507,7 +508,7 @@ function mountPlayer(host, page, { url, turns, total, tEnd, sim, vendor }) {
     const note = document.createElement("p");
     note.className = "muted";
     note.style.fontSize = "11.5px";
-    note.textContent = "Waveform unavailable for this recording (it plays from its original link); the lane below shows who spoke when.";
+    note.textContent = "No waveform for this recording; the lane shows who spoke when.";
     $(".wave-area", host)?.append(note);
   });
   draw();

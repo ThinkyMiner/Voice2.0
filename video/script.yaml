@@ -1,0 +1,139 @@
+# The demo video, one scene per narration block. `say` is spoken by video/tts.py (Sarvam Bulbul v3);
+# `show` says what is on screen and what to point at; video/capture.py turns each into a clip as long as its
+# narration. Numbers in <angle brackets> come from the real loop run and are filled in before the final render.
+# Real customer calls never appear: call pages come from the platform's demo copy (invented calls), and call
+# lists on the real platform are blurred.
+scenes:
+  - id: 01-title
+    show: "card title: Vani Lab · Every prompt change, proven before it ships · Team Hare & Tortoise"
+    say: >-
+      This is Vani Lab, by team Hare and Tortoise.
+
+  - id: 02-problem
+    show: "card problem: about 30,000 Vani calls a week; one prompt decides what Vani says; a change goes live
+      to every buyer at once; QA audits a sample by hand"
+    say: >-
+      Vani is IndiaMART's voice bot. It makes about thirty thousand calls a week, to pin down what each buyer
+      needs: the product, the quantity, the specifications, so a seller gets a lead worth calling. One prompt
+      decides everything Vani says. And today, when someone changes that prompt, the change goes live to every
+      buyer at once, on someone's judgement. If it hurts, nobody notices for weeks. If it helps, nobody can prove
+      it. So good ideas stall, and bad ones slip through. The only quality check is a QA team, auditing a small
+      sample of calls by hand.
+
+  - id: 03-cost
+    show: "card cost: a change that quietly loses 30% of meetings costs about 250 Meeting Fixed a week at full
+      rollout; the smallest change worth catching (15%) is worth about 165 a week"
+    say: >-
+      On six months of real call history, a prompt change that quietly loses thirty percent of meetings would
+      cost about two hundred and fifty Meeting Fixed, every week. Even the smallest change worth detecting, fifteen
+      percent, is worth about a hundred and sixty five meetings a week. Guessing is expensive.
+
+  - id: 04-loop
+    show: "card loop: the ring, one station lighting up at a time: Listen, Judge, Improve, Safety gate, Replay,
+      Prove on 10%, Approve and roll out, then back to Listen"
+    say: >-
+      Vani Lab closes the loop. It listens to every call, and grades it on IndiaMART's own QA checklist. It groups
+      the failures into root causes, writes a minimal fix to the prompt, checks the fix for safety, and replays it
+      against the same buyers. Then it proves the fix on ten percent of traffic. A person approves, the fix rolls
+      out, and the loop starts again on the new prompt.
+
+  - id: 05-home
+    show: "platform #/ : the ring, v1 in production, cycle 1 needs your decision"
+    say: >-
+      This is the platform. Prompt version one is in production, and cycle one has run all the way to its A B
+      test. Let's follow it around the loop.
+
+  - id: 06-call
+    show: "demo copy #/calls/sample-0001 : the recording, the transcript, the judge's notes beside the quoted
+      turns, the scorecard with QA's grade beside the judge's; the demo-data banner stays visible"
+    say: >-
+      Every call comes in with its recording and transcript. This one is an invented demo call: real customer
+      calls never leave the building. The judge grades each call on the same eighteen checks the QA team fills in
+      by hand, plus three rules from the prompt, like never claiming to be human. Every failed grade quotes the
+      line that proves it, and the QA team's own grade sits beside the judge's.
+
+  - id: 07-audit
+    show: "platform #/audit : the agreement card, then the per-check table"
+    say: >-
+      Can the judge be trusted? We measured it against IndiaMART's auditors, on a hundred and twenty calls it never
+      saw while tuning. On six checks, like quantity, units, specifications and product, it agrees well. On a call's
+      overall grade, not yet: one miss on any check changes it, and the auditors also see the lead record the bot
+      saved, which the judge cannot. The platform says so on screen, instead of hiding it.
+
+  - id: 08-rubric
+    show: "demo copy #/rubrics new rubric, filled in; Try it on a call, Grade, the result"
+    say: >-
+      Teams can add their own checks in plain English, and test them on a call before saving. The next cycle
+      grades every call with them.
+
+  - id: 09-issues
+    show: "platform #/issues : root causes ranked, How ranking works open; example call lists blurred"
+    say: >-
+      Failed grades become named root causes, twenty eight of them here, ranked by a published formula. Cycle one
+      tried the top cause a prompt can fix: the bot misstating a buyer's spec. Its fix changed nothing in replay, so
+      the loop dropped it by itself, and took the next: specs the buyer volunteered, ignored or deferred.
+
+  - id: 10-fix
+    show: "platform #/fixes/<fix id> : the redline, the safety gate card naming typesafe/jev-router, the replay
+      before and after"
+    say: >-
+      The fix is three small edits, shown as a redline. Before any buyer hears it, a safety gate running on Jev checks
+      it: does it add a promise, weaken an honesty rule, or contradict the prompt? Jev passed our safe test edit, and
+      blocked one that said, you may say you are human. Then the same buyers are replayed against both prompts. The
+      failure fell from twenty five percent to zero, but over just four conversations, and looping got worse. The
+      page shows both.
+
+  - id: 11-engine
+    show: "platform engine scenarios: vani-meeting-v1-harm (stopped on day 10), then -win (promoted on day 16),
+      then -inconclusive; point at the z-path against its lines each time"
+    say: >-
+      Then comes the proof. Prompt B gets ten percent of leads, and a sequential test checks the evidence at
+      planned checkpoints. Here, B secretly lost thirty percent of meetings. The engine stopped it on day ten, and
+      only one lead in ten ever heard it. Here, B was really better. The engine waited for the call duration
+      guardrail to clear, then promoted it on day sixteen, worth about two hundred and forty meetings a week. And
+      when the effect is too small to call, it says so, and A stays.
+
+  - id: 12-split
+    show: "the win run's split evidence: 10% configured, 9.91% achieved, SRM p 0.68, no lead in both arms"
+    say: >-
+      The split is real: ten percent configured, nine point nine one achieved, and not one lead heard both
+      prompts. If exposures ever stop being logged, a sample ratio check halts the test.
+
+  - id: 13-approve
+    show: "platform #/experiments/vani-loop-c1 : 90/10, the stated assumption, the z-path; type a name, Reject,
+      confirm"
+    say: >-
+      Cycle one's Prompt B then went through the same A B test, on simulated traffic, and the page states what was
+      assumed. It crossed the win line, so it waits for a person. The person has seen the replay: looping got worse.
+      So, reject. Version one stays in production.
+
+  - id: 14-live
+    show: "platform #/experiments/vani-live-c1 : the one-line change, agent versions 1 and 2, Calls per arm;
+      then make calls ARGS=status in a terminal"
+    say: >-
+      And the same router runs real phone calls. Here, Vani runs as a Sarvam voice agent, calling our own team.
+      Each lead is hashed to A or B, and logged before the phone rings, so nobody picks the arm. A rings on agent
+      version one. B rings on version two, which asks the quantity at most twice. Every outcome comes back into
+      the same engine, and every transcript to the same judge. With a handful of calls, the engine takes no look.
+      It never decides early.
+
+  - id: 15-adoption
+    show: "card adoption: proven on 10% before 100%; harm caught in days; a person signs off, every decision
+      logged; every call teaches the next prompt"
+    say: >-
+      This is what makes change adoptable. Every prompt change is proven on a tenth of traffic before the rest.
+      Harm is caught in days, not quarters. A person signs off on every rollout, and every decision lands in an
+      append only log. And because every call teaches the next prompt, Vani keeps getting better, without anyone
+      guessing.
+
+  - id: 16-again
+    show: "platform #/prompts (v2 is production), then #/ (cycle 2 opened on v2), then #/docs"
+    say: >-
+      And cycle two has already opened on version one, to try the next cause. Everything is documented in the Docs
+      tab.
+
+  - id: 17-close
+    show: "card close: The hare ships a prompt change on a hunch. The tortoise ships it on evidence. · Vani Lab ·
+      Team Hare & Tortoise"
+    say: >-
+      We're team Hare and Tortoise. The hare ships a prompt change on a hunch. The tortoise ships it on evidence.

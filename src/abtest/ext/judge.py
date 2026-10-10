@@ -1,7 +1,7 @@
 """Judge: grade a call transcript against every active rubric in one model call, and measure how
 well those grades agree with IndiaMART's human QA auditors.
 
-CLI: python -m abtest.ext.judge audit --source audited|production [--limit N] [--model M]
+CLI: python -m abtest.ext.judge audit --source audited|production|live [--limit N] [--model M]
                                       [--workers 4] [--yes-send-real-transcripts]
      python -m abtest.ext.judge agreement [--model M] [--version v1] [--tuned]
 
@@ -473,7 +473,8 @@ def agreement(audits: list[CallAudit], human: dict[str, dict], rubrics: list[Rub
         n_calls=len(pairs), overall_accuracy=sum(h == j for h, j in pairs) / len(pairs),
         overall_kappa=_kappa(pairs),
         fatal_vs_rest_accuracy=sum((h == "fatal") == (j == "fatal") for h, j in pairs) / len(pairs),
-        rows=tuple(rows), model=", ".join(sorted({a.model for a in matched})), held_out=held_out)
+        rows=tuple(rows), model=", ".join(sorted({a.model for a in matched})), held_out=held_out,
+        overall_confusion={h: {j: sum(p == (h, j) for p in pairs) for j in models.SEVERITY} for h in models.SEVERITY})
 
 
 def _pct(x: float | None) -> str:
@@ -535,10 +536,11 @@ def write_agreement_report(report: models.AgreementReport, path: Path,
 # --- CLI --------------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m abtest.ext.judge", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog="python -m abtest.ext.judge", description=__doc__.split("\n\n")[0],
+                                 allow_abbrev=False)  # no prefix of --yes-send-real-transcripts counts as it
     sub = ap.add_subparsers(dest="cmd", required=True)
-    a = sub.add_parser("audit", help="grade transcripts on every active rubric")
-    a.add_argument("--source", choices=["audited", "production"], required=True)
+    a = sub.add_parser("audit", help="grade transcripts on every active rubric", allow_abbrev=False)
+    a.add_argument("--source", choices=["audited", "production", "live"], required=True)
     a.add_argument("--limit", type=int)
     a.add_argument("--model", help=f"default {llm.model_for('judge')}")
     a.add_argument("--workers", type=int, default=4)

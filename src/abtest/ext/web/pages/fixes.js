@@ -57,25 +57,29 @@ export function cycleAt(c) {
 function noFixes(c) {
   return empty({
     title: "No fixes yet", glyph: "doc", action: html`<a class="btn sm" href="#/">Open the Loop page</a>`,
-    body: c ? `The fixer writes Prompt B at the Gate stage, for the top untried prompt or flow root cause. ${cycleAt(c)}`
-      : "The loop has not started. Advancing it judges the calls, ranks the root causes on the Issues page, then writes the first fix here.",
+    body: c ? `Fixes are written at the Gate stage. ${cycleAt(c)}` : "The loop has not started; its first fix will appear here.",
   });
+}
+
+/** Root causes by id, from the issues of every base version the fixes were written on. */
+export async function causesOf(fixes) {
+  const bases = [...new Set(fixes.map((f) => f.base_version))];
+  const iss = await Promise.allSettled(bases.map((v) => get(`/api/issues?version=${enc(v)}`)));
+  return Object.fromEntries(iss.flatMap((r) => (r.status === "fulfilled" ? r.value.items.map((i) => [i.id, i]) : [])));
 }
 
 export async function renderList(el) {
   const [fx, pr, ov] = await Promise.all([get("/api/fixes"), get("/api/prompts").catch(() => ({ items: [] })), get("/api/overview").catch(() => state.overview)]);
-  const bases = [...new Set(fx.items.map((f) => f.base_version))];
-  const iss = await Promise.allSettled(bases.map((v) => get(`/api/issues?version=${enc(v)}`)));
-  const rc = Object.fromEntries(iss.flatMap((r) => (r.status === "fulfilled" ? r.value.items.map((i) => [i.id, i]) : [])));
+  const rc = await causesOf(fx.items);
   const cand = Object.fromEntries(pr.items.filter((p) => p.fix_id).map((p) => [p.fix_id, p]));
   const cycles = ov?.cycles || [];
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Improve</div><h1 class="title">Prompt <em>fixes</em></h1>
-      <p class="lede">Each fix is a small set of edits to Prompt A aimed at one root cause. Before any traffic it must clear the safety gate and fail less than Prompt A in a simulated replay; then a simulated A/B test runs and a person approves it.</p></div></div>
+      <p class="lede">Each fix is a small set of edits to Prompt A aimed at one root cause.</p></div></div>
     ${fx.items.length ? html`<div class="card flist">${fx.items.map((f) => {
       const r = rc[f.root_cause_id], p = cand[f.id], c = cycles.find((x) => x.fix_id === f.id) || null, st = fixSteps(f, c), ts = f.created_ts || p?.created_ts;
       return html`<a class="frow" href="#/fixes/${enc(f.id)}">
-        <div class="fmain"><div class="nm">${r?.name || f.root_cause_id}</div><p class="why">${f.rationale}</p>
+        <div class="fmain"><div class="nm">${r?.name || f.root_cause_id}</div><p class="why" title="${f.rationale}">${f.rationale}</p>
           <div class="fmeta">${r ? typeChip(r.type) : ""}<span>${f.base_version} → ${p?.version || "Prompt B"}</span>${ts ? html`<span>drafted ${when(ts)}</span>` : ""}${c ? html`<span>cycle ${c.n}</span>` : ""}<span class="mono">${f.id}</span>${p && p.status !== "candidate" ? html`<span>Prompt B ${stateChip(p.status)}</span>` : ""}</div></div>
         <div class="fside">${fixTrack(st)}<div class="rp"><span class="eyebrow">Replay, simulated</span>${replayShort(f, st, c)}</div></div></a>`;
     })}</div>` : noFixes(cycles[0])}`);
@@ -98,7 +102,8 @@ function parseDiff(diff) {
 }
 
 export function wordDiff(a, b) {  // LCS over words and spaces: equal runs plain, deletions struck, insertions underlined
-  const A = clean(a).split(/(\s+)/), B = clean(b).split(/(\s+)/);
+  const toks = (x) => clean(x).split(/(\s+|(?<=⁣)[,.;:!?])/).filter(Boolean);  // "{x};" is two words, so a variable is never struck and re-added
+  const A = toks(a), B = toks(b);
   const n = A.length, m = B.length;
   if (n * m > 4e6) return html`<del>${prose(a)}</del> <ins>${prose(b)}</ins>`;
   const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
@@ -161,12 +166,12 @@ function editsByHunk(hunks, edits) {
   return at;
 }
 
-function replayEmpty(f, st, cycle, rc, real) {
+function replayEmpty(f, st, cycle, real) {
   const g = f.gate;
   if (st[2].state === "now") {  // real calls: the web never sends them to the model, so the replay needs the CLI go-ahead
     return empty({ title: waitingOn(cycle) ? "Waiting for a go-ahead" : "Waiting to run", compact: true, glyph: "flask",
-      body: `Cycle ${cycle.n} is at the Replay stage. A few of the ${rc ? `${int(rc.n_calls)} ` : ""}calls behind this cause (fatal ones first) become simulated buyers; each plays once against Prompt A and once against Prompt B, and the judge grades both.`,
-      action: html`${real ? html`<p class="fix-go">The buyers are built from real calls, so their content goes to the model provider: the replay runs only after a go-ahead on the platform machine, <code>make loop ARGS=--yes-send-real-transcripts</code>.</p>` : ""}<a class="btn sm" href="#/">See the loop</a>` });
+      body: `Cycle ${cycle.n} is at the Replay stage.`,
+      action: html`${real ? html`<p class="fix-go">Real call content goes to the model provider, so it needs a go-ahead: <code>make loop ARGS=--yes-send-real-transcripts</code></p>` : ""}<a class="btn sm" href="#/">See the loop</a>` });
   }
   if (g && !g.passed) return empty({ title: "No replay", body: "The safety gate blocked this fix, so it was never replayed.", compact: true, glyph: "flask" });
   if (!g) return empty({ title: "No replay yet", body: "The replay runs once the safety gate passes.", compact: true, glyph: "flask" });
@@ -178,7 +183,7 @@ export async function renderFix(el, { id }) {
     get("/api/overview").catch(() => state.overview), get("/api/rubrics").catch(() => ({ items: [] }))]);
   if (got instanceof Error) {
     if (got.status !== 404) throw got;
-    return mount(el, empty({ title: `No fix called ${id}`, glyph: "doc", body: "It is not among the loop's fixes: the address may be mistyped, or the fix was written on another machine.",
+    return mount(el, empty({ title: `No fix called ${id}`, glyph: "doc", body: "The address may be mistyped, or the fix was written on another machine.",
       action: html`<a class="btn" href="#/fixes">All fixes</a>` }));
   }
   const { fix: f, root_cause: rc } = got;
@@ -186,6 +191,7 @@ export async function renderFix(el, { id }) {
   const cand = pr.items.find((p) => p.fix_id === f.id);
   const cycle = ov?.cycles?.find((c) => c.fix_id === f.id) || null;
   const st = fixSteps(f, cycle);
+  if (f.replay) st[2].note = `${pct(f.replay.fail_rate_a, 0)} → ${pct(f.replay.fail_rate_b, 0)} failing, simulated`;  // the header carries the result
   const names = Object.fromEntries(rb.items.map((r) => [r.id, r.name]));
   const rn = (rid) => names[rid] || rid;
   const ts = f.created_ts || cand?.created_ts;
@@ -213,19 +219,19 @@ export async function renderFix(el, { id }) {
     <div class="page-head"><div class="fix-head">
       <div class="eyebrow">Prompt fix · ${f.base_version} → ${cand?.version || "Prompt B"}${cycle ? html` · <a href="#/">cycle ${cycle.n}</a>` : ""}</div>
       <h1 class="title">Fix: <em>${rc?.name || f.root_cause_id}</em></h1>
-      <p class="lede">${f.rationale}</p>
+      <p class="lede" title="${f.rationale}">${f.rationale}</p>
       ${fixTrack(st, "lg")}
       <div class="row fix-links">
-        ${ex.length ? html`<span class="muted">Listen to ${ex.length === 1 ? "the example call" : `${ex.length} example calls`}</span>${ex.map(callLink)}` : ""}
+        ${ex.length ? html`<span class="muted">${ex.length === 1 ? "Example call" : "Example calls"}</span>${ex.map(callLink)}` : ""}
         ${cand ? html`<a class="btn sm" href="#/prompts?v=${enc(cand.version)}">Open Prompt B (${cand.version})</a>` : ""}
         ${cycle?.experiment_id ? html`<a class="btn sm" href="#/experiments/${enc(cycle.experiment_id)}">See the A/B test</a>` : ""}
         ${rc ? html`<a class="btn sm ghost" href="#/issues?version=${enc(rc.prompt_version)}&rc=${enc(rc.id)}">The root cause on Issues</a>` : ""}
       </div>
-      <p class="fix-fine">${int(f.edits.length)} edit${f.edits.length === 1 ? "" : "s"} · written by <span class="mono">${f.model}</span>${ts ? ` · drafted ${when(ts)}` : ""} · Prompt B <span class="mono">${short(f.prompt_b_sha256, 10)}</span> · <span class="mono">${f.id}</span>${cand && cand.status !== "candidate" ? html` · ${stateChip(cand.status)}` : ""}</p>
+      <p class="fix-fine">${int(f.edits.length)} edit${f.edits.length === 1 ? "" : "s"} · by <span class="mono">${f.model}</span>${ts ? ` · ${when(ts)}` : ""} · <span class="mono" title="Prompt B ${short(f.prompt_b_sha256, 10)}">${f.id}</span>${cand && cand.status !== "candidate" ? html` · ${stateChip(cand.status)}` : ""}</p>
     </div></div>
 
     <section class="redline" aria-label="Redline from Prompt A to Prompt B">
-      <div class="redline-head"><span class="eyebrow">Redline · ${f.base_version} to ${cand?.version || "Prompt B"}${baseText ? ` · ${int(words(baseText))} words in Prompt A` : ""}</span>
+      <div class="redline-head"><span class="eyebrow">Redline · ${f.base_version} to ${cand?.version || "Prompt B"}</span>
         <span class="legend"><span><del>struck</del> removed</span><span><ins>underlined</ins> added</span><span><span class="tok">{name}</span> a prompt variable</span></span></div>
       ${blocks.length ? blocks.map(({ h, pre, post }, k) => {
         const paras = [...pre.lines, ...hunkBody(h), ...post.lines];
@@ -235,8 +241,7 @@ export async function renderFix(el, { id }) {
           <div class="doc">${paras.map((p) => html`<p class="${p.cls || ""}" title="${p.n ? `Prompt A line ${p.n}` : "new line"}">${p.body}</p>`)}</div>
           <aside class="margin">${notes[k].length ? notes[k].map((i) => html`
             <div class="eyebrow accent">Change ${i + 1} of ${f.edits.length} · ${f.edits[i].mode === "append" ? "appended" : "replaced"}</div>
-            <div class="why">${f.edits[i].why}</div>`) : html`<div class="eyebrow">Context</div>`}
-            ${rc ? html`<div>Targets <a href="#/issues?version=${enc(rc.prompt_version)}&rc=${enc(rc.id)}">${rc.name}</a>: ${int(rc.n_calls)} of ${int(rc.n_audited)} judged calls.</div>` : ""}</aside>
+            <div class="why" title="${f.edits[i].why}">${f.edits[i].why}</div>`) : html`<div class="eyebrow">Context</div>`}</aside>
         </div>${post.bar}`;
       }) : empty({ title: "No textual change", body: "This fix's diff is empty.", compact: true })}
       ${blocks.length && !totalLines ? html`<div class="collapsed">… the rest of Prompt A unchanged …</div>` : ""}
@@ -246,13 +251,12 @@ export async function renderFix(el, { id }) {
       <div class="card">
         <div class="card-head"><div><div class="eyebrow">Safety gate</div><h3 class="serif" style="margin-top:6px">${g ? (g.passed ? html`Clear to <em>test</em>` : "Blocked") : "Not run yet"}</h3></div>
           ${g ? html`<span class="chip ${g.passed ? "win" : "harm"}"><i></i>${g.passed ? "passed" : "blocked"}</span>` : ""}</div>
-        ${g ? html`<p class="muted gate-intro">${int(g.checks.length)} questions about Prompt B, each scored as a risk by <span class="mono">${g.model}</span>.
-            ${one != null ? `A blocking check at ${pct(one, 0)} risk or more stops the fix; an advisory one only warns.` : "A blocking check at or above its line stops the fix; an advisory one only warns."}${noReasons ? " The gate model gave no reasons for its scores." : ""}</p>
+        ${g ? html`<p class="muted gate-intro" title="A blocking check at or above its line stops the fix; an advisory one only warns.">${int(g.checks.length)} checks scored by <span class="mono">${g.model}</span>${one != null ? ` · blocks at ${pct(one, 0)} risk` : ""}${noReasons ? " · no reasons given" : ""}</p>
           ${g.checks.map((c) => {
             const over = c.probability >= c.threshold, level = over ? "High" : c.probability >= 0.4 * c.threshold ? "Medium" : "Low";
             const fill = over ? (c.blocking ? "var(--harm)" : "var(--warn)") : level === "Medium" ? "var(--warn)" : "var(--win)";
             const ink = over ? (c.blocking ? "var(--harm)" : "var(--warn-ink)") : level === "Medium" ? "var(--warn-ink)" : "var(--win)";
-            return html`<div class="gate-row" title="Check ${c.id}"><div class="q">${c.question}${c.reason ? html`<span class="why">${c.reason}</span>` : ""}<small>${c.blocking ? "Blocking" : "Advisory"}${one == null ? ` · stops at ${pct(c.threshold, 0)}` : ""}</small></div>
+            return html`<div class="gate-row" title="Check ${c.id}"><div class="q">${c.question}${c.reason ? html`<span class="why" title="${c.reason}">${c.reason}</span>` : ""}<small>${c.blocking ? "Blocking" : "Advisory"}${one == null ? ` · stops at ${pct(c.threshold, 0)}` : ""}</small></div>
               <div class="meter" role="img" aria-label="${pct(c.probability, 0)} risk, ${level.toLowerCase()}; ${c.blocking ? "blocks" : "warns"} at ${pct(c.threshold, 0)}"><span class="fill" style="width:${(c.probability * 100).toFixed(1)}%;background:${raw(fill)}"></span><span class="tick" style="left:${(c.threshold * 100).toFixed(1)}%" ${one == null ? raw(`data-label="${esc(pct(c.threshold, 0))}"`) : ""}></span></div>
               <div class="p" style="color:${raw(ink)}">${pct(c.probability, 0)} risk<small>${level}</small></div></div>`;
           })}` : empty({ title: "The gate has not run", body: "The gate model scores each safety question before any replay.", compact: true, glyph: "lock" })}
@@ -260,9 +264,9 @@ export async function renderFix(el, { id }) {
       <div class="card">
         <div class="card-head"><div><div class="sim-label">Simulated conversations</div><h3 class="serif" style="margin-top:6px">Replay, <em>before and after</em></h3></div>
           ${rp ? html`<span class="chip ${delta < 0 ? "win" : delta > 0 ? "harm" : ""}">${spp(delta)}</span>` : ""}</div>
-        ${rp ? html`<p class="muted" style="font-size:12.5px;margin-bottom:16px">${int(rp.n_cases)} scenarios built from real calls behind this cause, each played twice by a simulated buyer: once against Prompt A, once against Prompt B, then judged on <b class="ink">${rn(rp.rubric_id)}</b>.${rp.n_cases < 30 ? ` ${int(rp.n_cases)} cases is a small sample: read it as a direction, not a measurement.` : ""}</p>
+        ${rp ? html`<p class="muted" style="font-size:12.5px;margin-bottom:16px" title="Each scenario, built from a real call behind this cause, is played by a simulated buyer once against Prompt A and once against Prompt B.">${int(rp.n_cases)} cases from this cause's calls, judged on <b class="ink">${rn(rp.rubric_id)}</b>.${rp.n_cases < 30 ? " Small sample: a direction, not a measurement." : ""}</p>
           <div class="ba">
-            ${[["Real calls", "where the scenarios came from", rp.fail_rate_real, "var(--faint)"], ["Simulated A", "Prompt A, the fair before", rp.fail_rate_a, "var(--ink)"], ["Simulated B", "Prompt B, the after", rp.fail_rate_b, "var(--accent)"]].map(([l, s, v, c]) => html`
+            ${[["Real calls", "the source", rp.fail_rate_real, "var(--faint)"], ["Simulated A", "before", rp.fail_rate_a, "var(--ink)"], ["Simulated B", "after", rp.fail_rate_b, "var(--accent)"]].map(([l, s, v, c]) => html`
               <div class="ba-row"><div class="lbl">${l}<small>${s}</small></div><div class="track"><span style="width:${(v * 100).toFixed(1)}%;background:${raw(c)}"></span></div><div class="v">${pct(v, 0)}<small>${int(Math.round(v * rp.n_cases))} of ${int(rp.n_cases)}</small></div></div>`)}
           </div>
           ${Object.keys(rp.regressions || {}).length ? html`<div style="margin-top:18px"><div class="eyebrow" style="margin-bottom:6px">Other rubrics, B minus A (fail rate)</div>
@@ -271,7 +275,7 @@ export async function renderFix(el, { id }) {
             <div class="row" style="gap:6px">${rp.cases.filter((c) => c.grade_a !== c.grade_b).map((c) => html`<span class="row" style="gap:6px">${callLink(c.call_id)}<span class="mono muted" style="font-size:11px">${c.grade_a} → ${c.grade_b}</span></span>`)}
             <span class="muted" style="font-size:12px">${int(rp.cases.filter((c) => c.grade_a === c.grade_b).length)} unchanged</span></div></div>
           <p class="fix-fine" style="margin-top:14px">Bot <span class="mono">${rp.models?.bot}</span> · buyer <span class="mono">${rp.models?.buyer}</span> · judge <span class="mono">${rp.models?.judge}</span> · ${fix(rp.seconds, 0)} s</p>`
-        : replayEmpty(f, st, cycle, rc, !pr.items.find((p) => p.version === f.base_version)?.fix_id)}
+        : replayEmpty(f, st, cycle, !pr.items.find((p) => p.version === f.base_version)?.fix_id)}
       </div>
     </div>`);
 }

@@ -1,0 +1,4 @@
+# PLAN_EXTENSIONS §E4.2: one fewer quantity ask changes no promise and no safety rule. Must pass.
+name: safe_qty
+expect: pass
+edit: {mode: replace_text, find: "quantity = 3", replace: "quantity = 2"}

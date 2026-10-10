@@ -1,4 +1,4 @@
-"""The Slow & Steady platform (docs/loop_api.md): the base app's routes (GET /assign, unchanged) plus the
+"""The Vani Lab platform (docs/loop_api.md): the base app's routes (GET /assign, unchanged) plus the
 loop's JSON routes, and the static site in ext/web/ at "/", mounted last so /api/* and /assign win.
 make platform -> http://127.0.0.1:8600
 
@@ -12,10 +12,12 @@ model provider from the web only when the server was started with LOOP_ALLOW_REA
 POST /api/loop/advance runs the loop with it, POST /api/rubrics/test grades such a transcript with it.
 """
 
+import difflib
 import importlib
 import math
 import os
 import re
+import sqlite3
 import threading
 from collections import Counter
 from contextlib import closing
@@ -109,8 +111,9 @@ def _transcripts_of(name: str) -> list[Transcript]:
 
 
 def _audits_of(name: str) -> list[CallAudit]:
-    """Every saved grade on a version (no model call): the judge's files, or the proving replay's."""
-    if _version(name).fix_id is not None:
+    """Every saved grade on a version (no model call): the judge's files, or the proving replay's. "live" is
+    no registry version: the live calls' own label (ext/sarvam_live), graded by the judge like v1's."""
+    if name != "live" and _version(name).fix_id is not None:
         return loop.audits(name)
     return _mod("judge").load_audits(name)
 
@@ -181,7 +184,8 @@ def _experiment(conn, eid: str, scenario: str | None, cycles: dict[str, int], de
            "lift_rel": last.primary.lift_rel if last else None,
            "started": s.started_ts_sim.isoformat() if s.started_ts_sim else None,
            "updated": s.updated_ts_sim.isoformat() if s.updated_ts_sim else None,
-           "cycle": cycles.get(eid), "simulated": True, "assumed_effect": _assumed(eid, scenario, cfg)}
+           "cycle": cycles.get(eid), "simulated": not eid.startswith("vani-live-"),  # ext/sarvam_live: real calls
+           "assumed_effect": _assumed(eid, scenario, cfg)}
     if detail:
         out |= {"config": cfg.model_dump(mode="json"), "n_b_max": s.n_b_max,
                 "looks": [{"look": d.look, "info_fraction": d.info_fraction, "z": d.primary.z,
@@ -192,7 +196,39 @@ def _experiment(conn, eid: str, scenario: str | None, cycles: dict[str, int], de
                            "ts_sim": d.ts_sim.isoformat() if d.ts_sim else None} for d in looks],
                 "decisions": [d.model_dump(mode="json") for d in ds],
                 "impact": {"per_week": _per_week(s, cfg, last), "unit": " / ".join(cfg.primary.dispositions)}}
+        if not out["simulated"]:
+            out["live"] = _live(conn, eid, cfg, s)
     return _finite(out)
+
+
+def _live(conn, eid: str, cfg: ExperimentConfig, s: ExperimentState) -> dict | None:
+    """A live experiment's Sarvam agent and each arm's version and calls (sarvam_live.summary), plus B's change
+    when it is one line of A's prompt: both lines, and the changed words with the two words before them."""
+    from abtest.ext import sarvam_live
+    try:
+        out = sarvam_live.summary(conn, eid)
+    except sqlite3.OperationalError:  # no live tables: ext/sarvam_live did not start it
+        return None
+    try:
+        texts = config.resolve_prompts(cfg)
+        same = config.freeze(cfg).prompt_hash == s.prompt_hash
+    except (OSError, ValueError):  # a prompt file gone, or not UTF-8 (UnicodeDecodeError is a ValueError)
+        return out | {"change": None}
+    if not same:  # a prompt file was edited after the start: what is on disk is not what the calls tested
+        return out | {"change": None}
+    a, b = texts["A"].splitlines(), texts["B"].splitlines()
+    lines = [(x, y) for x, y in zip(a, b) if x != y] if len(a) == len(b) else []
+    if len(lines) != 1:
+        return out | {"change": None}
+    (la, lb), = lines
+    find, replace = la, lb
+    wa, wb = la.split(), lb.split()
+    ops = [o for o in difflib.SequenceMatcher(None, wa, wb, autojunk=False).get_opcodes() if o[0] != "equal"]
+    if len(ops) == 1:  # "quantity = 3" -> "quantity = 2", not the whole line
+        _, i1, i2, j1, j2 = ops[0]
+        k = min(2, i1, j1)
+        find, replace = " ".join(wa[i1 - k:i2]).rstrip(";,."), " ".join(wb[j1 - k:j2]).rstrip(";,.")
+    return out | {"change": {"a": la, "b": lb, "find": find, "replace": replace}}
 
 
 def _experiment_ids(conn) -> list[tuple[str, str | None]]:
@@ -240,6 +276,8 @@ def overview() -> dict:
             "agreement_overall": agreement.overall_accuracy if agreement else None,
             "agreement_kappa": agreement.overall_kappa if agreement else None,
             "fatal_vs_rest_accuracy": agreement.fatal_vs_rest_accuracy if agreement else None,
+            "agreement_n": agreement.n_calls if agreement else None,
+            "agreement_held_out": agreement.held_out if agreement else None,
             "root_causes": _maybe(lambda: len(_mod("improve").load_root_causes(prod.version))),
             "fixes_tested": sum(f.gate is not None or f.replay is not None for f in fixes),
             "experiments": len(_loop_cycles()), "per_week_gained": gained, "per_week_protected": protected}
@@ -263,7 +301,8 @@ def calls(source: str | None = None, overall: str | None = None, flag: str | Non
     for t in ts:
         a, h = audits.get((t.prompt_version, t.call_id)), human.get(t.call_id)
         grades = Counter(v.grade for v in a.verdicts) if a else Counter()
-        item = {"call_id": t.call_id, "source": t.source, "duration_s": t.duration_s, "language": t.language,
+        item = {"call_id": t.call_id, "source": t.source, "real": models.is_real(t),
+                "duration_s": t.duration_s, "language": t.language,
                 "prompt_version": t.prompt_version, "overall": a.overall if a else None,
                 "disposition": a.disposition if a else None, "risk_flags": list(a.risk_flags) if a else [],
                 "summary": a.summary if a else "", "n_fatal": grades["fatal"], "n_non_fatal": grades["non_fatal"],
@@ -528,7 +567,7 @@ def loop_advance(body: AdvanceIn | None = None) -> dict:
 
 # A new app around the base app's routes rather than the base app object itself: the host check is
 # middleware, which cannot join an app another importer may already have started.
-app = FastAPI(title="Slow & Steady")
+app = FastAPI(title="Vani Lab")
 app.router.routes.extend(r for r in api.app.routes if isinstance(r, APIRoute))
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=HOSTS)
 

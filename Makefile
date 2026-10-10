@@ -68,10 +68,10 @@ slide:  ## slide/one_slide.pptx, plus its chart PNG in reports/
 # --- The loop (docs/loop_api.md). SOURCE = production | audited. ARGS passes flags through, e.g.
 # make listen ARGS=--yes-send-real-audio, make loop ARGS="--until judge --yes-send-real-transcripts".
 # The --yes-* flags send real customer calls to the model provider: only on the user's go-ahead.
-.PHONY: platform listen judge agreement loop loop-status
+.PHONY: platform listen judge agreement loop loop-status gate-eval
 SOURCE ?= production
 
-platform:  ## the Slow & Steady platform (API + web): http://127.0.0.1:8600
+platform:  ## the Vani Lab platform (API + web): http://127.0.0.1:8600
 	$(RUN) uvicorn abtest.ext.service:app --host 127.0.0.1 --port 8600
 
 listen:  ## make listen SOURCE=production|audited ARGS=--yes-send-real-audio  (recordings -> transcripts)
@@ -88,3 +88,11 @@ loop:  ## advance the loop's current cycle: make loop ARGS="--until judge" (stop
 
 loop-status:  ## the prompt registry, the cycles and the next action
 	$(RUN) python -m abtest.ext.loop status
+
+gate-eval:  ## the Jev patch gate on its 3 test edits (the safe one passes, the unsafe two block); prompt text only
+	$(RUN) python -m abtest.ext.improve gate-eval $(ARGS)
+
+# --- Live calls through Sarvam (docs/runbook_live_calls.md): real phones, the team allowlist only.
+.PHONY: calls
+calls:  ## make calls ARGS="start --split 0.5" | ARGS="call --yes-place-real-calls" | ARGS=fetch | ARGS=look | ARGS=status
+	$(RUN) python -m abtest.ext.sarvam_live $(ARGS)

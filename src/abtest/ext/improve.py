@@ -25,6 +25,8 @@ from itertools import islice
 from pathlib import Path
 from typing import get_args
 
+import yaml
+
 from abtest.config import _count
 from abtest.contracts import BASE_PROMPT, ROOT
 from abtest.ext import llm
@@ -60,6 +62,8 @@ FAIL = ("fatal", "non_fatal")
 ROOT_TYPES = get_args(RootType)
 MAX_BOT_TURNS = 14
 THINK_TOKENS = 3000  # Claude 5.5 on OpenRouter reasons by default and that eats max_tokens: 400 came back empty
+GATE_TOKENS = 8000   # the reply is small, but Jev Router may pick a reasoning model, and reasoning counts here
+PATCHES = ROOT / "tests" / "ext" / "fixtures" / "patches"  # the gate's test edits (PLAN_EXTENSIONS §E4.2)
 END = "[END_CALL]"
 GATE_CHECKS = (  # (id, blocking, question): PLAN_EXTENSIONS §E4.2
     ("alters_commitments", True, ("Does B make the bot state or promise any fact, price, delivery time or "
@@ -442,20 +446,42 @@ def gate(fix: Fix, model: str | None = None) -> GateResult:
     """Safety review before any buyer hears B: a compliance break would not move the A/B metric within two
     weeks and is unacceptable even once. Blocks when any blocking check has p >= 0.5; warnings are logged
     only. Saved on the Fix."""
-    model = model or llm.model_for("gate")
     a, b = _prompts(fix)
-    questions = "\n".join(f"- {cid}: {q}" for cid, _, q in GATE_CHECKS)
-    user = (f"Prompt A:\n<<<\n{a}\n>>>\n\nPrompt B:\n<<<\n{b}\n>>>\n\nUnified diff, A -> B:\n{fix.diff}\n\n"
-            f"Questions:\n{questions}")
-    res = llm.chat(model, [{"role": "system", "content": _GATE}, {"role": "user", "content": user}],
-                   schema=_GATE_SCHEMA, schema_name="gate", max_tokens=THINK_TOKENS)
-    data = res.data if isinstance(res.data, dict) else {}
-    checks = tuple(GateCheck(id=cid, question=q, probability=_prob(data.get(cid), blocking), blocking=blocking)
-                   for cid, blocking, q in GATE_CHECKS)
-    result = GateResult(passed=not any(c.blocking and c.probability >= c.threshold for c in checks),
-                        checks=checks, model=res.model)
+    result = gate_check(a, b, fix.diff, model)
     _update_fix(fix, gate=result)
     return result
+
+
+def gate_check(a: str, b: str, diff: str, model: str | None = None, cache: bool = True) -> GateResult:
+    """The gate on two prompt texts and their diff. Only prompt text is sent; no Fix is saved (the reply is
+    cached and its cost counted against the cap, like every model call)."""
+    model = model or llm.model_for("gate")
+    questions = "\n".join(f"- {cid}: {q}" for cid, _, q in GATE_CHECKS)
+    user = (f"Prompt A:\n<<<\n{a}\n>>>\n\nPrompt B:\n<<<\n{b}\n>>>\n\nUnified diff, A -> B:\n{diff}\n\n"
+            f"Questions:\n{questions}")
+    res = llm.chat(model, [{"role": "system", "content": _GATE}, {"role": "user", "content": user}],
+                   schema=_GATE_SCHEMA, schema_name="gate", max_tokens=GATE_TOKENS, cache=cache)
+    data = res.data if isinstance(res.data, dict) else {}
+    ans = {cid: data[cid] if isinstance(data.get(cid), dict) else {} for cid, _, _ in GATE_CHECKS}
+    checks = tuple(GateCheck(id=cid, question=q, probability=_prob(ans[cid], blocking), blocking=blocking,
+                             reason=str(ans[cid].get("reason") or "").strip())
+                   for cid, blocking, q in GATE_CHECKS)
+    return GateResult(passed=not any(c.blocking and c.probability >= c.threshold for c in checks),
+                      checks=checks, model=model if res.model == model else f"{model} → {res.model}")  # Jev names the model it routed to
+
+
+def gate_eval(model: str | None = None) -> list[tuple[str, str, GateResult]]:
+    """The gate on its test edits to v1 (one safe, two it must block): [(name, expected pass | block, result)].
+    Always asks the model afresh: a check of the live model must not replay a cached verdict."""
+    a = _base_text(_prompt_version("v1"))
+    out = []
+    for path in sorted(PATCHES.glob("*.yaml")):
+        fx = yaml.safe_load(path.read_text(encoding="utf-8"))
+        b = _apply(a, [Edit(**fx["edit"], why=fx["name"])])
+        diff = "".join(difflib.unified_diff(a.splitlines(keepends=True), b.splitlines(keepends=True),
+                                            fromfile="v1", tofile=fx["name"], n=3))
+        out.append((fx["name"], fx["expect"], gate_check(a, b, diff, model, cache=False)))
+    return out
 
 
 # --- replay ------------------------------------------------------------------------------
@@ -591,16 +617,20 @@ def _find(items, id_: str):
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(prog="python -m abtest.ext.improve", description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(prog="python -m abtest.ext.improve", description=__doc__.split("\n")[0],
+                                 allow_abbrev=False)  # no prefix of --yes-send-real-transcripts counts as it
     sub = ap.add_subparsers(dest="cmd", required=True)
-    causes = sub.add_parser("causes", help="rank root causes from the version's audits")
+    causes = sub.add_parser("causes", help="rank root causes from the version's audits", allow_abbrev=False)
     causes.add_argument("--version", default="v1")
-    fix = sub.add_parser("fix", help="draft Prompt B for one root cause")
+    fix = sub.add_parser("fix", help="draft Prompt B for one root cause", allow_abbrev=False)
     fix.add_argument("rc_id")
     fix.add_argument("--version", default="v1", help="the version the root cause was found on")
     gate_p = sub.add_parser("gate", help="safety-check a fix")
     gate_p.add_argument("fix_id")
-    rep = sub.add_parser("replay", help="simulate the root cause's calls with Prompt A and Prompt B")
+    gev = sub.add_parser("gate-eval", help="the gate on its test edits: the safe one must pass, the unsafe ones block")
+    gev.add_argument("--model", help="default: the gate role's model (LLM_MODEL_GATE)")
+    rep = sub.add_parser("replay", help="simulate the root cause's calls with Prompt A and Prompt B",
+                         allow_abbrev=False)
     rep.add_argument("fix_id")
     rep.add_argument("--n", type=int, default=8)
     for p in (causes, fix, rep):
@@ -623,6 +653,19 @@ def main(argv: Sequence[str] | None = None) -> None:
                    and (f.gate is not None or f.replay is not None)]  # tried ones only: reruns stay idempotent
         f = draft_fix(rc, _prompt_version(rc.prompt_version), _audits(rc.prompt_version), history)
         print(f"{f.id}  {f.prompt_b_path}\n{f.rationale}\n\n{f.diff}")
+    elif a.cmd == "gate-eval":
+        try:
+            rows = gate_eval(a.model)
+        except llm.BudgetExceeded as e:
+            sys.exit(f"stopped: {e}")
+        for name, expect, res in rows:
+            got = "pass" if res.passed else "block"
+            print(f"{name:<18} expect {expect:<5}  got {got:<5}  {'ok' if got == expect else 'WRONG'}  ({res.model})")
+            for c in res.checks:
+                print(f"  {c.probability:4.2f}  {'blocking' if c.blocking else 'warning ':<8}  {c.id}  {c.reason}")
+        bad = sum(("pass" if r.passed else "block") != e for _, e, r in rows)
+        print(f"{len(rows) - bad} of {len(rows)} as expected")
+        sys.exit(1 if bad or not rows else 0)
     elif a.cmd == "gate":
         res = gate(_find(load_fixes(), a.fix_id))
         print("PASSED" if res.passed else "BLOCKED", res.model)

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · ad outcome</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="ad-b.css">
+<style>
+  .s { position: absolute; left: 160px; top: 0; width: 980px; }
+  .s > * { display: block; will-change: transform, opacity; }
+  .s .lead { font: 400 34px/1.2 var(--f-ui); color: var(--muted); letter-spacing: -.01em; }
+  .s .big { margin-top: 16px; font: 400 124px/.98 var(--f-display); letter-spacing: -.03em; }
+  .s .big em { color: var(--teal); }
+  .s.hm .big em { color: #E07A62; }
+  .s .trail { margin-top: 26px; font: 400 34px/1.2 var(--f-ui); color: var(--muted); }
+  .tag { font: 500 15px var(--f-mono); letter-spacing: .2em; text-transform: uppercase; white-space: nowrap; color: var(--muted); }
+  .num { font: 300 104px/1 var(--f-ui); letter-spacing: -.05em; font-variant-numeric: tabular-nums lining-nums; text-align: center; width: 360px; }
+  .log { left: 1180px; top: 640px; width: 560px; font: 400 21px/1.9 var(--f-mono); color: var(--ink); }
+  .log div { white-space: nowrap; }
+  .log b { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--teal); margin-right: 18px; vertical-align: 2px; box-shadow: 0 0 10px rgba(63, 184, 169, .7); }
+  .slot { height: 22px; overflow: hidden; }
+  .slot > div { will-change: transform; }
+  .slot span { display: block; height: 22px; line-height: 22px; }
+</style>
+</head>
+<body>
+<div id="fx">
+  <canvas id="c"></canvas>
+  <div class="s" id="s0"><span class="lead">Every change,</span><span class="big">Proven on <em>a tenth</em>.</span><span class="trail">Before it reaches the rest.</span></div>
+  <div class="s hm" id="s1"><span class="lead">Harm,</span><span class="big">Caught in <em>days</em>.</span><span class="trail">Not quarters.</span></div>
+  <div class="s" id="s2"><span class="lead">Every rollout,</span><span class="big">Signed by <em>a person</em>.</span><span class="trail">And logged.</span></div>
+  <div class="s" id="s3"><span class="lead">And every call,</span><span class="big">Teaching the<br><em>next prompt</em>.</span></div>
+  <div class="num abs" id="pct" style="left:1260px;top:488px">10%</div>
+  <div class="tag abs" id="d10"><span style="color:#E07A62">Day 10</span> · stopped</div>
+  <div class="tag abs" id="d90">A quarter</div>
+  <svg class="abs" id="pen" style="left:1230px;top:380px;overflow:visible" width="420" height="130" viewBox="0 0 420 130"><path pathLength="1" fill="none" stroke="#EDEAE2" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 1" d="M8 86C28 22 52 8 56 48C59 86 38 98 44 70C50 40 86 30 96 62C103 86 111 80 121 56C129 36 142 42 139 64C137 84 151 84 166 58C179 38 191 30 201 50C209 66 205 82 216 72C231 52 247 40 264 52C277 62 271 80 287 71C312 56 332 40 354 46M36 106C118 92 240 96 404 80"/></svg>
+  <div class="tag abs" id="sig" style="left:1210px;top:520px">Approved by</div>
+  <div class="log abs" id="log"><div id="l0"><b></b>test started on 10% of leads</div><div id="l1"><b></b>sample ratio check · ok</div><div id="l2"><b></b>rollout approved · signed</div></div>
+  <div class="tag abs slot" id="ver" style="left:1340px;top:800px;width:200px;text-align:center"><div><span>Prompt v1</span><span style="color:var(--teal)">Prompt v2</span></div></div>
+</div>
+<div class="grain"></div>
+<script src="../runtime.js"></script>
+<script src="ad-b.js"></script>
+<script>
+const VX = 1440, VY = 540;
+let g, dust, T, S;
+
+function init() {
+  g = ctx2d("c");
+  dust = makeDust(37, 70);
+  T = [
+    [cue("Every change"), cue("proven on a tenth"), cue("before it reaches the rest")],
+    [cue("Harm"), cue("caught in days"), cue("not quarters")],
+    [cue("Every rollout"), cue("signed by a person"), cue("and logged")],
+    [cue("And every call"), cue("teaching the next prompt")],
+  ];
+  T.forEach((b, i) => (b.out = T[i + 1] ? T[i + 1][0] - 0.35 : Infinity));
+  S = T.map((_, i) => document.getElementById(`s${i}`));
+  // centre each statement on the frame's middle
+  S.forEach((el) => (el.style.top = `${540 - el.offsetHeight / 2}px`));
+}
+
+/** Statement i in and out: its lead, big line and trail rise in on their cues, and drift up together on exit. */
+function statement(t, i) {
+  const [a, b, c] = T[i], out = T[i].out, el = S[i], [lead, big, trail] = el.children;
+  show(lead, t, a - 0.1, out, { dy: 18, blur: 8, d: 0.8 });
+  show(big, t, b - 0.15, out, { dy: 40, blur: 16, d: 1.1 });
+  if (trail) show(trail, t, c - 0.1, out, { dy: 18, blur: 8, d: 0.8 });
+  return life(t, a - 0.2, 0.8, out, 0.6);
+}
+
+function arc(cx, cy, r, a0, a1) { const p = new Path2D(); p.arc(cx, cy, r, a0, a1); return p; }
+
+function render(t) {
+  stage(t);
+  g.clearRect(0, 0, 1920, 1080);
+  drawDust(g, dust, t, 0, 0, 0.8);
+  const k = [0, 1, 2, 3].map((i) => statement(t, i));
+
+  // 1. a tenth of the circle fills before the whole
+  {
+    const [, b, c] = T[0], a = k[0], R = 200, top = -Math.PI / 2;
+    const ten = prog(t, b, 0.9, E.inOutCubic), rest = prog(t, c + 0.1, 1.6, E.inOutCubic);
+    g.save(); g.globalAlpha = a;
+    g.strokeStyle = `rgba(${RGB.ink},.13)`; g.lineWidth = 1; g.stroke(arc(VX, VY, R, 0, TAU));
+    g.lineCap = "butt";
+    if (rest > 0) { g.strokeStyle = `rgba(${RGB.ink},.42)`; g.lineWidth = 4; g.stroke(arc(VX, VY, R, top + TAU * 0.1 + 0.03, top + 0.03 + TAU * (0.1 + 0.9 * rest) - 0.06 * rest)); }
+    if (ten > 0) { g.lineWidth = 14; g.strokeStyle = `rgba(${RGB.teal},1)`; g.stroke(arc(VX, VY, R, top, top + TAU * 0.1 * ten)); glow(g, arc(VX, VY, R, top, top + TAU * 0.1 * ten), RGB.teal, 0.8, 1, 1.4); }
+    g.restore();
+    const pct = document.getElementById("pct"), whole = rest > 0.5;
+    pct.textContent = `${Math.round(lerp(10 * prog(t, b, 0.9, E.outCubic), 100, rest))}%`;
+    pct.style.color = whole ? "var(--ink)" : "var(--teal)";
+    pct.style.opacity = (a * prog(t, b, 0.6)).toFixed(3);
+  }
+
+  // 2. the harm path, caught and stopped early on its z-path
+  {
+    const [h, c, q] = T[1], a = k[1], x0 = 1130, W = 640, y0 = 420, U = 44;
+    const X = (d) => x0 + W * Math.sqrt(d / 90), B = (d) => -(1.9 + 3.4 * Math.exp(-d / 12)), Y = (z) => y0 - z * U;
+    const Z = (d) => B(10) * (d / 10) ** 1.25 + 0.42 * Math.sin(d * 1.9) * Math.sin(Math.PI * d / 10);
+    g.save(); g.globalAlpha = a;
+    const ax = prog(t, h, 0.9, E.inOutCubic);
+    g.strokeStyle = `rgba(${RGB.ink},.22)`; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + W * ax, y0); g.stroke();
+    // the harm boundary and its zone
+    const bk = prog(t, h + 0.2, 1.0, E.inOutCubic), bp = [];
+    for (let d = 0.5; d <= 90 * bk; d += 0.5) bp.push([X(d), Y(B(d))]);
+    if (bp.length > 1) {
+      g.setLineDash([3, 6]); g.strokeStyle = `rgba(${RGB.harm},.6)`; g.stroke(poly(bp)); g.setLineDash([]);
+      const zone = poly([...bp, [bp[bp.length - 1][0], Y(-6.6)], [bp[0][0], Y(-6.6)]], true);
+      const gr = g.createLinearGradient(0, Y(-2), 0, Y(-6.6)); gr.addColorStop(0, `rgba(${RGB.harm},.12)`); gr.addColorStop(1, `rgba(${RGB.harm},0)`);
+      g.fillStyle = gr; g.fill(zone);
+    }
+    // the ghost of a quarter: where it would have gone, unnoticed
+    const gk = prog(t, q - 0.1, 1.4, E.inOutCubic);
+    if (gk > 0) {
+      const gp = []; for (let d = 10; d <= 10 + 80 * gk; d += 0.5) gp.push([X(d), Y(Z(10) - 0.042 * (d - 10) + 0.3 * Math.sin(d * 0.7) * (d - 10) / 80)]);
+      g.setLineDash([2, 7]); g.strokeStyle = `rgba(${RGB.ink},.28)`; g.lineWidth = 1.4; g.stroke(poly(gp)); g.setLineDash([]);
+    }
+    // the path itself, to day 10, where it is stopped
+    const pk = prog(t, h + 0.35, Math.max(0.8, c - h + 0.1), E.inOutCubic), pts = [];
+    for (let d = 0; d <= 10 * pk + 1e-6; d += 0.1) pts.push([X(d), Y(Z(d))]);
+    if (pts.length > 1) glow(g, poly(pts), RGB.harm, 1, 2.2, 0.7);
+    const sk = prog(t, c + 0.45, 0.7, E.outQuint);
+    if (sk > 0) {
+      const [sx, sy] = [X(10), Y(Z(10))];
+      g.strokeStyle = `rgba(${RGB.ink},${0.5 * sk})`; g.lineWidth = 1; g.beginPath(); g.moveTo(sx, y0 + 8); g.lineTo(sx, sy - 26 + 26 * (1 - sk)); g.stroke();
+      bloom(g, sx, sy, 40, RGB.harm, 0.5 * sk);
+      g.fillStyle = "#0B0B0C"; g.beginPath(); g.arc(sx, sy, 8, 0, TAU); g.fill();
+      g.strokeStyle = `rgba(${RGB.ink},${sk})`; g.lineWidth = 2.2; g.stroke();
+      const hk = prog(t, c + 0.45, 1.2, E.outCubic); if (hk < 1) { g.strokeStyle = `rgba(${RGB.harm},${0.8 * (1 - hk)})`; g.lineWidth = 1.4; g.beginPath(); g.arc(sx, sy, 10 + 40 * hk, 0, TAU); g.stroke(); }
+    }
+    g.restore();
+    const d10 = document.getElementById("d10"), d90 = document.getElementById("d90");
+    d10.style.left = `${X(10) - 40}px`; d10.style.top = `${y0 - 44}px`;
+    d90.style.left = `${X(90) - 120}px`; d90.style.top = `${y0 - 44}px`;
+    show(d10, t, c + 0.55, T[1].out, { dy: 10, blur: 6, d: 0.8 }); d10.style.opacity *= a;
+    show(d90, t, q + 0.2, T[1].out, { dy: 10, blur: 6, d: 0.8 }); d90.style.opacity *= a;
+  }
+
+  // 3. a signature stroke, then a log line appending
+  {
+    const [r, s, l] = T[2], a = k[2];
+    g.save(); g.globalAlpha = a;
+    const base = prog(t, r, 1.0, E.inOutCubic);
+    g.strokeStyle = `rgba(${RGB.ink},.25)`; g.lineWidth = 1; g.beginPath(); g.moveTo(1210, 500); g.lineTo(1210 + 520 * base, 500); g.stroke();
+    const pk = prog(t, s - 0.05, 1.6, E.inOutCubic), pen = document.getElementById("pen");
+    pen.firstElementChild.style.strokeDashoffset = (1 - pk).toFixed(4);
+    pen.style.opacity = a.toFixed(3);
+    g.restore();
+    const sg = document.getElementById("sig"); sg.style.opacity = (a * base * 0.9).toFixed(3); sg.style.top = "516px";
+    // the log: two earlier lines, then the new one appends and the lines step up
+    const ap = prog(t, l - 0.05, 0.8, E.outQuint), lg = document.getElementById("log");
+    lg.style.opacity = (a * prog(t, r + 0.3, 0.8)).toFixed(3);
+    lg.style.transform = `translate3d(0, ${(-40 * ap).toFixed(1)}px, 0)`;
+    ["l0", "l1"].forEach((id, i) => (document.getElementById(id).style.opacity = (i ? 0.55 : 0.32) - 0.15 * ap));
+    const l2 = document.getElementById("l2"); l2.style.opacity = ap.toFixed(3); l2.style.transform = `translate3d(${(-16 * (1 - ap)).toFixed(1)}px, 0, 0)`;
+  }
+
+  // 4. the ring turns once more, and the prompt moves on
+  {
+    const [e, n] = T[3], a = k[3], R = 190, top = -Math.PI / 2;
+    const lap = prog(t, e + 0.2, Math.max(2.0, n - e + 1.2), E.inOutCubic), cA = top + TAU * lap, ph = 0.6 + t * 1.2;
+    const done = Math.exp(-(((t - (e + 0.2 + Math.max(2.0, n - e + 1.2))) / 0.35) ** 2));
+    g.save(); g.globalAlpha = a;
+    const ring = (from, to, amp, nn) => poly(Array.from({ length: nn + 1 }, (_, i) => { const aa = from + ((to - from) * i) / nn, r = ringR(aa, R, ph, cA, amp); return [VX + r * Math.cos(aa), VY + r * Math.sin(aa)]; }));
+    glow(g, ring(0, TAU, 0.9, 300), RGB.ink, 0.3 + 0.5 * done, 1.3);
+    if (lap > 0.002) glow(g, ring(top, cA, 0.9, Math.max(4, Math.ceil(300 * lap))), RGB.tealHi, 0.85 + done, 1.8);
+    for (let i = 0; i < 7; i++) {  // the seven stations, lit as the comet passes
+      const sa = top + (i * TAU) / 7, on = lap * TAU >= i * TAU / 7 + 0.02 || lap >= 1;
+      g.fillStyle = "#0B0B0C"; g.beginPath(); g.arc(VX + R * Math.cos(sa), VY + R * Math.sin(sa), 6, 0, TAU); g.fill();
+      g.lineWidth = 1.6; g.strokeStyle = on ? `rgba(${RGB.tealHi},.95)` : `rgba(${RGB.ink},.35)`; g.stroke();
+    }
+    const hr = ringR(cA, R, ph, cA, 0.9), hx = VX + hr * Math.cos(cA), hy = VY + hr * Math.sin(cA);
+    bloom(g, hx, hy, 60, RGB.amber, 0.35); bloom(g, hx, hy, 14, RGB.amberHi, 0.9);
+    g.fillStyle = "rgba(255,240,215,1)"; g.beginPath(); g.arc(hx, hy, 5, 0, TAU); g.fill();
+    g.restore();
+    const ver = document.getElementById("ver");
+    ver.style.opacity = (a * 0.95).toFixed(3);
+    ver.firstElementChild.style.transform = `translate3d(0, ${(-22 * prog(t, n + 0.6, 0.6, E.inOutCubic)).toFixed(1)}px, 0)`;
+  }
+}
+
+scene({ init, render, sfx: () => T.map((b) => [b[1] - 0.1, "hit", 0.4]) });
+</script>
+</body>
+</html>

@@ -222,8 +222,21 @@ def test_gate_blocks_when_any_blocking_check_reaches_the_threshold(answer, passe
     res = improve.gate(fix, model="m")
     assert res.passed is passed
     assert {c.id: c.blocking for c in res.checks} == {cid: b for cid, b, _ in improve.GATE_CHECKS}
+    assert {c.id: c.reason for c in res.checks} == {cid: "r" if cid in answer else "" for cid, _, _ in improve.GATE_CHECKS}
     assert PROMPT_A in seen[0] and fix.diff in seen[0]
     assert improve.load_fixes()[0].gate == res
+
+
+def test_gate_eval_runs_the_plans_three_edits_on_the_committed_prompt():
+    def stub(model, messages, schema):  # blocks exactly the two edits the plan says must block
+        diff = messages[1]["content"].split("Unified diff, A -> B:")[1]
+        added = "".join(x for x in diff.splitlines() if x.startswith("+") and not x.startswith("+++"))
+        risky = "a human if asked" in added or "within 24 hours" in added
+        return {cid: {"reason": "r", "probability": 0.9 if risky and b else 0.1} for cid, b, _ in improve.GATE_CHECKS}
+    llm.set_stub(stub)
+    got = {name: (expect, res.passed) for name, expect, res in improve.gate_eval(model="m")}
+    assert got == {"safe_qty": ("pass", True), "unsafe_assurance": ("block", False), "unsafe_human": ("block", False)}
+    assert not list(improve.FIXES_DIR.glob("*.json"))  # an eval saves no Fix
 
 
 def test_gate_and_replay_refuse_a_prompt_b_edited_after_drafting():

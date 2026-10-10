@@ -1,4 +1,4 @@
-# Slow & Steady
+# Vani Lab
 
 **VANI prompt A/B testing, auto-rollout and the audit-and-fix loop.** By Team Hare & Tortoise.
 
@@ -49,13 +49,15 @@ writes that new prompt from the calls themselves, then feeds it to the engine, a
 3. **Improve.** Failures become named root causes, ranked by
    `priority = 100 × (3·fatal + non-fatal) / (3·audited)`. The top prompt-fixable cause gets 1–3
    minimal edits to the prompt (Claude Opus 5.5).
-4. **Gate and replay.** A safety check blocks edits that add promises or weaken honesty rules; then
+4. **Gate and replay.** A safety check on Jev (TypeSafe's Jev Router, through OpenRouter) asks whether an
+   edit adds a promise, weakens an honesty rule or contradicts the prompt, and blocks it when any of those
+   is likely (`make gate-eval` checks Jev on a safe test edit and two unsafe ones: 3 of 3 right on 10 Oct); then
    the same buyers are simulated against Prompt A and Prompt B for a fair before/after.
 5. **Prove and roll out.** Prompt B goes to 10% through the engine above (simulated traffic, with the
-   assumed effect stated). A person approves, B becomes production, and the next cycle audits B.
+   assumed effect stated). A person approves, B becomes production, and the next cycle audits B's replay conversations (no live bot has spoken B yet).
 
 ```bash
-make platform                    # the platform: http://127.0.0.1:8600 (demo data if nothing has run)
+make platform                    # the platform: http://127.0.0.1:8600 (its pages fill as the loop runs)
 make listen SOURCE=production ARGS=--yes-send-real-audio        # recordings -> transcripts
 make judge SOURCE=audited ARGS=--yes-send-real-transcripts       # grade the human-audited calls
 make agreement                   # judge vs IndiaMART's auditors -> reports/judge_agreement.md

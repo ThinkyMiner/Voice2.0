@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · the problem</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="card.css">
+<style>
+  .eyebrow.lead { position: absolute; left: 120px; top: 214px; }
+  .lines { position: absolute; left: 120px; top: 282px; width: 940px; display: grid; gap: 52px; }
+  .line { display: grid; grid-template-columns: 70px 1fr; align-items: baseline; transition-property: opacity, transform, filter; }
+  .line .n { font: 500 18px var(--f-mono); letter-spacing: .1em; color: var(--accent); }
+  .line h2 { font: 400 66px/1.04 var(--f-display); letter-spacing: -.02em; }
+  .line h2 em { font-style: italic; }
+  .line .fig { font-size: .94em; }
+  .line p { grid-column: 2; margin-top: 12px; font: 400 25px/1.4 var(--f-ui); color: var(--muted); max-width: 820px; }
+  .line.past { opacity: .36; }
+  .grid { position: absolute; left: 1196px; top: 296px; display: grid; grid-template-columns: repeat(14, 22px); gap: 18px; }
+  .grid i { width: 22px; height: 22px; border-radius: 50%; background: var(--ink); opacity: 0; transform: scale(.4);
+    transition: opacity 600ms var(--ease), transform 700ms var(--ease), background 500ms var(--ease), box-shadow 600ms var(--ease); }
+  .grid[class*=" s"] i { transform: none; }
+  .grid.s1 i { opacity: .2; transition-delay: calc(var(--k) * 4ms); }
+  .grid.s2 i { opacity: .55; background: var(--accent); transition-delay: calc(var(--r) * 22ms); }
+  .grid.s3 i { opacity: .92; background: var(--accent-2); transition-delay: 0ms; transition-duration: 220ms; }
+  .grid.s4 i { opacity: .14; background: var(--ink); transition-delay: 0ms; }
+  .grid.s4 i.sample { opacity: 1; background: var(--bg); box-shadow: 0 0 0 3px var(--accent); }
+  .legend { position: absolute; left: 1196px; top: 820px; font: 500 15px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="top"><span class="brand"><svg class="logo"></svg><b>Vani <em>Lab</em></b></span><span class="team">Team Hare &amp; Tortoise</span></div>
+<div class="eyebrow accent lead" data-step>The problem, today</div>
+<div class="lines">
+  <div class="line" data-step data-cue="It makes about thirty thousand calls"><span class="n">01</span><h2>About <span class="fig">30,000</span> Vani calls a&nbsp;week.</h2></div>
+  <div class="line" data-step data-cue="One prompt decides"><span class="n">02</span><h2>One prompt decides what Vani&nbsp;says.</h2></div>
+  <div class="line" data-step data-cue="the change goes live"><span class="n">03</span><h2>A change goes live to every buyer <em>at&nbsp;once</em>.</h2>
+    <p data-step data-cue="If it hurts">If it hurts, nobody notices for weeks. If it helps, nobody can prove it.</p></div>
+  <div class="line" data-step data-cue="The only quality check"><span class="n">04</span><h2>QA audits a sample <em>by&nbsp;hand</em>.</h2></div>
+</div>
+<div class="grid" id="grid" aria-hidden="true"></div>
+<div class="legend" data-step data-cue="It makes about thirty thousand calls">Each dot, a buyer call · illustrative</div>
+<script src="card.js"></script>
+<script>
+  const grid = document.getElementById("grid"), COLS = 14, ROWS = 12;
+  const SAMPLE = new Set([17, 46, 75, 103, 128, 150]);  // a handful of dots, ringed as the hand-audited sample
+  for (let k = 0; k < COLS * ROWS; k++) {
+    const i = document.createElement("i");
+    i.style.setProperty("--k", k); i.style.setProperty("--r", Math.floor(k / COLS) + (k % COLS));
+    if (SAMPLE.has(k)) i.className = "sample";
+    grid.append(i);
+  }
+  const lines = [...document.querySelectorAll(".line")];
+  window.onStep = (i, el) => {
+    const n = lines.indexOf(el);
+    if (n < 0) return;
+    lines.forEach((l, j) => l.classList.toggle("past", j < n));
+    grid.className = `grid s${n + 1}`;
+  };
+</script>
+</body>
+</html>

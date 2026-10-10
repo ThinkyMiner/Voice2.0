@@ -259,10 +259,10 @@ function demoTest({ rubric, call_id }) {
     return null;
   };
   const bad = find(rubric.examples_fail), good = find(rubric.examples_pass);
-  const base = { rubric_id: rubric.id || "draft", rubric_version: rubric.version || 1 };
-  if (bad) return { ...base, grade: "fatal", confidence: 0.6, reason: "Demo mode, phrase match only: a fail example occurs in this call.", evidence: [bad] };
-  if (good) return { ...base, grade: "pass", confidence: 0.6, reason: "Demo mode, phrase match only: a pass example occurs in this call.", evidence: [good] };
-  return { ...base, grade: "na", confidence: 0.3, reason: "Demo mode has no judge model: none of your example phrases occur in this call. On the platform the judge model grades it.", evidence: [] };
+  const base = { rubric_id: rubric.id || "draft", rubric_version: rubric.version || 1 };  // no confidence: a phrase match measures none
+  if (bad) return { ...base, grade: "fatal", confidence: null, reason: "Demo mode, phrase match only: a fail example occurs in this call.", evidence: [bad] };
+  if (good) return { ...base, grade: "pass", confidence: null, reason: "Demo mode, phrase match only: a pass example occurs in this call.", evidence: [good] };
+  return { ...base, grade: "na", confidence: null, reason: "Demo mode has no judge model: none of your example phrases occur in this call. On the platform the judge model grades it.", evidence: [] };
 }
 
 function demoSaveRubric(method, path, body) {

@@ -237,6 +237,10 @@ def test_agreement_matches_hand_computed_kappa():
     assert (rep.n_calls, rep.overall_accuracy, rep.model, rep.held_out) == (5, 0.8, "m", True)
     assert rep.overall_kappa == pytest.approx(0.32 / 0.52)
     assert rep.fatal_vs_rest_accuracy == pytest.approx(0.8)   # fatal flags agree on calls 0, 2, 3 and 4
+    # the same pairs as counts, so the Audit page's trivial guesses sit on these calls
+    assert rep.overall_confusion == {"pass": {"pass": 2, "non_fatal": 0, "fatal": 1},
+                                     "non_fatal": {"pass": 0, "non_fatal": 0, "fatal": 0},
+                                     "fatal": {"pass": 0, "non_fatal": 0, "fatal": 2}}
 
 
 def test_kappa_is_none_when_undefined():

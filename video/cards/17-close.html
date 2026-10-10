@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · close</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="card.css">
+<style>
+  .stage { position: absolute; left: 0; right: 0; top: 470px; transform: translateY(-50%); text-align: center; }
+  .team { font: 500 19px var(--f-mono); letter-spacing: .2em; color: var(--accent); }
+  .line { margin-top: 56px; font: 400 96px/1.02 var(--f-display); letter-spacing: -.025em; }
+  .line + .line { margin-top: 18px; }
+  .line em { font-style: italic; }
+  .line.hare em { color: var(--accent-2-ink); }
+  .line.tort em { color: var(--accent); }
+  .lock { margin-top: 92px; display: inline-flex; align-items: center; gap: 20px; }
+  .lock svg { width: 66px; height: 66px; }
+  .lock b { font: 400 64px/1 var(--f-display); letter-spacing: -.015em; }
+  .lock b em { font-style: italic; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="team" data-step data-cue="We're team">TEAM HARE &amp; TORTOISE</div>
+  <h1 class="line hare" data-step data-cue="The hare ships">The hare ships a prompt change on a <em>hunch</em>.</h1>
+  <h1 class="line tort" data-step data-cue="The tortoise ships">The tortoise ships it on <em>evidence</em>.</h1>
+  <div data-step data-cue="on evidence"><span class="lock"><svg class="logo"></svg><b>Vani <em>Lab</em></b></span></div>
+</div>
+<script src="card.js"></script>
+</body>
+</html>

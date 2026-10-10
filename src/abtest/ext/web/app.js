@@ -12,6 +12,7 @@ import * as experiments from "./pages/experiments.js";
 import * as rubrics from "./pages/rubrics.js";
 import * as prompts from "./pages/prompts.js";
 import * as settings from "./pages/settings.js";
+import * as docs from "./pages/docs.js";
 
 const ROUTES = [  // [pattern, nav key, section label, render]
   [/^$/, "loop", "Loop", home.render],
@@ -26,6 +27,7 @@ const ROUTES = [  // [pattern, nav key, section label, render]
   [/^rubrics$/, "rubrics", "Rubrics", rubrics.renderLibrary],
   [/^rubrics\/(.+)$/, "rubrics", "Rubrics", rubrics.renderStudio],
   [/^prompts$/, "prompts", "Prompts", prompts.render],
+  [/^docs(?:\/[a-z0-9-]+)?$/, "docs", "Docs", docs.render],  // no capture: the crumb stays "Docs"; docs.js reads the section
   [/^settings$/, "settings", "Settings", settings.render],
 ];
 
@@ -53,7 +55,8 @@ async function route(keepScroll = false) {
   }
   $$(".nav a").forEach((a) => (a.dataset.route === key ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
   $("#menu-label").textContent = label;
-  $("#sim-pill").hidden = key !== "experiments";  // the calls are real; only the A/B traffic is simulated
+  $("#sim-pill").hidden = key !== "experiments" || /^vani-live-/.test(id || "");  // the calls are real; only the A/B traffic is simulated, except a live experiment's
+  $("#sim-pill .lbl").textContent = id ? "A/B traffic is simulated" : "A/B traffic simulated, except live runs";  // the list may hold a live run
   const back = id ? [`All ${label.toLowerCase()}`, `#/${key}`] : key === "loop" ? null : toLoop;
   await show(n, label, id || null, (el) => render(el, { id, params }), key, keepScroll, back);
   if (keepScroll) scrollTo({ top });
@@ -74,11 +77,11 @@ async function show(n, label, id, render, key = "", keepScroll = false, back = n
     if (n === seq) { if (err?.status !== 404) console.error(err); mount(el, failState(err, back)); }
   }
   el.style.minHeight = "";
-  document.title = id ? `${id} · Slow & Steady` : label === "Loop" ? "Slow & Steady" : `${label} · Slow & Steady`;
+  document.title = id ? `${id} · Vani Lab` : label === "Loop" ? "Vani Lab" : `${label} · Vani Lab`;
 }
 
 function crumbs(label, id, key) {
-  const items = [html`<li><a href="#/">Slow &amp; Steady</a></li>`];
+  const items = [html`<li><a href="#/">Vani Lab</a></li>`];
   if (key && key !== "loop") items.push(id ? html`<li><a href="#/${key}">${label}</a></li>` : html`<li>${label}</li>`);
   else if (key === "loop") items.push(html`<li>The loop</li>`);
   if (id) items.push(html`<li class="mono">${id}</li>`);
@@ -148,6 +151,7 @@ const PAGES = [  // [title, href, words people search for]
   ["Prompts", "#/prompts", "versions lineage text v1 production candidate"],
   ["Experiments", "#/experiments", "A/B test prove approve reject engine scenarios"],
   ["Settings", "#/settings", "models budget spend privacy data locations"],
+  ["Docs", "#/docs", "documentation help guide how it works glossary faq"],
 ];
 let palLoad = null, palItems = null, palSel = 0, palShown = [];
 
@@ -163,6 +167,7 @@ async function loadPalette() {
   items.push(...x.map((i) => ({ k: "Experiment", t: i.experiment_id, s: i.state, w: i.assumed_effect, href: `#/experiments/${enc(i.experiment_id)}` })));
   items.push(...f.map((i) => ({ k: "Fix", t: i.id, s: i.rationale || "", href: `#/fixes/${enc(i.id)}` })));
   items.push(...r.map((i) => ({ k: "Rubric", t: i.name, s: i.category, href: `#/rubrics/${enc(i.id)}` })));
+  items.push(...docs.SECTIONS.map(([id, t]) => ({ k: "Docs", t, href: `#/docs/${id}` })));
   items.push(...c.map((i) => ({ k: "Call", t: i.call_id, s: i.summary || "", href: `#/calls/${enc(i.call_id)}` })));  // last: there are hundreds
   return items;
 }

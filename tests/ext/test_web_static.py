@@ -15,7 +15,7 @@ from abtest.ext.models import (AgreementReport, CallAudit, Cycle, Fix, PromptVer
                                Transcript)
 
 WEB = Path(__file__).resolve().parents[2] / "src" / "abtest" / "ext" / "web"
-PAGES = ["home", "audit", "calls", "issues", "fixes", "experiments", "rubrics", "prompts", "settings"]
+PAGES = ["home", "audit", "calls", "issues", "fixes", "experiments", "rubrics", "prompts", "settings", "docs"]
 
 
 @pytest.fixture(scope="module")
@@ -29,7 +29,7 @@ def test_files_exist_and_index_references_them():
         assert (WEB / name).is_file(), name
     html = (WEB / "index.html").read_text(encoding="utf-8")
     assert re.search(r'<link rel="stylesheet" href="app\.css">', html)
-    assert re.search(r'<script type="module" src="app\.js"></script>', html)
+    assert re.search(r'<script type="module" src="app\.js".*?></script>', html)
 
 
 def test_no_external_scripts_and_only_google_fonts_styles():
@@ -98,6 +98,27 @@ def test_demo_calls_are_invented_and_self_consistent(demo):
     assert "amazonaws" not in blob and "s3://" not in blob
 
 
+def test_docs_links_land_and_its_copied_facts_match_the_code():
+    """pages/docs.js hard-codes the gate checks, the built-in rubrics and the headline's planned boundaries:
+    a change in the code must show up here. Every #/docs/<id> link must land on a section."""
+    from abtest import boundaries, config, power
+    from abtest.ext import improve, rubrics
+    js = (WEB / "pages" / "docs.js").read_text(encoding="utf-8")
+    ids = re.findall(r'\["([a-z]+)", "[^"]+"\]', re.search(r"SECTIONS = \[(.*?)\n\];", js, re.S)[1])
+    assert ids and sorted(re.findall(r'sec\("([a-z]+)"', js)) == sorted(ids)
+    assert set(re.findall(r"#/docs/([a-z0-9-]+)", js)) <= set(ids)
+    for cid, blocking, question in improve.GATE_CHECKS:
+        assert f'["{cid}", {str(blocking).lower()}, "{question}"]' in js, cid
+    built = rubrics.builtin()
+    assert len(built) == len(re.findall(r'\["[^"]+", "(?:prompt|flow|asr|knowledge|platform)"', js))
+    for r in built:
+        assert f'["{r.name}", "{r.root_type}"' + (", true]" if r.needs_audio else "]") in js, r.name
+    cfg = config.load_experiment("configs/experiments/vani-meeting-v1.yaml")
+    t = power.planned_info_fractions(cfg)
+    plan = {k: [float(x) for x in re.search(rf"{k}: \[([^\]]+)\]", js)[1].split(",")] for k in ("win", "harm")}
+    assert plan["win"] == [round(x, 3) for x in boundaries.win_boundaries(t, cfg.alpha_win)]
+    assert plan["harm"] == [-round(x, 3) for x in boundaries.harm_boundaries(t, cfg.alpha_harm)]
+
 
 CASES = [  # (Prompt A line, Prompt B line): the redline must read as B with deletions hidden, as A with insertions hidden
     ("Use an appropriate unit from options ; never ask without a unit.",
@@ -120,6 +141,17 @@ def test_redline_word_diff_reads_as_both_prompts():
         red = json.loads(line)
         assert squash(unescape(re.sub(r"<del>.*?</del>", "", red))) == squash(b)
         assert squash(unescape(re.sub(r"<ins>.*?</ins>", "", red))) == squash(a)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_redline_keeps_a_variable_both_prompts_share():
+    """A's "{x} ;" loses the space before the ";" in clean(): the variable must stay plain, only the ";" struck."""
+    a = "Use a unit from ﻿@ unit_options﻿ ; never ask without one."
+    b = "Use a unit from ﻿@ unit_options﻿ in every question; never ask without one."
+    script = "const { wordDiff } = await import(process.argv[1]); console.log(String(wordDiff(process.argv[2], process.argv[3])));"
+    red = subprocess.run(["node", "--input-type=module", "-e", script, (WEB / "pages" / "fixes.js").as_uri(), a, b],
+                         capture_output=True, text=True, timeout=30, check=True).stdout
+    assert re.sub(r"<(del|ins)>.*?</\1>", "", red).count('<span class="tok">@unit_options</span>') == 1, red
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")

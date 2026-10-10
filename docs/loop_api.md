@@ -1,4 +1,4 @@
-# Slow & Steady platform API (contract)
+# Vani Lab platform API (contract)
 
 Served by `src/abtest/ext/service.py` (`make platform`, port 8600): the base FastAPI app plus these
 JSON routes, plus the static site from `src/abtest/ext/web/` at `/`. Every object below is a model in
@@ -35,7 +35,7 @@ Errors: 404 for an unknown id, 422 for a bad body, 409 for an illegal state chan
 | `DELETE /api/rubrics/{id}` | – | archives it (`active: false`); built-ins can be archived, never deleted |
 | `POST /api/rubrics/test` | `{rubric: {...}, call_id}` | grades one transcript with that rubric: `RubricVerdict`; 403 for a real call unless the platform runs with `LOOP_ALLOW_REAL=1` |
 | `POST /api/experiments/{id}/decision` | `{actor, approved}` | approve or reject a PENDING_APPROVAL experiment (base `decision.approve`) |
-| `POST /api/loop/advance` | `{until: Stage \| null}` | runs the loop in the background up to that stage: 202 `{accepted, until}`, 409 if a run is in progress; `GET /api/loop` shows progress. The web never sends real calls to the model; that needs the CLI flag |
+| `POST /api/loop/advance` | `{until: Stage \| null}` | runs the loop in the background up to that stage: 202 `{accepted, until}`, 409 if a run is in progress; `GET /api/loop` shows progress. steps that send real call content run from here only when the platform was started with `LOOP_ALLOW_REAL=1`; otherwise they wait for the CLI go-ahead (`--yes-send-real-transcripts`) |
 
 ## Honesty rules the UI must keep
 - There is no live traffic: every experiment is simulated replay of real call history with an assumed effect for B. Show `assumed_effect` wherever an experiment result appears.

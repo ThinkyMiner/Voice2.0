@@ -1,7 +1,7 @@
 // #/ The loop: where the current cycle stands and its one next step, the key numbers with their n,
 // the cycle's five stations (eight steps), its root cause, fix and A/B test, and the closed cycles.
 import { get, send, state } from "../api.js";
-import { $, html, raw, esc, mount, int, pct, fix, sint, when, short, cap, stateChip, gradeStack, shares, toast, enc, kappaWord, confirmDialog } from "../ui.js";
+import { $, html, raw, esc, mount, int, pct, fix, sint, when, short, cap, stateChip, gradeStack, shares, toast, enc, kappaWord, confirmDialog, goodChecks, audioIds } from "../ui.js";
 import { mountRing } from "../viz.js";
 
 // The ring's five stations and the loop's eight steps under them (loop.STAGES).
@@ -42,44 +42,43 @@ function station(c) {
   if (h >= 0) return { station: STATION[ORDER[h]], halt: true, detail: SUB[ORDER[h]] ? `→ ${SUB[ORDER[h]]}` : "" };
   return { station: STATION[c.stage] ?? 0, halt: false, detail: SUB[c.stage] ? `→ ${SUB[c.stage]}` : "" };
 }
-const figs = (s) => raw(esc(s).replace(/\b(v\d+|\d[\d,.]*)\b/g, '<span class="fig">$1</span>'));  // the serif's 1 reads as l
+const figs = (s) => raw(esc(s).replace(/(&#?\w+;)|\b(v\d+|\d[\d,.]*)\b/g, (m, ent, f) => ent || `<span class="fig">${f}</span>`));  // the serif's 1 reads as l; entities pass untouched ("v2&#39;s")
 const first = (s) => (String(s || "").match(/^.+?[.!?](?=\s|$)/)?.[0] || String(s || "")).trim();
 const plain = (note) => cap(String(note || "").replace(/^(blocked|waiting|done|close):\s*/, ""));
-const fixStatus = (f, x) => [
+const fixStatus = (f) => [
   `${f.edits.length} edit${f.edits.length === 1 ? "" : "s"}`,
   f.gate ? (f.gate.passed ? "gate passed" : "gate blocked") : "gate not run",
-  f.replay ? `replay ${pct(f.replay.fail_rate_a, 0)} → ${pct(f.replay.fail_rate_b, 0)} failing, ${f.replay.n_cases} cases` : "replay not run",
-  x ? `A/B ${OUTCOME[x.state] || x.state.toLowerCase()}` : "no A/B yet"].join(" · ");
+  f.replay ? `replay ${pct(f.replay.fail_rate_a, 0)} → ${pct(f.replay.fail_rate_b, 0)} failing, ${f.replay.n_cases} cases` : "replay not run"].join(" · ");
 
 /** The headline and the one next step for where the loop stands. */
 function plan(c, lp, k) {
   const A = c?.production_version || k.prodV, B = c?.candidate_version || "Prompt B", n = c?.n;
   const wait = /^waiting/.test(lp.next_action || "") ? lp.next_action : "";
-  if (lp.busy) return { title: `Cycle ${n ?? 1} is running`, body: "The loop is working in the background. The run log below shows each step as it happens; this page refreshes when it stops." };
+  if (lp.busy) return { title: `Cycle ${n ?? 1} is running`, body: "The run log below shows each step; the page refreshes when it stops." };
   if (!c || c.stage === "done") {
     const m = c ? c.n + 1 : 1;
-    return { title: `Ready to start cycle ${m}`, body: `Cycle ${m} works on ${A}, the prompt in production. Starting opens the cycle and counts ${A}'s calls. No model is called.`,
+    return { title: `Ready to start cycle ${m}`, body: `It works on ${A}, the prompt in production. No model is called.`,
       run: { until: "listen", label: `Start cycle ${m}` } };
   }
   if (c.stage === "blocked") return { title: `Cycle ${n} is blocked`, tone: "harm", body: plain(c.notes.at(-1)) || "No root cause a prompt change can fix is left on this version." };
   if (c.stage === "approval" && (k.x?.state === "PENDING_APPROVAL" || /^waiting for approval/.test(wait)))
-    return { title: `Cycle ${n} needs your decision`, tone: "pending", body: `${B} beat ${A} on simulated traffic. It keeps 10% of that traffic until someone approves or rejects it on the experiment page.`,
+    return { title: `Cycle ${n} needs your decision`, tone: "pending", body: `${B} beat ${A} on simulated traffic. It keeps 10% of it until you decide.`,
       link: ["Review and decide", `#/experiments/${enc(c.experiment_id)}`] };
   if (k.real && !k.allowReal && (NEEDS_REAL(c) || /^waiting for the go-ahead/.test(wait)))
     return { title: `Cycle ${n} is waiting for your go-ahead`, tone: "pending",
-      body: `${c.stage === "judge" && k.graded ? "The numbers below are from the judge's last run. Grading again for this cycle" : `The next step, ${STEP_NAME[c.stage] || c.stage},`} sends real call content to the model provider (OpenRouter), so it needs your go-ahead. Run it from a terminal, or start the platform with LOOP_ALLOW_REAL=1 to run it from here:`, cli: GO_AHEAD };
+      body: `${c.stage === "judge" && k.graded ? "The numbers below are from the judge's last run. Grading again" : `The next step, ${STEP_NAME[c.stage] || c.stage},`} sends real call content to OpenRouter. Run it from a terminal, or start the platform with LOOP_ALLOW_REAL=1:`, cli: GO_AHEAD };
   if (/^waiting for transcripts/.test(wait)) return { title: `Cycle ${n} is waiting for calls`, tone: "pending", body: plain(wait.replace(/^waiting for transcripts of \S+:\s*/, "")) };
   if (/^waiting: none of the/.test(wait)) return { title: `Cycle ${n}: the judge could not grade any call`, tone: "harm", body: "Its errors are in the run log. Grading again retries them.", run: { until: "judge", label: "Grade again", paid: ["judge"] } };
   const rc = k.rc ? ` “${k.rc.name}”` : "";
   const S = {
     listen: [`Cycle ${n}: count ${A}'s calls`, "Counts the calls this cycle works on. No model is called.", "Count the calls"],
-    judge: [`Cycle ${n}: grade ${A}'s calls`, "The judge model grades every call against the active rubrics. Calls graded before are cached and cost nothing.", "Grade the calls"],
-    improve: [`Cycle ${n}: rank the root causes`, "Groups the failed grades into root causes, ranks them by priority and picks the top one a prompt change can fix.", "Rank root causes"],
+    judge: [`Cycle ${n}: grade ${A}'s calls`, "The judge grades every call against the active rubrics. Cached grades cost nothing.", "Grade the calls"],
+    improve: [`Cycle ${n}: rank the root causes`, "Groups failed grades into root causes and picks the top one a prompt can fix.", "Rank root causes"],
     gate: c.fix_id ? [`Cycle ${n}: safety-check ${B}`, `The gate model checks ${B} against the safety rules before any replay.`, "Run the safety gate"]
       : [`Cycle ${n}: write the fix${rc ? ` for${rc}` : ""}`, `The fixer drafts Prompt B as a few edits to ${A}, then the safety gate checks it.`, "Write the fix"],
     // up to 8 calls: improve.replay(n=8)
-    replay: [`Cycle ${n}: replay ${B} against ${A}`, `Up to 8 of the calls behind${rc || " the root cause"} become simulated buyers. Each one talks to ${A} and to ${B}, and the judge grades both conversations.`, "Run the replay"],
-    prove: [`Cycle ${n}: A/B test ${B}`, `The A/B engine replays call history with ${B} on 10% of leads and an effect assumed for B, deciding at each checkpoint. Simulated traffic; no model is called.`, "Run the A/B test"],
+    replay: [`Cycle ${n}: replay ${B} against ${A}`, `Up to 8 calls behind${rc || " the root cause"} become simulated buyers; the judge grades ${A} and ${B} on each.`, "Run the replay"],
+    prove: [`Cycle ${n}: A/B test ${B}`, `${B} gets 10% of replayed leads, with an assumed effect. Simulated traffic; no model is called.`, "Run the A/B test"],
     approval: [`Cycle ${n}: read the A/B decision`, `${c.experiment_id || "The A/B test"} has ended${k.x ? `: ${OUTCOME[k.x.state] || k.x.state}` : ""}. This moves the cycle to roll-out.`, "Read the decision"],
     rollout: k.x?.state === "PROMOTED" ? [`Cycle ${n}: roll out ${B}`, `${B} becomes production, ${A} is retired, and cycle ${n + 1} starts on ${B}.`, `Roll out ${B}`]
       : [`Cycle ${n}: close the cycle`, `${B} is rejected and ${A} stays in production. Cycle ${n + 1} then starts on ${A}.`, "Close the cycle"],
@@ -88,7 +87,7 @@ function plan(c, lp, k) {
   const rest = ORDER.slice(ORDER.indexOf(c.stage), ORDER.indexOf("approval"));  // the steps before a person decides
   return { title: S[0], body: S[1], run: { until: c.stage, label: S[2], body: S[1], paid: PAID[c.stage] || [] },
     all: rest.length > 1 ? { label: "Run until it needs you", paid: [...new Set(rest.flatMap((s) => PAID[s] || []))],
-      body: `Runs every step from ${STEP_NAME[c.stage] || c.stage} on, until the loop needs a person: the A/B decision, a step that is blocked, or a step that waits for your go-ahead.` } : null };
+      body: `Runs every step from ${STEP_NAME[c.stage] || c.stage} on, until the loop needs a person.` } : null };
 }
 
 function ask(run, settings) {
@@ -110,13 +109,15 @@ export async function render(el) {
   state.overviewFresh = false;
   const prodV = ov.production?.version;
   const versions = [...new Set([prodV, ...(ov.cycles || []).map((c) => c.production_version)].filter(Boolean))];
-  const [lp, pr, fx, xs, iss, settings] = await Promise.all([
+  const [lp, pr, fx, xs, iss, settings, au, rb] = await Promise.all([
     get("/api/loop"),
     get("/api/prompts").catch(() => ({ items: [] })),
     get("/api/fixes").catch(() => ({ items: [] })),
     get("/api/experiments").catch(() => ({ items: [] })),
     Promise.allSettled(versions.map((v) => get(`/api/issues?version=${enc(v)}`))),
     get("/api/settings").catch(() => null),
+    get("/api/audit?version=v1").catch(() => null),  // up front, so the Judge vs QA tile never changes on screen
+    get("/api/rubrics").catch(() => ({ items: [] })),
   ]);
   const rcBy = Object.fromEntries(iss.flatMap((r) => (r.status === "fulfilled" ? r.value.items.map((i) => [i.id, i]) : [])));
   const fixBy = Object.fromEntries(fx.items.map((f) => [f.id, f]));
@@ -129,17 +130,24 @@ export async function render(el) {
     allowReal: Boolean(settings?.allow_real) });
   const p = plan(cur, lp, ctx(cur));
   const sp = shares({ pass: k.pass_rate, non_fatal: k.non_fatal_rate, fatal: k.fatal_rate });
-  const loopX = xs.items.filter((x) => x.cycle != null), engineX = xs.items.length - loopX.length;
+  const loopX = xs.items.filter((x) => x.cycle != null);
   const finished = loopX.filter((x) => !["RUNNING", "DRAFT", "PENDING_APPROVAL"].includes(x.state));
+  const promoted = finished.filter((x) => x.state === "PROMOTED"), stopped = finished.filter((x) => x.state === "STOPPED_HARM").length;
+  const units = await Promise.all(promoted.map((x) => get(`/api/experiments/${enc(x.experiment_id)}`).then((d) => d.impact?.unit, () => null)));
+  const unit = units.length && units.every((u) => u && u === units[0]) ? units[0] : "successes";  // the engine's own unit, e.g. Meeting Fixed
   const latest = fx.items[0];
   const acc = k.agreement_overall, kap = k.agreement_kappa;
   const agreeTone = acc == null ? "" : kap != null ? (kap < 0.2 ? "harm" : kap < 0.6 ? "warn" : "win") : acc < 0.6 ? "harm" : acc < 0.8 ? "warn" : "win";
+  const ag = au?.agreement, { text: checks, good, sameN } = goodChecks(ag, audioIds(rb.items));  // what the judge gets right, first
+  const qaN = au?.human_split ? au.human_split.pass + au.human_split.non_fatal + au.human_split.fatal : 0;
+  const qaLine = qaN && !verBy[prodV]?.fix_id ? (qaN === k.calls_audited ? "all also audited by QA" : `${int(qaN)} also audited by QA`) : "";
   const st = station(cur);
   const closed = (ov.cycles || []).filter((c) => c.n !== cur?.n);
 
   mount(el, html`
     <section class="status">
       <div class="status-main">
+        <p class="status-intro">Vani Lab grades every call, fixes the costliest failure and tests the fix on simulated traffic before a person approves.</p>
         <div class="eyebrow accent">The loop · ${cur ? html`cycle ${cur.n} · ${GROUPS[st.station][0]}${st.detail ? ` ${st.detail}` : ""}` : "not started yet"}</div>
         <h1 class="status-title ${p.tone || ""}">${figs(p.title)}</h1>
         <p class="status-body">${p.body}</p>
@@ -152,32 +160,33 @@ export async function render(el) {
           ${lp.busy ? html`<button class="btn" id="adv" type="button" disabled><span>Running…</span></button>` : ""}
         </div>
         <details class="runlog" id="runlog" ${lp.busy ? "open" : ""} ${lp.log?.length ? "" : "hidden"}><summary><span class="eyebrow">Run log</span><span class="last-line" id="lastline"></span></summary><pre class="log" id="log"></pre></details>
-        <p class="status-intro">Slow &amp; Steady listens to Vani's buyer calls, grades each one against IndiaMART's QA checklist, writes a prompt fix for the costliest failure and tests it on simulated traffic before it ships.</p>
       </div>
       <div class="ring-wrap" id="ring"></div>
     </section>
 
     <section class="kpis home-kpis" aria-label="Key numbers">
       ${kpi("#/calls", `${int(k.calls_audited)} calls graded by the judge. Open the calls.`, html`<div class="eyebrow">Calls graded</div><div class="big">${int(k.calls_audited)}</div>
-        <div class="sub">by the judge, on ${prodV || "—"}${k.calls_total != null && k.calls_total !== k.calls_audited ? ` (of ${int(k.calls_total)})` : ""}<span class="sub-line" id="qa-n"></span></div>`)}
+        <div class="sub">by the judge, on ${prodV || "—"}${k.calls_total != null && k.calls_total !== k.calls_audited ? ` (of ${int(k.calls_total)})` : ""}${qaLine ? html`<span class="sub-line">${qaLine}</span>` : ""}</div>`)}
       ${kpi("#/audit", `Fatal rate ${pct(k.fatal_rate)}, judge's grade. Open the audit.`, html`<div class="eyebrow">Fatal rate <span class="tag">judge</span></div><div class="big harm">${pct(k.fatal_rate)}</div>
-        <div class="sub">of ${int(k.calls_audited)} graded calls · non‑fatal ${pct(k.non_fatal_rate, 0)} · pass ${pct(k.pass_rate, 0)}</div><div aria-hidden="true">${sp ? gradeStack(sp, "minibar") : ""}</div>`)}
-      ${kpi("#/audit", `Judge versus IndiaMART QA: ${pct(acc, 0)} agreement. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big ${agreeTone}">${pct(acc, 0)}<small>agree</small></div>
-        <div class="sub">with IndiaMART QA on the overall grade<span id="agree-n"></span> · κ ${fix(kap)}, ${kappaWord(kap)} · fatal vs rest ${pct(k.fatal_vs_rest_accuracy, 0)}</div>`)}
+        <div class="sub">non‑fatal ${pct(k.non_fatal_rate, 0)} · pass ${pct(k.pass_rate, 0)}</div><div aria-hidden="true">${sp ? gradeStack(sp, "minibar") : ""}</div>`)}
+      ${checks.length ? kpi("#/audit", `${good.length} of ${checks.length} checks agree well with IndiaMART QA. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big">${int(good.length)}<small>of ${int(checks.length)} checks</small></div>
+        <div class="sub" title="κ 0.6 or more, on ${sameN ? `${int(ag.n_calls)} ${ag.held_out ? "held-out " : ""}calls` : "the calls both graded"}">agree well with QA · overall grade ${pct(acc, 0)}, κ ${fix(kap)}, ${kappaWord(kap)}</div>`)
+        : kpi("#/audit", `Judge versus IndiaMART QA: ${pct(acc, 0)} agreement. Open the audit.`, html`<div class="eyebrow">Judge vs QA</div><div class="big ${agreeTone}">${pct(acc, 0)}<small>agree</small></div>
+        <div class="sub" title="On the overall grade · fatal vs rest ${pct(k.fatal_vs_rest_accuracy, 0)}">${k.agreement_n != null ? `on ${int(k.agreement_n)} ${k.agreement_held_out ? "held-out " : ""}calls · ` : ""}κ ${fix(kap)}, ${kappaWord(kap)}</div>`)}
       ${kpi("#/issues", `${int(k.root_causes)} root causes. Open the issues.`, html`<div class="eyebrow">Root causes <span class="tag">judge</span></div><div class="big ${k.root_causes ? "" : "none"}">${k.root_causes ? int(k.root_causes) : "—"}</div>
-        <div class="sub">${k.root_causes ? "ranked by priority; the loop fixes the top one a prompt can fix" : "not ranked yet: Improve ranks them after the judge"}</div>`)}
+        <div class="sub">${k.root_causes ? "ranked by priority" : "not ranked yet"}</div>`)}
       ${kpi("#/fixes", `${fx.items.length} prompt fixes. Open the fixes.`, html`<div class="eyebrow">Prompt fixes</div><div class="big ${fx.items.length ? "" : "none"}">${fx.items.length ? int(fx.items.length) : "—"}</div>
-        <div class="sub">${latest ? `latest: ${fixStatus(latest, xBy[(ov.cycles || []).find((c) => c.fix_id === latest.id)?.experiment_id])}` : "none written yet: the fixer writes one for the top root cause"}</div>`)}
+        <div class="sub">${latest ? `latest: ${fixStatus(latest)}` : "none written yet"}</div>`)}
       ${kpi("#/experiments", "Weekly impact from loop experiments. Open the experiments.", html`<div class="eyebrow">Weekly impact</div>
-        ${finished.length ? html`<div class="big ${k.per_week_gained > 0 ? "win" : ""}">${sint(k.per_week_gained)}</div><div class="sub">simulated successes a week gained ·${int(k.per_week_protected)} protected · from ${finished.length} loop A/B test${finished.length === 1 ? "" : "s"}${engineX ? `, plus ${engineX} engine scenarios` : ""}</div>`
-          : html`<div class="big none">—</div><div class="sub">no loop A/B test has finished yet${engineX ? ` · ${engineX} engine scenarios ran, changing nothing` : ""}</div>`}`)}
+        ${finished.length ? html`<div class="big ${k.per_week_gained > 0 ? "win" : ""}">${sint(k.per_week_gained)}</div><div class="sub">simulated ${unit} a week · ${int(promoted.length)} of ${int(finished.length)} loop tests promoted${stopped ? `, ${stopped} stopped for harm` : ""}${k.per_week_protected ? ` · ${int(k.per_week_protected)} protected` : ""}</div>`
+          : html`<div class="big none">—</div><div class="sub">no loop A/B test finished yet</div>`}`)}
     </section>
-    ${acc != null && (kap != null ? kap <= 0.4 : acc < 0.7) ? html`<p class="kpi-note"><i class="dot demo" aria-hidden="true"></i><span>Judge grades are directional until they agree better with IndiaMART QA (${pct(acc, 0)} today). <a href="#/audit">Compare them call by call</a></span></p>` : ""}
+    ${acc != null && (kap != null ? kap <= 0.4 : acc < 0.7) ? html`<p class="kpi-note"><i class="dot demo" aria-hidden="true"></i><span>The overall grade and fatal rate are directional for now: one miss on any check can change a call's grade. <a href="#/audit">See which checks it gets right</a></span></p>` : ""}
 
     <section class="section" id="current"></section>
 
     ${closed.length ? html`<section class="section">
-      <div class="section-head"><h2>Earlier <em>cycles</em></h2><p>Newest first. Each cycle starts on the prompt the one before left in production.</p></div>
+      <div class="section-head"><h2>Earlier <em>cycles</em></h2><p>Newest first.</p></div>
       <div class="timeline">${closed.map((c) => {
         const r = rcBy[c.root_cause_id], x = xBy[c.experiment_id];
         return html`<div class="tl ${c.outcome === "PROMOTED" ? "win" : "harm"}">
@@ -213,7 +222,7 @@ export async function render(el) {
     const idx = (key) => ORDER.indexOf(key);
     mount(host, html`
       <div class="section-head"><h2>${c ? html`Cycle <span class="fig">${c.n}</span>, <em>${c.stage === "done" ? "closed" : c.stage === "blocked" ? "blocked" : `${GROUPS[station(c).station][0].toLowerCase()}`}</em>` : html`How a cycle <em>runs</em>`}</h2>
-        <p>${c ? html`Prompt A is ${c.production_version}${c.candidate_version ? html`; Prompt B is ${c.candidate_version}` : ""}${calls ? ` · ${int(calls[1])} calls${calls[2] === calls[1] ? ", all real" : `, ${int(calls[2])} real`}` : ""} · started ${when(c.started_ts)}` : "Five stations, eight steps; nothing ships without the A/B test and a human."}</p></div>
+        <p>${c ? html`Prompt A is ${c.production_version}${c.candidate_version ? html`; Prompt B is ${c.candidate_version}` : ""}${calls ? ` · ${int(calls[1])} calls${calls[2] === calls[1] ? ", all real" : `, ${int(calls[2])} real`}` : ""} · started ${when(c.started_ts)}` : "Nothing ships without an A/B test and a human."}</p></div>
       <ol class="stations">${GROUPS.map(([name, subs]) => {
         const states = subs.map(([key]) => stp[idx(key)]);
         const s = states.includes("halt") ? "halt" : states.includes("current") ? "current" : states.every((x) => x === "done") ? "done" : states.every((x) => x === "skip") ? "skip" : "";
@@ -223,13 +232,13 @@ export async function render(el) {
       ${c ? html`<div class="links3">
         ${kc.rc ? html`<a class="linkcard" href="#/issues?version=${enc(kc.rc.prompt_version)}&rc=${enc(kc.rc.id)}" aria-label="Root cause: ${kc.rc.name}"><span class="eyebrow">Root cause</span><span class="t">${kc.rc.name}</span>
             <span class="s">${int(kc.rc.n_calls)} of ${int(kc.rc.n_audited)} graded calls · priority ${fix(kc.rc.priority, 1)}</span></a>`
-          : html`<a class="linkcard" href="#/issues" aria-label="Root causes"><span class="eyebrow">Root cause</span><span class="t muted">${c.root_cause_id || "Not chosen yet"}</span><span class="s">Chosen once the judge has graded the calls</span></a>`}
+          : html`<a class="linkcard" href="#/issues" aria-label="Root causes"><span class="eyebrow">Root cause</span><span class="t muted">${c.root_cause_id || "Not chosen yet"}</span><span class="s">Chosen after grading</span></a>`}
         ${kc.f ? html`<a class="linkcard" href="#/fixes/${enc(kc.f.id)}" aria-label="Prompt fix ${kc.f.id}"><span class="eyebrow">Prompt fix · ${kc.f.id}</span><span class="t">${first(kc.f.rationale)}</span>
-            <span class="s">${fixStatus(kc.f, kc.x)}</span></a>`
-          : html`<a class="linkcard" href="#/fixes" aria-label="Prompt fixes"><span class="eyebrow">Prompt fix</span><span class="t muted">${c.fix_id || "Not written yet"}</span><span class="s">Written for the top root cause a prompt can fix</span></a>`}
+            <span class="s">${fixStatus(kc.f)}</span></a>`
+          : html`<a class="linkcard" href="#/fixes" aria-label="Prompt fixes"><span class="eyebrow">Prompt fix</span><span class="t muted">${c.fix_id || "Not written yet"}</span><span class="s">For the top root cause</span></a>`}
         ${kc.x ? html`<a class="linkcard" href="#/experiments/${enc(kc.x.experiment_id)}" aria-label="A/B test ${kc.x.experiment_id}"><span class="eyebrow">A/B test · simulated</span><span class="t">${cap(OUTCOME[kc.x.state] || kc.x.state.toLowerCase())}</span>
             <span class="s">${kc.x.looks_done} of ${kc.x.n_looks} checkpoints · lift ${kc.x.lift_rel == null ? "—" : `${kc.x.lift_rel >= 0 ? "+" : "−"}${pct(Math.abs(kc.x.lift_rel))}`}</span></a>`
-          : html`<a class="linkcard" href="#/experiments" aria-label="Experiments"><span class="eyebrow">A/B test</span><span class="t muted">Not started</span><span class="s">${c.candidate_version ? `${c.candidate_version} gets one after the replay` : "Runs once a fix passes the gate and the replay"}</span></a>`}
+          : html`<a class="linkcard" href="#/experiments" aria-label="Experiments"><span class="eyebrow">A/B test</span><span class="t muted">Not started</span><span class="s">${c.candidate_version ? `${c.candidate_version} gets one after the replay` : "After the gate and the replay"}</span></a>`}
       </div>` : ""}
       ${notes.length ? html`<details class="enginelog"><summary>Engine notes for this cycle · ${notes.length}</summary><ul class="notes">${notes.map((t) => html`<li>${t}</li>`)}</ul></details>` : ""}`);
   };
@@ -245,15 +254,6 @@ export async function render(el) {
   drawRing(cur, lp.busy);
   drawCurrent(cur);
   drawLog(lp.log);
-
-  // The judge's agreement with QA, with its n, and the QA-audited share: /api/audit is heavier, so it fills in after.
-  get("/api/audit?version=v1").then((a) => {
-    if (!el.isConnected) return;
-    const g = a.agreement, h = a.human_split;
-    if (g) $("#agree-n", el).textContent = `, ${int(g.n_calls)} ${g.held_out ? "held-out " : ""}calls${g.calibrated && g.n_tuning ? ` (calibrated on ${int(g.n_tuning)} others)` : ""}`;
-    const qa = h ? h.pass + h.non_fatal + h.fatal : 0;
-    if (qa && !verBy[prodV]?.fix_id) $("#qa-n", el).textContent = qa === k.calls_audited ? "all also audited by IndiaMART QA" : `${int(qa)} also audited by IndiaMART QA`;
-  }).catch(() => { /* the tiles stand without it */ });
 
   // --- one step at a time, confirmed first, with live progress from GET /api/loop
   const btn = $("#adv", el);

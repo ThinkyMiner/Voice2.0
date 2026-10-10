@@ -2,7 +2,7 @@
 // how far the judge agrees with IndiaMART's QA auditors on each) and #/rubrics/<id|new>: the Rubric Studio, a
 // form with a live preview of what the judge reads.
 import { get, send, state } from "../api.js";
-import { $, $$, html, mount, int, pct, fix, typeChip, weight, gradeStack, gradeLegend, grade, empty, toast, enc, esc, seg, agreement, kappaWord, confirmDialog } from "../ui.js";
+import { $, $$, html, mount, int, pct, fix, typeChip, weight, gradeStack, gradeLegend, grade, empty, toast, enc, esc, seg, agreement, kappaWord, confirmDialog, reducedMotion, goodChecks, audioIds } from "../ui.js";
 
 const CATEGORIES = ["Outcome", "Quantity", "Specs", "Details", "Conversation", "Speech", "Catalog", "Compliance", "Custom"];
 const ROOTS = ["prompt", "asr", "knowledge", "flow", "platform"];
@@ -31,10 +31,11 @@ export async function renderLibrary(el) {
   const other = active.filter((r) => !CATEGORIES.includes(r.category));
   if (other.length) groups.push(["Other", other]);
   if (archived.length) groups.push(["Archived", archived]);
-  const qa = active.filter((r) => r.qa_column), weak = qa.filter((r) => gr.agRow[r.id] && agreement(gr.agRow[r.id]).weak);
-  const judgeOnly = active.filter((r) => !r.qa_column);
+  const audio = audioIds(items), { text, good } = goodChecks(gr.ag, audio);  // the same counts as the Audit page's
+  const weak = text.filter((r) => r.kappa == null || r.kappa < 0.4);
   const agCell = (r) => {
-    if (!r.qa_column) return html`<div class="ag none"><b>Judge only</b><small>${r.builtin ? "prompt rule" : "custom"}: no QA column</small></div>`;
+    if (!r.qa_column) return html`<div class="ag none"><b>Judge only</b><small>no QA column</small></div>`;
+    if (r.needs_audio) return html`<div class="ag none"><b>Needs audio</b><small>not compared</small></div>`;
     const x = gr.agRow[r.id];
     if (!x) return html`<div class="ag none"><b>—</b><small>${gr.ag ? "not compared" : "not measured yet"}</small></div>`;
     const a = agreement(x);
@@ -46,21 +47,18 @@ export async function renderLibrary(el) {
       <div class="nm"><b>${r.name}</b><span class="q" title="${r.question}">${r.question}</span></div>
       <div class="ty">${typeChip(r.root_type)}<small>${kind(r)} · v${r.version}${r.needs_audio ? " · audio" : ""}</small></div>
       <div class="gr">${b && b.n_applicable ? html`${gradeStack({ pass: b.pass / n, non_fatal: b.non_fatal / n, fatal: b.fatal / n, n })}<small><b>${int(b.fatal)}</b> fatal · <b>${int(b.non_fatal)}</b> non-fatal · ${int(b.n_applicable)} graded</small>`
-        : html`<small>${gr.err ? "grades did not load" : r.needs_audio ? "needs audio: the transcript judge answers N/A" : gr.v ? `not graded in ${gr.v}` : "not graded yet"}</small>`}</div>
+        : html`<small>${gr.err ? "grades did not load" : r.needs_audio ? "needs audio: N/A from a transcript" : gr.v ? `not graded in ${gr.v}` : "not graded yet"}</small>`}</div>
       ${agCell(r)}
       <div class="wt">${weight(r.weight)}${r.builtin ? "" : html`<small>${r.author}</small>`}</div></a>`;
   };
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Judge</div><h1 class="title">Rubrics</h1>
-      <p class="lede">What the judge grades every call on: IndiaMART's own QA matrix, parameter by parameter, the prompt's own rules, and rubrics anyone on the team writes in the studio.
-        Every version is kept, and each verdict cites the version it used.</p></div>
+      <p class="lede">The checks the judge grades every call on: IndiaMART's QA matrix, prompt rules and your own.</p></div>
       <a class="btn primary" href="#/rubrics/new"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>New rubric</a></div>
-    ${gr.err ? html`<div class="note rb-err" role="alert"><b>Grades could not load.</b> ${gr.err.message || gr.err}. The rubrics below are current; their grades and agreement are missing.</div>` : ""}
+    ${gr.err ? html`<div class="note rb-err" role="alert"><b>Grades could not load.</b> ${gr.err.message || gr.err}.</div>` : ""}
     ${items.length ? html`<div class="rb-sum">
-      <p>${gr.v ? html`Grades are the judge's, on the <b>${int(gr.n)}</b> calls judged on ${gr.v}.` : "No calls are graded yet."}
-        ${gr.ag ? html`Agreement compares the judge with IndiaMART's QA auditors on ${int(gr.ag.n_calls)} ${gr.ag.held_out ? "held-out " : ""}calls: it is weak (κ under 0.4) on <b>${int(weak.length)} of ${int(qa.length)}</b> QA-matrix rubrics.` : ""}
-        ${judgeOnly.length ? html`<b>${int(judgeOnly.length)}</b> ${judgeOnly.length === 1 ? "rubric has" : "rubrics have"} no QA column, so only the judge checks ${judgeOnly.length === 1 ? "it" : "them"}.` : ""}
-        ${gr.ag ? html`<a href="#/audit">Agreement on the Audit page</a>` : ""}</p>
+      <p>${gr.v ? html`Judge's grades on <b>${int(gr.n)}</b> ${gr.v} calls.` : "No calls are graded yet."}
+        ${gr.ag ? html`Agreement with QA on ${int(gr.ag.n_calls)} ${gr.ag.held_out ? "held-out " : ""}calls: good (κ 0.6+) on <b>${int(good.length)} of ${int(text.length)}</b> checks, weak (under 0.4) on <b>${int(weak.length)}</b>. <a href="#/audit">Audit</a>` : ""}</p>
       <div class="rb-legends">${gradeLegend()}<div class="legend" aria-label="Root type: where a failure gets fixed"><span class="muted">Fixed in:</span>${ROOT_WORDS.map(([t, w]) => html`<span>${typeChip(t)} ${w}</span>`)}</div></div>
     </div>
     <div class="rlist">
@@ -76,7 +74,7 @@ export async function renderStudio(el, { id }) {
   // Testing sends the transcript to the model provider, so real customer calls stay out of the picker
   // unless the platform was started with LOOP_ALLOW_REAL=1 (demo calls are invented and never leave the tab).
   const allowReal = state.demo || settings?.allow_real_rubric_tests === true;
-  const calls = all.items.filter((c) => allowReal || !REAL.includes(c.source));
+  const calls = all.items.filter((c) => allowReal || !(c.real ?? REAL.includes(c.source)));  // real: replays of real calls too
   const hiddenReal = all.items.length - calls.length;
   const cur = isNew ? null : items.find((r) => r.id === id);
   if (!isNew && !cur) throw Object.assign(new Error(`There is no rubric called ${id}.`), { status: 404 });
@@ -95,9 +93,9 @@ export async function renderStudio(el, { id }) {
   mount(el, html`
     <div class="page-head"><div><div class="eyebrow">Rubric studio${cur ? ` · ${kind(cur)} · v${cur.version}` : ""}</div>
       <h1 class="title">${cur ? html`Edit <em>${cur.name}</em>` : html`Write a <em>rubric</em>`}</h1>
-      <p class="lede">Describe one thing a good Vani call does, in the words your auditors use. The judge reads the preview card exactly as shown and grades every call against it. Fields marked <span class="req">*</span> are required.</p></div>
+      <p class="lede">Describe one thing a good Vani call does, in the words your auditors use.</p></div>
       <div class="row"><button class="btn sm narrow-only" type="button" id="to-preview">See the preview</button><a class="btn ghost" href="#/rubrics">Back to the library</a></div></div>
-    ${state.demo ? html`<div class="note" style="margin-bottom:20px"><b>Demo mode.</b> Saving keeps the rubric in this browser only (localStorage), and "Try it" uses phrase matching instead of the judge model.</div>` : ""}
+    ${state.demo ? html`<div class="note" style="margin-bottom:20px"><b>Demo mode.</b> Saves stay in this browser; "Try it" uses phrase matching, not the judge.</div>` : ""}
     <div class="studio">
       <form id="form" novalidate>
         <div class="two">
@@ -107,20 +105,20 @@ export async function renderStudio(el, { id }) {
         </div>
         ${field("question", "Question the judge answers", "Did the bot … ?", 2, true)}
         <div class="two">${field("fatal_when", "Fatal when", "The failure that breaks the lead or the buyer's trust", 3)}${field("non_fatal_when", "Non-fatal when", "A slip worth coaching, not a broken call", 3)}</div>
-        <div class="two">${field("applies_when", "Applies when", "Leave empty for every call; otherwise the grade is N/A", 2)}${field("guidance", "Guidance (optional)", "How your auditors decide edge cases", 2)}</div>
-        <div class="field"><span>Root type</span><div id="root">${seg(ROOTS.map((r) => [r, r]), d.root_type)}</div><small>Where a failure is fixed: the prompt, speech recognition, catalogue knowledge, the call flow, or the platform.</small></div>
+        <div class="two">${field("applies_when", "Applies when", "Leave empty to apply to every call", 2)}${field("guidance", "Guidance (optional)", "How your auditors decide edge cases", 2)}</div>
+        <div class="field"><span>Root type</span><div id="root">${seg(ROOTS.map((r) => [r, r]), d.root_type)}</div><small title="The prompt, speech recognition (asr), catalogue knowledge, the call flow, or the platform">Where a failure gets fixed.</small></div>
         <div class="two">
-          <div class="field"><span>Weight</span><div class="range"><input type="range" name="weight" min="1" max="5" step="1" value="${d.weight}" aria-label="Weight, 1 to 5"><output id="wout">${d.weight}</output></div><small>How much this check matters to your team, shown with the rubric. Root causes are ranked by fatal and non-fatal grades, not by weight.</small></div>
+          <div class="field"><span>Weight</span><div class="range"><input type="range" name="weight" min="1" max="5" step="1" value="${d.weight}" aria-label="Weight, 1 to 5"><output id="wout">${d.weight}</output></div><small>Shown with the rubric; not used in ranking.</small></div>
           <div class="field"><span>Needs audio</span><label class="switch"><input type="checkbox" name="needs_audio" ${d.needs_audio ? "checked" : ""}>Only gradable from the recording</label><small>A transcript-only judge answers N/A.</small></div>
         </div>
         <div class="two">
           <div class="field"><span>Passes, example phrases</span><div class="chips-input" data-k="examples_pass"><input placeholder="Add a phrase…" aria-label="Add a pass example" aria-describedby="chip-hint"></div></div>
           <div class="field"><span>Fails, example phrases</span><div class="chips-input" data-k="examples_fail"><input placeholder="Add a phrase…" aria-label="Add a fail example" aria-describedby="chip-hint"></div></div>
         </div>
-        <small class="muted chip-hint" id="chip-hint">Press Enter to add each phrase; commas stay inside it. Backspace in an empty box removes the last one.</small>
+        <small class="muted chip-hint" id="chip-hint">Enter adds a phrase; Backspace removes the last.</small>
         <label class="field"><span>Your name${req}</span><input class="input" name="author" required value="${d.builtin ? author : d.author || author}" placeholder="Recorded as the author of this version" autocomplete="name" aria-describedby="err-author"><small class="err" id="err-author" hidden></small></label>
         <div class="row" style="margin-top:4px"><button class="btn primary" type="submit">${cur ? `Save as v${cur.version + 1}` : "Save rubric"}</button>
-          <span class="muted" style="font-size:12px">${cur ? `v${cur.version} stays on record; audits cite the version they used.` : "Saved as version 1."}</span></div>
+          <span class="muted" style="font-size:12px">${cur ? `v${cur.version} stays on record.` : "Saved as version 1."}</span></div>
       </form>
       <div class="preview" id="preview">
         <div id="card"></div>
@@ -128,11 +126,11 @@ export async function renderStudio(el, { id }) {
             <div class="row" style="flex-wrap:nowrap"><select class="select" id="call" aria-label="Call to grade">${calls.map((c) => html`<option value="${c.call_id}">${c.call_id} · ${(c.summary || "").slice(0, 46)}</option>`)}</select>
             <button class="btn" id="run" type="button">Grade</button></div><div id="verdict"></div></div>`
           : html`<div class="card try off"><div class="card-head"><h3>Try it on a call</h3><span class="chip">off here</span></div>
-            <p class="muted">${hiddenReal ? `Real buyer calls are never sent to the model from the web page, and all ${int(hiddenReal)} calls here are real. A saved rubric is graded the next time the judge runs.` : "There are no transcripts to try it on yet."}</p></div>`}
+            <p class="muted">${hiddenReal ? "Off for real calls: a test sends the transcript to the model provider. Start the platform with LOOP_ALLOW_REAL=1 to allow it." : "No transcripts to try it on yet."}</p></div>`}
         ${cur ? html`<div class="card"><div class="card-head"><h3>Version history</h3><span class="eyebrow">${archived ? "archived" : "active"}</span></div>
           <div class="history">${(history || [cur]).slice().reverse().map((r) => html`<div class="h"><b>v${r.version}</b><span>${r.author || "—"}${r.version === cur.version ? " · current" : ""}</span><span class="muted">${r.active === false ? "archived" : ""}</span></div>`)}
-          ${!history && cur.version > 1 ? html`<p class="muted" style="font-size:12px;padding-top:8px">Versions 1 to ${cur.version - 1} are kept on the platform; audits cite the version they used.</p>` : ""}</div>
-          <div class="archive-row"><p class="muted">${archived ? "Archived: the judge does not grade it on new calls." : "Archiving stops the judge grading it on new calls; past verdicts keep it."}</p>
+          ${!history && cur.version > 1 ? html`<p class="muted" style="font-size:12px;padding-top:8px">Versions 1 to ${cur.version - 1} are kept on the platform.</p>` : ""}</div>
+          <div class="archive-row"><p class="muted">${archived ? "Archived: not graded on new calls." : "Archiving stops grading on new calls; past verdicts stay."}</p>
             <button class="btn sm ${archived ? "" : "danger"}" type="button" id="archive">${archived ? "Restore…" : "Archive…"}</button></div></div>` : ""}
       </div>
     </div>`);
@@ -142,7 +140,7 @@ export async function renderStudio(el, { id }) {
   const label = isNew ? "New rubric" : cur.name;
   const crumb = $("#crumbs li:last-child");
   if (crumb) { crumb.textContent = label; crumb.classList.remove("mono"); }
-  setTimeout(() => { document.title = `${label} · Slow & Steady`; });
+  setTimeout(() => { document.title = `${label} · Vani Lab`; });
 
   const form = $("#form", el);
   const read = () => {
@@ -258,10 +256,11 @@ export async function renderStudio(el, { id }) {
     try {
       const { version, builtin, ...rubric } = d;
       const v = await send("POST", "/api/rubrics/test", { rubric: { ...rubric, id: d.id || "draft", version: cur ? cur.version + 1 : 1, builtin: false }, call_id: cid });
-      mount(out, html`<div class="verdict" role="status"><div class="row between">${grade(v.grade, "boxed")}<span class="mono muted" style="font-size:11px">confidence ${(v.confidence ?? 0).toFixed(2)}</span></div>
+      mount(out, html`<div class="verdict" role="status"><div class="row between">${grade(v.grade, "boxed")}${v.confidence != null ? html`<span class="mono muted" style="font-size:11px">confidence ${v.confidence.toFixed(2)}</span>` : ""}</div>
         <p style="font-size:13px">${v.reason}</p>
-        ${(v.evidence || []).map((e) => html`<blockquote>“${e.quote}”<small>line ${e.turn + 1}</small></blockquote>`)}
+        ${(v.evidence || []).map((e) => html`<blockquote>“${e.quote}”<small>turn ${e.turn + 1}</small></blockquote>`)}
         <a class="btn sm" href="#/calls/${enc(cid)}" style="justify-self:start">Open the call</a></div>`);
+      out.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });  // the verdict lands on screen
     } catch (err) { mount(out, html`<p style="color:var(--harm);font-size:13px">${err.message}</p>`); }
     btn.disabled = false;
   });

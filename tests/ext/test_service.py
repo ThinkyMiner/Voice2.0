@@ -1,16 +1,20 @@
 """The platform API (ext/service.py, docs/loop_api.md) with fastapi's TestClient: a temp store, the
 temp LOOP_DIR, invented calls, audits, root causes and fixes; the stubbed model for rubric tests."""
 
+import json
 import time
 import types
+from contextlib import closing
 
 import httpx
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from test_loop import audit, cause, transcript, world  # noqa: F401 - world is a fixture
 
-from abtest.contracts import BASE_PROMPT, State
-from abtest.ext import improve, judge, listen, llm, loop, models, rubrics, service
+from abtest import config, store
+from abtest.contracts import BASE_PROMPT, ROOT, ExperimentConfig, State
+from abtest.ext import improve, judge, listen, llm, loop, models, rubrics, sarvam_live, service
 from abtest.ext.models import CallAudit, Fix, RubricVerdict, save
 
 SEND = httpx.Client.send  # before conftest's no-network patch: TestClient's transport is in-process
@@ -55,6 +59,7 @@ def test_calls_list_filters_and_detail(client):
     _calls_on_disk()
     r = client.get("/api/calls").json()
     assert r["total"] == 3 and [i["call_id"] for i in r["items"]] == ["aud-1", "fx-1", "real-1"]
+    assert {i["call_id"]: i["real"] for i in r["items"]} == {"aud-1": True, "fx-1": False, "real-1": True}  # the picker hides real ones
     real = next(i for i in r["items"] if i["call_id"] == "real-1")
     assert (real["overall"], real["risk_flags"], real["n_fatal"], real["human_overall"]) == ("fatal", ["loop"], 1, None)
     aud = next(i for i in r["items"] if i["call_id"] == "aud-1")
@@ -247,6 +252,35 @@ def test_experiments_and_approval_continue_the_loop(world, client):  # noqa: F81
     o = client.get("/api/overview").json()
     assert o["production"]["version"] == "v2" and [c["n"] for c in o["cycles"]] == [2, 1]
     assert o["kpis"]["experiments"] == 1 and o["kpis"]["per_week_gained"] > 0
+
+
+def test_a_live_experiment_is_not_simulated(client, monkeypatch):
+    """ext/sarvam_live's experiments (vani-live-*) run on real calls: the platform must not call them simulated."""
+    raw = yaml.safe_load((ROOT / loop.TEMPLATE).read_text(encoding="utf-8")) | {"id": "vani-live-t1", "variants": {
+        v: {"patch": {"mode": "full", "path": f"prompts/live/vani_demo_{v}.txt"}} for v in "AB"}}
+    with closing(store.connect(loop.DB_PATH)) as conn:
+        store.create_experiment(conn, config.freeze(ExperimentConfig.model_validate(raw)))
+    item = client.get("/api/experiments").json()["items"][0]
+    assert (item["experiment_id"], item["simulated"], item["assumed_effect"]) == ("vani-live-t1", False, None)
+    x = client.get("/api/experiments/vani-live-t1").json()
+    assert x["simulated"] is False and x["live"] is None  # no live tables: sarvam_live did not start it
+    with closing(store.connect(loop.DB_PATH)) as conn:
+        conn.executescript(sarvam_live.LIVE_SCHEMA)
+        with conn:
+            conn.execute("INSERT INTO live_experiments VALUES (?, ?)", ("vani-live-t1", json.dumps(
+                {"SARVAM_APP_ID": "Outbound-t", "SARVAM_VERSION_A": "1", "SARVAM_VERSION_B": "2"})))
+    live = client.get("/api/experiments/vani-live-t1").json()["live"]
+    assert live["agent"] == "Outbound-t" and live["arms"]["B"] == {
+        "version": "2", "assigned": 0, "called": 0, "back": 0, "provisional": 0, "connected": 0, "dispositions": {}}
+    assert (live["change"]["find"], live["change"]["replace"]) == ("quantity = 3", "quantity = 2")  # the one line B changes
+    real = config.resolve_prompts
+    monkeypatch.setattr(config, "resolve_prompts", lambda c: real(c) | {"B": real(c)["B"].replace("quantity = 2", "quantity = 1")})
+    assert client.get("/api/experiments/vani-live-t1").json()["live"]["change"] is None  # edited after the start
+    t = transcript("live-1", source="live", version="live")  # a live call, graded by the judge
+    save(models.TRANSCRIPTS_DIR / "live-1.json", t)
+    save(models.AUDITS_DIR / "live" / "live-1.json", audit(t, "non_fatal"))
+    row = client.get("/api/calls?source=live").json()["items"][0]
+    assert (row["call_id"], row["real"], row["overall"], row["prompt_version"]) == ("live-1", True, "non_fatal", "live")
 
 
 def _idle(client) -> dict:
