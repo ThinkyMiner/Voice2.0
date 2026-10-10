@@ -201,10 +201,12 @@ class _Run:
 
 
 def _observe(run: _Run) -> pd.DataFrame:
-    """Scores of the production prompt: reuse stored ones, else observe it with base-only bot tests."""
+    """Scores of the production prompt: reuse stored ones when there are at least as many leads as
+    seed personas, else observe it with base-only bot tests (a crashed run can leave a single stored
+    conversation, too few to diagnose from; the base conversations are cached, so topping up is cheap)."""
     ctx, store = run.ctx, loop_module("store_loop")
     scores = store.get_scores(ctx.conn, run.gen.rubric_hash, prompt_hash=run.prod.hash)
-    if scores.empty:
+    if scores.empty or scores["lead_id"].nunique() < len(ctx.personas):
         _set_context(ctx, run.gen.generation, "observe")
         bot_tests = loop_module("bot_tests")
         bot_tests.run_bot_tests(run.prod.text, [], ctx.personas, ctx.rubric, ctx.provider, ctx.cfg,

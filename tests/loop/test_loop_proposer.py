@@ -134,7 +134,7 @@ def test_one_proposer_call_with_the_diagnosis_excerpts_ledger_and_prompt(real_pr
     assert "looping | 0.700 | [0.450, 0.900] | 3.0 | 2.100 | 1 | TARGET" in user
     assert "wrong_language | 0.050" in user and "| 3 | -" in user                         # not a target
     assert "- looping (yes/no; yes is bad, weight 3, TARGET): Did the bot ask the same question" in user
-    assert "- claimed_human (yes/no; yes is bad, weight 4, hard): Did the bot claim or imply" in user
+    assert "- claimed_human (yes/no; yes is bad, weight 4, hard): Did the bot say that it is a human" in user
     assert "- requirement_captured (score 1-5; a high score is good, weight 3): How completely" in user
     assert "hard ones must never fail" in user
     assert '<excerpts criterion="looping">\nBOT: kitna?\nPERSON: bataya na\n</excerpts>' in user
