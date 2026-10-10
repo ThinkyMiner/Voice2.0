@@ -64,3 +64,39 @@ dashboard:  ## http://localhost:8501 (reads the store; auto-refreshes while make
 
 slide:  ## slide/one_slide.pptx, plus its chart PNG in reports/
 	$(RUN) python slide/build_slide.py
+
+# --- self-improving loop (PLAN_LOOP.md §L9); appended by Lane B
+# Personal data stays under data/derived/loop/ (gitignored); the demo needs no network. Real runs need
+# SARVAM_API_KEY in .env, and the batch speech-to-text needs the SDK, hence `--with sarvamai` below.
+.PHONY: loop-test loop-demo loop-observe loop-agreement loop-run loop-status loop-pause loop-resume
+
+LOOP        := $(RUN) python -m abtest.loop
+LOOP_SDK    := $(RUN) --with sarvamai python -m abtest.loop
+LIMIT       ?= 30
+GENERATIONS ?= 1
+
+loop-test:  ## the loop's tests (offline: stub provider, no network)
+	$(RUN) pytest tests/loop -q
+
+loop-demo:  ## three generations on the stub provider and a fresh demo DB, offline
+	$(LOOP) demo
+
+loop-observe:  ## make loop-observe SRC=<corpus csv> [LIMIT=30]  (real Sarvam: transcribe + score + report + audit sheet)
+	@test -n "$(SRC)" || { echo "usage: make loop-observe SRC=<corpus csv> [LIMIT=30]"; exit 2; }
+	$(LOOP_SDK) observe --src "$(SRC)" --limit $(LIMIT)
+
+loop-agreement:  ## make loop-agreement SHEET=<filled audit csv>
+	@test -n "$(SHEET)" || { echo "usage: make loop-agreement SHEET=<filled audit csv>"; exit 2; }
+	$(LOOP) agreement --sheet "$(SHEET)"
+
+loop-run:  ## make loop-run [GENERATIONS=1]  (real Sarvam, simulated A/B traffic; stops at the spend cap)
+	$(LOOP_SDK) run --generations $(GENERATIONS)
+
+loop-status:  ## generations table and total spend
+	$(LOOP) status
+
+loop-pause:  ## no new generation starts until loop-resume
+	$(LOOP) pause
+
+loop-resume:
+	$(LOOP) resume

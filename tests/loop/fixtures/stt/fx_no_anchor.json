@@ -1,0 +1,34 @@
+{
+ "request_id": "synthetic",
+ "transcript": "ठीक है। आपकी कैटेगरी में खरीदारों की काफी पूछताछ आ रही है इसलिए प्रोफाइल सुधारना फायदेमंद रहेगा। अच्छा। तो कल आप किस समय फ्री होंगे?",
+ "timestamps": null,
+ "language_code": "hi-IN",
+ "diarized_transcript": {
+  "entries": [
+   {
+    "transcript": "ठीक है।",
+    "start_time_seconds": 0.5,
+    "end_time_seconds": 1.5,
+    "speaker_id": "0"
+   },
+   {
+    "transcript": "आपकी कैटेगरी में खरीदारों की काफी पूछताछ आ रही है इसलिए प्रोफाइल सुधारना फायदेमंद रहेगा।",
+    "start_time_seconds": 1.5,
+    "end_time_seconds": 7.5,
+    "speaker_id": "1"
+   },
+   {
+    "transcript": "अच्छा।",
+    "start_time_seconds": 7.5,
+    "end_time_seconds": 8.5,
+    "speaker_id": "0"
+   },
+   {
+    "transcript": "तो कल आप किस समय फ्री होंगे?",
+    "start_time_seconds": 8.5,
+    "end_time_seconds": 12.0,
+    "speaker_id": "1"
+   }
+  ]
+ }
+}

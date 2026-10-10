@@ -36,14 +36,14 @@ One **generation** turns the prompt in production into a better one, with eviden
 ## L1. Non-breaking rules (in addition to PLAN_EXTENSIONS §E1)
 
 1. **Flag:** `ABT_LOOP=1` enables the loop service. With it off, the system is byte-identical to the tagged base; the golden test (PLAN_EXTENSIONS X1) enforces it.
-2. **New code only in** `src/abtest/loop/`, `dashboard/pages/4_Loop.py`, `tests/loop/` (file names start `test_loop_` so they never collide with `tests/ext/` modules under pytest's default import mode), `configs/rubrics/`, `configs/loop/` (including `configs/loop/sims/`), `prompts/loop/`, `scripts/loop/`, `docs/loop_runbook.md`. Base files change only through §L3's prerequisite list, and every item there is already allowed by PLAN_EXTENSIONS §E1.2.
+2. **New code only in** `src/abtest/loop/`, `dashboard/pages/4_Loop.py`, `tests/loop/` (file names start `test_loop_` so they never collide with `tests/ext/` modules under pytest's default import mode), `configs_loop/rubrics/`, `configs_loop/` (including `configs_loop/sims/`), `prompts/loop/`, `scripts/loop/`, `docs/loop_runbook.md`. Base files change only through §L3's prerequisite list, and every item there is already allowed by PLAN_EXTENSIONS §E1.2.
 3. **The engine path stays model-free.** `metrics`, `analysis`, `rules`, `decision`, `runner`, `simulator` never call a model. Model calls are allowed only in `loop/sarvam.py` (the provider client) and its callers `loop/transcribe.py`, `loop/scorer.py`, `loop/proposer.py`, `loop/buyer_sim.py`, `loop/pii.py`. Tests use the `stub` provider (§L2.3) and never touch the network.
 4. **Rubric scores enter the engine only as data.** The ingest step writes per-call scores to the `loop_rubric_scores` table (keyed by `call_id`). The loop's look path joins them onto the call frame before `metrics.lead_outcomes`, which aggregates them per lead as an `extra_guardrails` column (§E4.4). No new decision rule and no change to the `calls` table.
 5. **Determinism for a model-driven step:** every model call is cached on disk under `data/derived/loop/cache/` keyed by `sha256(provider ‖ model ‖ endpoint ‖ request JSON with temperature, reasoning_effort, max_tokens, response schema)`. Judge temperature is 0. Every rubric and prompt carries a hash recorded in the generation ledger. A generation replays from the cache with no network: same ledger + same cache = same candidates, scores and pick.
-6. **Live traffic has hard caps the loop cannot raise:** `caps.max_share_b`, `caps.max_live_calls_per_day`, `caps.max_generations`, `caps.max_spend_inr`, in `configs/loop/<loop id>.yaml`, frozen with each generation. Every live and dogfood call is placed by `loop/dialer.py`, which checks the caps and the pause flag immediately before each call; that is the single enforcement point (§L2.4). `make loop-pause` (or `ABT_LOOP_PAUSE=1`) stops new calls before the next dial and leaves the base engine untouched.
+6. **Live traffic has hard caps the loop cannot raise:** `caps.max_share_b`, `caps.max_live_calls_per_day`, `caps.max_generations`, `caps.max_spend_inr`, in `configs_loop/<loop id>.yaml`, frozen with each generation. Every live and dogfood call is placed by `loop/dialer.py`, which checks the caps and the pause flag immediately before each call; that is the single enforcement point (§L2.4). `make loop-pause` (or `ABT_LOOP_PAUSE=1`) stops new calls before the next dial and leaves the base engine untouched.
 7. **A tried candidate is never retried verbatim.** The ledger stores every candidate's patch hash and outcome; `loop/proposer.py` drops any candidate whose patch hash is already in the ledger for this loop, before the gate. Config validation is not involved.
 8. **Dependencies.** Core: `sarvamai`, `httpx`, `python-dotenv`, `jinja2` (already installed via streamlit; declared explicitly). Optional extras, imported lazily inside `loop/telephony/<surface>.py` only, so `make test` never imports them: `[loop-s1] sarvam-conv-ai-sdk`; `[loop-s2] pipecat-ai[websocket,sarvam], twilio, loguru`. `pyproject.toml` is Lane A's, so adding these is a `request:` (§L3). Audio stays MP3; no ffmpeg. Ask before adding anything else.
-9. **Personal data stays out of git.** Recordings, transcripts, excerpts, audit sheets, persona cards and the model cache live under `data/derived/loop/` (already ignored). Files under `reports/` carry aggregates only, never a transcript line, a name or a number. `configs/loop/dogfood.yaml` (phone numbers) is ignored; only `dogfood.yaml.example` is tracked (§L3 request).
+9. **Personal data stays out of git.** Recordings, transcripts, excerpts, audit sheets, persona cards and the model cache live under `data/derived/loop/` (already ignored). Files under `reports/` carry aggregates only, never a transcript line, a name or a number. `configs_loop/dogfood.yaml` (phone numbers) is ignored; only `dogfood.yaml.example` is tracked (§L3 request).
 
 ---
 
@@ -63,7 +63,7 @@ One **generation** turns the prompt in production into a better one, with eviden
 
 ### L2.2 Rubric: customisable, versioned, hashed
 
-A rubric is a YAML file in `configs/rubrics/`. The default `vani-call-quality-v1.yaml` is seeded from the organisers' *Current Definitions of Call Quality Matrix being used in VANI* (PNG in the data folder; L0 transcribes it). Until it is in hand the default carries the criteria PLAN.md already names (looping, buyer irritation) and the prompt's own hard rules (never claim to be human, never assure, language handling).
+A rubric is a YAML file in `configs_loop/rubrics/`. The default `vani-call-quality-v1.yaml` is seeded from the organisers' *Current Definitions of Call Quality Matrix being used in VANI* (PNG in the data folder; L0 transcribes it). Until it is in hand the default carries the criteria PLAN.md already names (looping, buyer irritation) and the prompt's own hard rules (never claim to be human, never assure, language handling).
 
 ```yaml
 id: vani-call-quality-v1
@@ -111,10 +111,10 @@ Verified against docs.sarvam.ai on 10 Oct 2026; `loop/sarvam.py` re-checks model
 | Role | Surface | Settings |
 |---|---|---|
 | Transcribe | Batch STT, SDK `client.speech_to_text_job.create_job(model="saaras:v4", mode="transcribe", language_code=…, with_diarization=True, num_speakers=2)`; upload, start, poll `…/status`, download | ≤ 20 files per job, ≤ 2 h each; MP3 accepted; URLs cannot be passed, so the worker downloads first. At most `stt.max_jobs_in_flight` (3) jobs, poll interval ≥ 30 s, exponential backoff on 429/503 (Starter tier: 20 requests/min). `language_code` is the flow's main language (`hi-IN` default); L0 checks whether batch accepts auto-detect. Output: diarized entries `speaker_id, start_time_seconds, end_time_seconds, transcript`. |
-| Judge, proposer, buyer simulator | `POST https://api.sarvam.ai/v1/chat/completions`, `model: sarvam-105b` | `response_format: {type: json_schema, json_schema: {name, schema, strict: true}}`; explicit `reasoning_effort` and `max_tokens` per role from `configs/loop/default.yaml` (sarvam-105b reasons by default and reasoning tokens count toward `max_tokens`). On a schema failure: one retry with the error appended, then `provider_error`. Rate limit (Starter 40 RPM) enforced client-side by a token bucket at `provider.rpm`. |
+| Judge, proposer, buyer simulator | `POST https://api.sarvam.ai/v1/chat/completions`, `model: sarvam-105b` | `response_format: {type: json_schema, json_schema: {name, schema, strict: true}}`; explicit `reasoning_effort` and `max_tokens` per role from `configs_loop/default.yaml` (sarvam-105b reasons by default and reasoning tokens count toward `max_tokens`). On a schema failure: one retry with the error appended, then `provider_error`. Rate limit (Starter 40 RPM) enforced client-side by a token bucket at `provider.rpm`. |
 | Live voice | Voice Agents platform (S1) or Pipecat on `saaras:v4` + `sarvam-105b` + `bulbul:v4-flash` (S2) | §L2.4 |
 
-**Prices** (`configs/loop/prices.yaml`, verified 10 Oct 2026, re-checked at L0): sarvam-105b ₹29.28 per 1M input tokens and ₹73.2 per 1M output tokens; STT ₹30 per audio hour, ₹45 with diarization; new accounts carry ₹100 of credit. Every model call records its `usage` tokens and cost into `loop_spend` (§L2.8).
+**Prices** (`configs_loop/prices.yaml`, verified 10 Oct 2026, re-checked at L0): sarvam-105b ₹29.28 per 1M input tokens and ₹73.2 per 1M output tokens; STT ₹30 per audio hour, ₹45 with diarization; new accounts carry ₹100 of credit. Every model call records its `usage` tokens and cost into `loop_spend` (§L2.8).
 
 **Provider interface** (`loop/sarvam.py`): `complete_json(role, system, user, schema) -> dict`, `chat(role, messages) -> str`, `transcribe_batch(paths) -> list[DiarizedTranscript]`. Providers: `sarvam`, `stub`. If Wave 2 ships `ext/judge.py` first, `loop/scorer.py` builds its `JudgeAnswer`s through `ext.judge.judge(...)` with a `sarvam` provider added there; until then the loop uses its own client. One cache key scheme (§L1.5) serves both.
 
@@ -148,7 +148,7 @@ Common to every surface: the call event posted to `/hooks/calls` carries `report
 
 **Propose** (`loop/proposer.py`). Input: the base prompt, the diagnosis with excerpts, the rubric's criterion texts, the ledger (tried patches and outcomes), the allowed modes `append`, `replace_text`, `replace_section` (never `full`: a full prompt is ≈ 40k tokens, beyond the output cap). Output: `propose.candidates` (3) candidates, each `{mode, patch fields, rationale, targets: [criterion ids]}`, at most `propose.max_patch_chars` (1,500) changed characters. Each candidate is checked before the gate, deterministically: it resolves through the base patch rules (a `replace_text` `find` occurs exactly once, via `loop/render.py`'s wrapper around `config._resolve` on a minimal template config), the patched template still parses as Jinja and renders for every fixture variable set in `tests/loop/fixtures/render_vars.yaml`, and its patch hash is not in the ledger.
 
-**Gate** (step 4): the §E4.2 patch gate on every surviving candidate, plus the loop's compliance questions from L0 (calling hours, recording disclosure, any verbatim script), each a blocking yes/no at `gate.block_threshold` (0.5). §E4.2 lists its blocking questions as the minimum set; the loop extends the list through `configs/loop/<id>.yaml` `gate.extra_questions`. Blocked candidates go to the ledger as `GATE_BLOCKED` with the probabilities.
+**Gate** (step 4): the §E4.2 patch gate on every surviving candidate, plus the loop's compliance questions from L0 (calling hours, recording disclosure, any verbatim script), each a blocking yes/no at `gate.block_threshold` (0.5). §E4.2 lists its blocking questions as the minimum set; the loop extends the list through `configs_loop/<id>.yaml` `gate.extra_questions`. Blocked candidates go to the ledger as `GATE_BLOCKED` with the probabilities.
 
 ### L2.6 Bot tests: ranking candidates against simulated buyers
 
@@ -168,7 +168,7 @@ Common to every surface: the call event posted to `/hooks/calls` carries `report
 
 ### L2.7 Dogfood: real people, before any lead
 
-`make loop-dogfood GEN=` makes `dogfood.calls` (3) real calls from the picked candidate, through the dialer and the chosen surface, to the numbers in `configs/loop/dogfood.yaml` (team members who consented; the file is gitignored). Each call is transcribed with Saaras, role-labelled and scored. The gate **passes** when every call passes every hard criterion and the mean `rubric_score` ≥ `dogfood.min_score` (0.7). Then the controller stops in `DOGFOOD_REVIEW` and shows the approver the three transcripts and scores; only an explicit approval (`make loop-approve GEN=` or the dashboard button, recorded with the actor) moves on to the live test.
+`make loop-dogfood GEN=` makes `dogfood.calls` (3) real calls from the picked candidate, through the dialer and the chosen surface, to the numbers in `configs_loop/dogfood.yaml` (team members who consented; the file is gitignored). Each call is transcribed with Saaras, role-labelled and scored. The gate **passes** when every call passes every hard criterion and the mean `rubric_score` ≥ `dogfood.min_score` (0.7). Then the controller stops in `DOGFOOD_REVIEW` and shows the approver the three transcripts and scores; only an explicit approval (`make loop-approve GEN=` or the dashboard button, recorded with the actor) moves on to the live test.
 
 ### L2.8 Live A/B and roll-out
 
@@ -210,7 +210,7 @@ GEN_START → OBSERVED → AUDIT_PENDING → DIAGNOSED → PROPOSED → GATED �
 The page renders its own banner (the base `dashboard/common.py` is not edited): "Live traffic via <surface>, B share <x>%" or "Simulated loop (sim mode)".
 
 ### L2.11 Sim mode: the whole loop without a phone
-`loop.mode: sim` runs step 7 through the base simulator (the §E3.4 http sink) instead of a dialer, and steps 1 and 6 on synthetic calls. `loop/sim_scores.py` gives every simulated answered call a synthetic transcript and a `rubric_risk` drawn deterministically from the disposition, shifted in arm B by `true_effect.rubric_risk_change` read from `configs/loop/sims/<name>.yaml`. That file is ground truth: only `loop/sim_scores.py` reads it, never the engine path, and the engine-isolation test is extended to `configs/loop/sims/`. Steps 2–6 then run unchanged on the stub provider. This is how `make loop-demo` shows two generations in minutes, with no network and no spend.
+`loop.mode: sim` runs step 7 through the base simulator (the §E3.4 http sink) instead of a dialer, and steps 1 and 6 on synthetic calls. `loop/sim_scores.py` gives every simulated answered call a synthetic transcript and a `rubric_risk` drawn deterministically from the disposition, shifted in arm B by `true_effect.rubric_risk_change` read from `configs_loop/sims/<name>.yaml`. That file is ground truth: only `loop/sim_scores.py` reads it, never the engine path, and the engine-isolation test is extended to `configs_loop/sims/`. Steps 2–6 then run unchanged on the stub provider. This is how `make loop-demo` shows two generations in minutes, with no network and no spend.
 
 ---
 
@@ -226,7 +226,7 @@ The loop cannot ingest or decide on live calls without these. Each is a `contrac
 | P4 | `decision.py` | Write `extra_guardrails` log rows only when the list is non-empty | Lane A | L3 |
 | P5 | X1 and Wave 1 | Golden test; `ext/service.py`, `/hooks/calls`, `/hooks/proposals`, the daemon with an extensible tick, the outbox, the local registry, `store_ext` migrations; `recording_url` as an optional `/hooks/calls` field | Lane A (Wave 1) | L1 golden; L3 rest |
 | P6 | `runner.py` | §E1.2's behaviour-preserving `evaluate_look(experiment_id, as_of)` extraction, taking an optional `calls_transform` used to join rubric scores | Lane A | L3 |
-| P7 | `.gitignore`, `pyproject.toml`, `uv.lock`, `Makefile` | Ignore `configs/loop/dogfood.yaml`; declare §L1.8 deps and extras; append `loop-*` targets (§L4) | Lane A for the first two; Lane B appends targets in its own commit | L1 |
+| P7 | `.gitignore`, `pyproject.toml`, `uv.lock`, `Makefile` | Ignore `configs_loop/dogfood.yaml`; declare §L1.8 deps and extras; append `loop-*` targets (§L4) | Lane A for the first two; Lane B appends targets in its own commit | L1 |
 
 **Order.** L1 and L2 need only P7, so they start now. L3 needs P1–P6. If Wave 1 is not in hand when L2 finishes, L3 starts with Lane B's P3 against the P1 models (TEAM.md §2: work against the agreed signature with a local adapter until Lane A merges).
 
@@ -241,13 +241,13 @@ Each phase ends with a checkpoint block in PLAN.md's shape plus `Base files touc
 1. `git tag`, `make test`; which of §L3 P1–P7 exist.
 2. With `SARVAM_API_KEY` set in `.env`: four smoke calls through `sarvamai`: one REST STT on a 20 s clip; one batch job with diarization on 3 SquadStack recordings (also try `language_code="unknown"`); one `sarvam-105b` JSON-schema completion; and, if S1 is likely, one Instant Outbound call to a team number recording the create-call path, the webhook payload and the Analytics recording path. Report latency, tokens and cost of each.
 3. Download the SquadStack sample's 250 recordings into `data/squadstack/recordings/`; report size, failures, and whether the S3 URLs are public.
-4. Transcribe the *Call Quality Matrix* PNG into `configs/rubrics/vani-call-quality-v1.yaml`; show me the criteria and weights.
+4. Transcribe the *Call Quality Matrix* PNG into `configs_loop/rubrics/vani-call-quality-v1.yaml`; show me the criteria and weights.
 
 **Then ask me:**
 1. **Which flow does the loop improve?** Buyer-side (prompt in repo; corpus = `Call_Logs_Hackathon.csv` recordings; template `vani-buyer-qty-asks-v1`) or seller-side (corpus = SquadStack; template `vani-meeting-v1`; I must provide the `personalised_vani` prompt).
 2. **Which live surface:** S1 (Sarvam platform: org KYC, number, webhook URL) or S2 (Twilio/Exotel account and number, public `wss` URL) or sim only.
 3. **Where the live disposition comes from** on that surface (§L2.1). No source = no live A/B.
-4. **Who takes dogfood calls** (names and numbers go into `configs/loop/dogfood.yaml`, never chat) and when they may be called.
+4. **Who takes dogfood calls** (names and numbers go into `configs_loop/dogfood.yaml`, never chat) and when they may be called.
 5. **Live caps:** `max_share_b`, `max_live_calls_per_day`, `max_spend_inr`, `max_generations`. Volume check: at historical volume the buyer template needs 34.7 days at a 10% B share and 12.9 days at 50% (its window is 14); the meeting template needs 23.5 days at 10% and 11.3 at 30% (window 28). A share that does not fit is UNDERPOWERED and the proposal is rejected.
 6. **Compliance:** calling hours, do-not-call handling, recording disclosure, any line the bot must say verbatim. Each becomes a hard rubric criterion and a gate question.
 7. Time remaining and the cut order (§L6).
@@ -255,7 +255,7 @@ Each phase ends with a checkpoint block in PLAN.md's shape plus `Base files touc
 **Checkpoint L0 shows:** the audit, smoke results with costs, the rubric YAML, my answers, the flow and surface chosen.
 
 ### L1: Corpus, transcripts and rubric scores
-**Orchestrator first:** `loop/contracts.py` from §L7; `store_ext` tables `loop_transcripts`, `loop_rubric_scores`, `loop_generations`, `loop_candidates`, `loop_spend` (in `loop/store_loop.py` via the §E1.3 migrations table if Wave 1 shipped it, else its own `loop_schema_version` table); `configs/loop/default.yaml` (§L7.3); `configs/loop/prices.yaml`; `.env.example` (`SARVAM_API_KEY`).
+**Orchestrator first:** `loop/contracts.py` from §L7; `store_ext` tables `loop_transcripts`, `loop_rubric_scores`, `loop_generations`, `loop_candidates`, `loop_spend` (in `loop/store_loop.py` via the §E1.3 migrations table if Wave 1 shipped it, else its own `loop_schema_version` table); `configs_loop/default.yaml` (§L7.3); `configs_loop/prices.yaml`; `.env.example` (`SARVAM_API_KEY`).
 
 | Agent | Owns | Delivers |
 |---|---|---|
@@ -265,7 +265,7 @@ Each phase ends with a checkpoint block in PLAN.md's shape plus `Base files touc
 
 **Checkpoint L1 shows:**
 - `make loop-transcribe SRC=data/squadstack/squadstack_answered_2026-10-06_sample250.csv`: 180 calls ≥ 10 s transcribed and role-labelled into `data/derived/loop/transcripts.parquet`, resumable; minutes, cost and failures printed.
-- `make loop-score RUBRIC=configs/rubrics/vani-call-quality-v1.yaml`: `reports/loop/rubric_squadstack_2026-10-06.md` with failure rates and CIs for `personalised_vani` (base_vani's 9 calls reported without inference), the score distribution, the early-hang-up rate; no transcript text in the file.
+- `make loop-score RUBRIC=configs_loop/rubrics/vani-call-quality-v1.yaml`: `reports/loop/rubric_squadstack_2026-10-06.md` with failure rates and CIs for `personalised_vani` (base_vani's 9 calls reported without inference), the score distribution, the early-hang-up rate; no transcript text in the file.
 - `make loop-audit` writes 60 calls for review; after I fill it, `make loop-agreement` prints ρ with its CI, hard-criterion agreement, role accuracy, and TRUSTED or NOT TRUSTED.
 - With `LOOP_PROVIDER=stub` the whole phase runs offline and twice gives hash-equal outputs.
 - **Decide:** accept the rubric and weights; whether to keep `summary_vani` (2 calls).
@@ -293,8 +293,8 @@ Requires §L3 P1–P6 and the L0 surface answers.
 |---|---|---|
 | A | `loop/dialer.py`, `loop/telephony/base.py`, `loop/telephony/fake.py`, `loop/telephony/<surface>.py`, `test_loop_dialer.py`, `test_loop_telephony.py` | The dialer (caps, pause, `router.assign`, prompt-hash verification, rendering); the adapter interface; the fake surface (canned recording and disposition); the chosen surface |
 | B | `loop/ingest.py`, `loop/look.py`, `test_loop_ingest.py`, `test_loop_look.py` | Post-call worker (fetch recording, Saaras transcript, roles, score, `loop_rubric_scores`), idempotent on `call_id`; the look path (scoring watermark, `calls_transform` join, missingness check); parity: sim traffic through the http sink with stub scoring equals the direct run's decision rows when `extra_guardrails` is empty |
-| C | `loop/dogfood.py`, `configs/loop/dogfood.yaml.example`, `test_loop_dogfood.py` | `make loop-dogfood GEN=`: calls, wait for ingest, transcripts and scores, PASS or FAIL, then DOGFOOD_REVIEW |
-| D | Lane B's P3 (`metrics.py`, `analysis.py`, `rules.py` for §E4.4), `loop/sim_scores.py`, `configs/loop/sims/rubric_guardrail_stop.yaml`, `test_loop_rubric_guardrail.py`, the extended isolation test | Extra guardrails end to end; a sim where B's rubric_risk rises by 0.06 ends STOPPED_HARM with the reason naming `rubric_risk`; byte-identical with the list empty |
+| C | `loop/dogfood.py`, `configs_loop/dogfood.yaml.example`, `test_loop_dogfood.py` | `make loop-dogfood GEN=`: calls, wait for ingest, transcripts and scores, PASS or FAIL, then DOGFOOD_REVIEW |
+| D | Lane B's P3 (`metrics.py`, `analysis.py`, `rules.py` for §E4.4), `loop/sim_scores.py`, `configs_loop/sims/rubric_guardrail_stop.yaml`, `test_loop_rubric_guardrail.py`, the extended isolation test | Extra guardrails end to end; a sim where B's rubric_risk rises by 0.06 ends STOPPED_HARM with the reason naming `rubric_risk`; byte-identical with the list empty |
 
 **Checkpoint L3 shows:**
 - `make loop-dogfood GEN=1`: three real calls through the chosen surface to the configured team members; transcripts, scores, PASS; then DOGFOOD_REVIEW waits for my approval. (I take one of the calls.)
@@ -430,11 +430,11 @@ def submit(gen: Generation, candidate: Candidate, ctx: LoopContext) -> str      
 def capture_outcome(conn, gen: Generation) -> Generation
 ```
 
-### L7.3 `configs/loop/default.yaml` (every key and its default)
+### L7.3 `configs_loop/default.yaml` (every key and its default)
 ```yaml
 loop: {id: vani-loop, flow: buyer, mode: sim, auto_after_generations: 3}
 template: configs/experiments/vani-buyer-qty-asks-v1.yaml
-rubric: configs/rubrics/vani-call-quality-v1.yaml
+rubric: configs_loop/rubrics/vani-call-quality-v1.yaml
 provider: {name: sarvam, rpm: 40, concurrency: 4,
            roles: {judge: {reasoning_effort: low, max_tokens: 2048},
                    proposer: {reasoning_effort: medium, max_tokens: 4096},
@@ -483,7 +483,7 @@ The v2 check (two independent reviewers) returned *not ready* / *ready with fixe
 
 **Scope of the build.** Every step of §L0 runs:
 1. **Observe (real):** SquadStack recordings → Saaras v4 batch STT with diarization (`language_code: unknown`, `num_speakers: 2`) → roles → rubric scores from `sarvam-105b` → a lead-level rubric report and an audit sheet. This corpus is seller-side, so it is the *observation* demo; the improving generations run on the buyer flow, whose prompt is in the repo.
-2. **Diagnose, propose, gate, bot tests (real Sarvam, small):** generation N diagnoses the production prompt's latest scored conversations (generation 1: bot-test conversations of the base prompt against seed personas, `configs/loop/personas_seed.yaml`), proposes `K` patches, gates them, replays seed personas against base and candidates, picks by the paired-bootstrap rule (the runner-up substitution requires the runner-up to be eligible too).
+2. **Diagnose, propose, gate, bot tests (real Sarvam, small):** generation N diagnoses the production prompt's latest scored conversations (generation 1: bot-test conversations of the base prompt against seed personas, `configs_loop/personas_seed.yaml`), proposes `K` patches, gates them, replays seed personas against base and candidates, picks by the paired-bootstrap rule (the runner-up substitution requires the runner-up to be eligible too).
 3. **Live A/B (simulated traffic, real engine):** `loop/live_ab.py` mirrors `runner._run` step for step on the buyer template (simulator → router → store → `metrics` → `analysis` → `rules` → `decision.apply_verdict`), on a synthetic buyer dataset (`loop/synthdata.py`, written to `data/derived/loop/synthetic/`, used via `ABTEST_DATA_DIR`). Between `rules.evaluate_look` and `decision.apply_verdict` the loop applies the **rubric guardrail** (`loop/guard.py`): per-lead `rubric_risk` (mean over scored answered calls), `delta = mean_B − mean_A` with a Welch SE, RCI = delta ± c_k·se with c_k = `bounds.win[k−1]`; harm (RCI low > margin) → `STOPPED_HARM`; a base win whose rubric RCI is not entirely below the margin → `CONTINUE`, or `BLOCKED_GUARDRAIL` at the final look; base `HALTED_SRM`/`STOPPED_HARM`/`BLOCKED_GUARDRAIL` are kept. When the rubric guardrail decides, the `LookResult` handed to `apply_verdict` carries the rubric guardrail as its `secondary`, so the decision row and its business sentence describe the guardrail that fired; the loop logs both guardrails per look in `loop_guard_log`. Per-call `rubric_risk` in simulated traffic comes from `loop/sim_scores.py` (deterministic per `call_id`, base level by disposition, arm-B shift).
 4. **Sim truth for a candidate** (`sim.effect_mode`): `from_bot_tests` (default: the injected primary lift and the arm-B `rubric_risk` shift are set from the candidate's measured bot-test deltas through `sim.lift_per_score_point` and capped, so a candidate the bot tests rate worse is injected as harmful), or `scenario_sequence` (fixed list, e.g. win, harm, inconclusive). Either way the report labels the A/B as **simulated traffic**; nothing about real business impact is claimed.
 5. **Roll out and repeat:** PROMOTED → the resolved B prompt becomes `data/derived/loop/prompts/<hash>.txt` and the next generation's base; the ledger records every candidate and outcome; the proposer reads the ledger; generation N+1 observes the new production prompt's bot-test conversations. The controller stops at `max_generations`, `max_spend_inr`, three consecutive NO_CANDIDATE, or the pause flag.
@@ -495,7 +495,7 @@ The v2 check (two independent reviewers) returned *not ready* / *ready with fixe
 
 **Rubric flow.** The default rubric's wording is party-neutral ("the person"), `flow: any`, so the same rubric scores seller corpus calls and buyer bot tests.
 
-**Ownership in this build** (Lane B, new files only): everything under `src/abtest/loop/`, `tests/loop/`, `configs/loop/`, `configs/rubrics/`, `dashboard/pages/4_Loop.py`, `docs/loop_runbook.md`, and appended `loop-*` Makefile targets in their own commit.
+**Ownership in this build** (Lane B, new files only): everything under `src/abtest/loop/`, `tests/loop/`, `configs_loop/`, `configs_loop/rubrics/`, `dashboard/pages/4_Loop.py`, `docs/loop_runbook.md`, and appended `loop-*` Makefile targets in their own commit.
 
 **Done for this build:** `uv run pytest -m "not data" -q` green (base suite unchanged); `make loop-demo` (stub provider, no network) runs three generations with a promotion and a stop; `make loop-observe` produced a real rubric report on 30 SquadStack calls; `make loop-run` produced at least one real-Sarvam generation (diagnose → propose → gate → bot tests → simulated A/B → decision) within the cap; the branch is pushed.
 

@@ -31,8 +31,8 @@ from abtest.contracts import (CONFIGS_DIR, ROOT, Boundaries, ExperimentConfig, L
 LOOP_DATA_DIR = ROOT / "data" / "derived" / "loop"
 CACHE_DIR = LOOP_DATA_DIR / "cache"            # model-call cache (PLAN_LOOP §L1.5)
 RECORDINGS_DIR = ROOT / "data" / "squadstack" / "recordings"
-LOOP_CONFIGS_DIR = CONFIGS_DIR / "loop"
-RUBRICS_DIR = CONFIGS_DIR / "rubrics"
+LOOP_CONFIGS_DIR = ROOT / "configs_loop"     # outside configs/: the base tests treat configs/ as engine config
+RUBRICS_DIR = LOOP_CONFIGS_DIR / "rubrics"
 DEFAULT_LOOP_CONFIG = LOOP_CONFIGS_DIR / "default.yaml"
 PRICES = LOOP_CONFIGS_DIR / "prices.yaml"
 LOOP_REPORTS_DIR = ROOT / "reports" / "loop"   # tracked: aggregates only, never transcript text

@@ -1,0 +1,104 @@
+# Variable sets the loop's patch pre-checks render the buyer prompt against (PLAN_LOOP.md §L2.5).
+# Together they cover all 29 variables of prompts/base_buyer_vani.txt (markers and Jinja tags) and
+# take both sides of the switches the template branches on:
+#   is_enrich '1' / '0'; ast_seller_pns non-empty / "00" / empty; quantity_unit_options a list /
+#   "[]"; specification_options a dict / "{}"; language_name Hindi / English / telugu (the template
+#   tests == 'telugu', lowercase, so the Telugu block is only rendered for that exact value);
+#   known and unknown buyer name and city; identity_challenge_count 0 / 1 / 3.
+# Every value is a string, as the platform passes them. All names and numbers are made up.
+sets:
+  - name: live_enrich_hindi
+    vars:
+      bot_name: "Vani"
+      buyer_name: "Rakesh"
+      updated_buyer_name: "Rakesh Kumar"
+      buyer_city: "Jaipur"
+      product_name: "Industrial Water Pump"
+      quantity: "5"
+      quantity_unit_options: '["Piece", "Set"]'
+      specification_options: '{"Power": ["1 HP", "2 HP", "5 HP"], "Material": ["Cast Iron", "Stainless Steel"]}'
+      specifications: '{"Power": "2 HP"}'
+      seller_name: "Shree Ram Pumps"
+      ast_seller_company: "Balaji Engineering Works"
+      ast_seller_city: "Ahmedabad"
+      ast_seller_pns: "9000000001"
+      ast_flow_live: "true"
+      is_enrich: "1"
+      lead_type: "LIVE"
+      language_name: "Hindi"
+      initial_message: "Namaste Rakesh ji, main Vani bol rahi hoon IndiaMART se. Aap Industrial Water Pump ke liye call kar rahe the, sahi hai?"
+      current_phase: "REQUIREMENT_CONFIRMATION"
+      turn_intent: ""
+      triangulation_response_value: "1"
+      triangulation_response_city: "Jaipur"
+      pcd_pitch: "false"
+      already_bought_handled: "0"
+      bl_converted: "0"
+      identity_revealed: "0"
+      identity_challenge_count: "0"
+      off_topic_counter: "0"
+      seller_ask_count: "0"
+
+  - name: nonlive_english_unknown_buyer
+    vars:
+      bot_name: "Vani"
+      buyer_name: ""
+      updated_buyer_name: ""
+      buyer_city: ""
+      product_name: "LED Street Light"
+      quantity: ""
+      quantity_unit_options: "[]"
+      specification_options: "{}"
+      specifications: ""
+      seller_name: "Bright Lighting Solutions"
+      ast_seller_company: ""
+      ast_seller_city: ""
+      ast_seller_pns: ""
+      ast_flow_live: "false"
+      is_enrich: "0"
+      lead_type: "NON_LIVE"
+      language_name: "English"
+      initial_message: "Hello, this is Vani from IndiaMART. The seller you called is not available right now. May I help you with your requirement?"
+      current_phase: "REQUIREMENT_COLLECTION"
+      turn_intent: "ASK_FOR_CLARIFICATION"
+      triangulation_response_value: "0"
+      triangulation_response_city: "Pune"
+      pcd_pitch: "false"
+      already_bought_handled: "1"
+      bl_converted: "0"
+      identity_revealed: "0"
+      identity_challenge_count: "1"
+      off_topic_counter: "1"
+      seller_ask_count: "1"
+
+  - name: nonenrich_telugu_repeat_asker
+    vars:
+      bot_name: "Vani"
+      buyer_name: "Srinivas"
+      updated_buyer_name: ""
+      buyer_city: "Hyderabad"
+      product_name: ""
+      quantity: "10"
+      quantity_unit_options: '["Kg", "Ton"]'
+      specification_options: "{}"
+      specifications: ""
+      seller_name: "Sri Lakshmi Traders"
+      ast_seller_company: "Venkateswara Agro Products"
+      ast_seller_city: "Guntur"
+      ast_seller_pns: "00"
+      ast_flow_live: "true"
+      is_enrich: "0"
+      lead_type: "LIVE"
+      language_name: "telugu"
+      initial_message: "Namaskaram, nenu IndiaMART nundi Vani ni. Meeru ae product kosam chustunnaru?"
+      current_phase: "FINALISATION"
+      turn_intent: "ASK_FOR_ALTERNATE_SELLER"
+      triangulation_response_value: "0"
+      triangulation_response_city: ""
+      pcd_pitch: "true"
+      already_bought_handled: "0"
+      bl_converted: "1"
+      identity_revealed: "1"
+      identity_challenge_count: "3"
+      off_topic_counter: "2"
+      seller_ask_count: "3"

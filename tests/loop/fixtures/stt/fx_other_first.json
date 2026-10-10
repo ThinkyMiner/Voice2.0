@@ -1,0 +1,46 @@
+{
+ "request_id": "synthetic",
+ "transcript": "हाँ। नमस्ते, क्या मेरी बात डेमो ट्रेडर्स से हो रही है? हाँ बोलिए। आप माल खुद बनाते हैं या ट्रेडिंग करते हैं? मैं नेहा, इंडियामार्ट की ब्रांच से मैनेजर बोल रही हूँ। दोनों करते हैं।",
+ "timestamps": null,
+ "language_code": "hi-IN",
+ "diarized_transcript": {
+  "entries": [
+   {
+    "transcript": "हाँ।",
+    "start_time_seconds": 0.4,
+    "end_time_seconds": 0.8,
+    "speaker_id": "0"
+   },
+   {
+    "transcript": "नमस्ते, क्या मेरी बात डेमो ट्रेडर्स से हो रही है?",
+    "start_time_seconds": 0.8,
+    "end_time_seconds": 3.5,
+    "speaker_id": "1"
+   },
+   {
+    "transcript": "हाँ बोलिए।",
+    "start_time_seconds": 3.3,
+    "end_time_seconds": 5.0,
+    "speaker_id": "0"
+   },
+   {
+    "transcript": "आप माल खुद बनाते हैं या ट्रेडिंग करते हैं?",
+    "start_time_seconds": 5.0,
+    "end_time_seconds": 9.0,
+    "speaker_id": "1"
+   },
+   {
+    "transcript": "मैं नेहा, इंडियामार्ट की ब्रांच से मैनेजर बोल रही हूँ।",
+    "start_time_seconds": 9.0,
+    "end_time_seconds": 12.5,
+    "speaker_id": "1"
+   },
+   {
+    "transcript": "दोनों करते हैं।",
+    "start_time_seconds": 12.5,
+    "end_time_seconds": 14.0,
+    "speaker_id": "0"
+   }
+  ]
+ }
+}

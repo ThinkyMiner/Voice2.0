@@ -1,0 +1,195 @@
+# Seed buyer personas for the bot tests (PLAN_LOOP.md §L2.6, §L9): the cards that generation 1 uses
+# before any real buyer call has been scored. Every card is made up; none is taken from a real call
+# (`source_call_id: seed`), and every name, city and number below is invented.
+#
+# `render_vars` fills the buyer prompt (prompts/base_buyer_vani.txt) for that persona and must hold
+# all 29 variables it uses, so `render()` never meets a missing one. The shared defaults below are an
+# unknown buyer on a non-live enrichment call; each card overrides what differs. All values are
+# strings, as the platform passes them. `script` is what the stub simulator replays, in order; a real
+# model plays the buyer from the other fields and uses the lines only where they fit.
+defaults: &defaults
+  bot_name: "Vani"
+  buyer_name: ""
+  updated_buyer_name: ""
+  buyer_city: ""
+  product_name: ""
+  quantity: ""
+  quantity_unit_options: "[]"
+  specification_options: "{}"
+  specifications: ""
+  seller_name: "the seller"
+  ast_seller_company: ""
+  ast_seller_city: ""
+  ast_seller_pns: ""
+  ast_flow_live: "false"
+  is_enrich: "0"
+  lead_type: "NON_LIVE"
+  language_name: "Hindi"
+  initial_message: "Namaste, main Vani bol rahi hoon IndiaMART se. Jis seller ko aapne call kiya woh abhi available nahi hain."
+  current_phase: "REQUIREMENT_CONFIRMATION"
+  turn_intent: ""
+  triangulation_response_value: "0"
+  triangulation_response_city: ""
+  pcd_pitch: "false"
+  already_bought_handled: "0"
+  bl_converted: "0"
+  identity_revealed: "0"
+  identity_challenge_count: "0"
+  off_topic_counter: "0"
+  seller_ask_count: "0"
+
+personas:
+  - card_id: p1
+    source_call_id: seed
+    requirement: "Wants 100 one-litre steel water bottles for his provision store."
+    language: Hindi
+    tone: cooperative and polite
+    irritation_point: null
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      product_name: "Steel Water Bottle"
+      quantity_unit_options: '["Piece", "Dozen"]'
+      seller_name: "Shree Steel Traders"
+      initial_message: "Namaste, main Vani bol rahi hoon IndiaMART se. Aap Steel Water Bottle ke liye call kar rahe the, sahi hai?"
+    script:
+      - "Haan ji, mujhe steel ki water bottle chahiye."
+      - "Ek litre wali, sau piece."
+      - "Indore se bol raha hoon."
+      - "Mera naam Amit Sharma hai."
+      - "Theek hai, dhanyavaad."
+
+  - card_id: p2
+    source_call_id: seed
+    requirement: "Needs 200 round-neck cotton t-shirts for her boutique; has already said so."
+    language: Hinglish
+    tone: brisk, gets short-tempered when asked something twice
+    irritation_point: "Is asked the same question again after she has answered it."
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      buyer_name: "Neha"
+      buyer_city: "Pune"
+      product_name: "Cotton T-Shirt"
+      quantity: "200"
+      quantity_unit_options: '["Piece", "Dozen"]'
+      specification_options: '{"Neck": ["Round Neck", "V Neck"], "Fabric": ["Cotton", "Polyester"]}'
+      seller_name: "Fashion Hub Garments"
+      triangulation_response_value: "1"
+      triangulation_response_city: "Pune"
+      current_phase: "REQUIREMENT_COLLECTION"
+      initial_message: "Namaste Neha ji, main Vani bol rahi hoon IndiaMART se. Aap Cotton T-Shirt ke liye call kar rahi thi, sahi hai?"
+    script:
+      - "Cotton t-shirts chahiye, round neck."
+      - "Maine abhi bataya na, do sau piece."
+      - "Aap baar baar wahi kyun pooch rahe ho, main pareshan ho gayi hoon."
+      - "Seller se baat karwa do, mujhe aur sawaal nahi chahiye."
+
+  - card_id: p3
+    source_call_id: seed
+    requirement: "Needs a 2 HP industrial water pump for a small factory; wants a person, not a machine."
+    language: English
+    tone: skeptical and direct
+    irritation_point: "Suspects he is talking to a machine."
+    asked_for_human: true
+    render_vars:
+      <<: *defaults
+      buyer_name: "Rakesh"
+      updated_buyer_name: "Rakesh Kumar"
+      buyer_city: "Jaipur"
+      product_name: "Industrial Water Pump"
+      quantity: "5"
+      quantity_unit_options: '["Piece", "Set"]'
+      specification_options: '{"Power": ["1 HP", "2 HP", "5 HP"], "Material": ["Cast Iron", "Stainless Steel"]}'
+      specifications: '{"Power": "2 HP"}'
+      seller_name: "Shree Ram Pumps"
+      language_name: "English"
+      triangulation_response_value: "1"
+      triangulation_response_city: "Jaipur"
+      initial_message: "Hello Rakesh, this is Vani from IndiaMART. You were trying to reach Shree Ram Pumps about an Industrial Water Pump, is that right?"
+    script:
+      - "Yes, I need a two horsepower pump for my factory."
+      - "Am I talking to a machine? I want to speak to a human."
+      - "Please connect me to a real person."
+      - "Fine, then connect me to the seller."
+      - "Okay, thank you."
+
+  - card_id: p4
+    source_call_id: seed
+    requirement: "Wants 500 nine-watt LED bulbs for a shop in Surat; starts in Hindi, then asks to continue in English."
+    language: Hindi, then English
+    tone: friendly, switches language mid-call
+    irritation_point: "The assistant keeps answering in Hindi after he asked for English."
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      buyer_name: "Vikram"
+      product_name: "LED Bulb"
+      quantity_unit_options: '["Piece", "Box"]'
+      specification_options: '{"Wattage": ["9 W", "12 W", "15 W"]}'
+      seller_name: "Surat Lighting Co"
+      initial_message: "Namaste Vikram ji, main Vani bol rahi hoon IndiaMART se. Aap LED Bulb ke liye call kar rahe the, sahi hai?"
+    script:
+      - "Mujhe LED bulbs chahiye."
+      - "Can we talk in English please?"
+      - "I need five hundred pieces, nine watt."
+      - "I am calling from Surat."
+      - "Okay, thanks."
+
+  - card_id: p5
+    source_call_id: seed
+    requirement: "Wants corrugated packaging boxes for a warehouse in Delhi but does not know the quantity yet."
+    language: Hinglish
+    tone: vague, unsure, a little hesitant
+    irritation_point: null
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      buyer_name: "Sunita"
+      buyer_city: "Delhi"
+      product_name: "Corrugated Packaging Box"
+      quantity_unit_options: '["Piece", "Box"]'
+      specification_options: '{"Ply": ["3 Ply", "5 Ply"], "Size": ["Small", "Medium", "Large"]}'
+      seller_name: "Delhi Packaging House"
+      triangulation_response_value: "1"
+      triangulation_response_city: "Delhi"
+      current_phase: "REQUIREMENT_COLLECTION"
+      initial_message: "Namaste Sunita ji, main Vani bol rahi hoon IndiaMART se. Aap Corrugated Packaging Box ke liye call kar rahi thi, sahi hai?"
+    script:
+      - "Corrugated boxes chahiye, thode zyada."
+      - "Pata nahi kitne, shayad kuch hazaar."
+      - "Abhi pakka nahi hai, seller se baat karke batati hoon."
+      - "Delhi mein delivery chahiye."
+      - "Theek hai."
+
+  - card_id: p6
+    source_call_id: seed
+    requirement: "Needs 50 mobile phone covers for his stall and is in a hurry; wants the seller to call him back."
+    language: Hindi
+    tone: impatient and curt
+    irritation_point: "Long explanations and questions he considers unnecessary."
+    asked_for_human: false
+    render_vars:
+      <<: *defaults
+      buyer_name: "Imran"
+      updated_buyer_name: "Imran Shaikh"
+      buyer_city: "Ahmedabad"
+      product_name: "Mobile Phone Cover"
+      quantity: "50"
+      quantity_unit_options: '["Piece", "Dozen"]'
+      seller_name: "Gujarat Mobile Accessories"
+      ast_seller_company: "Royal Mobile Accessories"
+      ast_seller_city: "Surat"
+      ast_seller_pns: "9000000002"
+      ast_flow_live: "true"
+      is_enrich: "1"
+      lead_type: "LIVE"
+      triangulation_response_value: "1"
+      triangulation_response_city: "Ahmedabad"
+      current_phase: "FINALISATION"
+      initial_message: "Namaste Imran ji, main Vani bol rahi hoon IndiaMART se. Aapki Mobile Phone Cover ki requirement ke liye ek seller abhi line par hain."
+    script:
+      - "Jaldi bolo, mere paas time nahi hai."
+      - "Mobile covers, pachas piece."
+      - "Ahmedabad."
+      - "Bas, seller ko bolo call kare. Rakhta hoon."

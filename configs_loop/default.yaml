@@ -1,9 +1,9 @@
 # Loop configuration (PLAN_LOOP.md §L7.3). Every key the loop reads, with its default.
-# A loop instance copies this file to configs/loop/<loop id>.yaml and overrides keys there.
+# A loop instance copies this file to configs_loop/<loop id>.yaml and overrides keys there.
 # `caps` are frozen with each generation; changing them starts a new generation (PLAN_LOOP §L1.6).
 loop: {id: vani-loop, flow: buyer, mode: sim, auto_after_generations: 3}
 template: configs/experiments/vani-buyer-qty-asks-v1.yaml
-rubric: configs/rubrics/vani-call-quality-v1.yaml
+rubric: configs_loop/rubrics/vani-call-quality-v1.yaml
 provider:
   name: sarvam                 # sarvam | stub (tests and sim mode use stub)
   rpm: 40                      # sarvam-105b Starter tier: 40 requests/minute
@@ -25,7 +25,7 @@ guardrail: {rubric_risk_margin: 0.05}
 ingest: {score_timeout_h: 6}
 live: {surface: fake, disposition_field: disposition}
 sim:                           # simulated traffic for the live A/B in sim mode (PLAN_LOOP §L9.3-4)
-  base_sim: configs/loop/sims/buyer_base.yaml
+  base_sim: configs_loop/sims/buyer_base.yaml
   effect_mode: from_bot_tests
   lift_per_score_point: 1.5    # +0.10 bot-test rubric_score -> +15% injected relative lift
   max_abs_lift: 0.30

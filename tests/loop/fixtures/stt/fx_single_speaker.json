@@ -1,0 +1,22 @@
+{
+ "request_id": "synthetic",
+ "transcript": "नमस्ते, क्या मेरी बात टेस्ट स्टोर से हो रही है? हेलो, क्या आप मुझे सुन पा रहे हैं?",
+ "timestamps": null,
+ "language_code": "hi-IN",
+ "diarized_transcript": {
+  "entries": [
+   {
+    "transcript": "नमस्ते, क्या मेरी बात टेस्ट स्टोर से हो रही है?",
+    "start_time_seconds": 0.5,
+    "end_time_seconds": 4.0,
+    "speaker_id": "0"
+   },
+   {
+    "transcript": "हेलो, क्या आप मुझे सुन पा रहे हैं?",
+    "start_time_seconds": 4.0,
+    "end_time_seconds": 7.0,
+    "speaker_id": "0"
+   }
+  ]
+ }
+}

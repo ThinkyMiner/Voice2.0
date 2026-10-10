@@ -1,0 +1,35 @@
+# What the stub provider returns for role "proposer" (PLAN_LOOP.md §L2.3): three candidates that
+# pass every pre-check on prompts/base_buyer_vani.txt.
+#   a) and b) contain the phrases the stub bot reacts to, so a stub-mode generation can really
+#      improve: "never repeat the same question" stops its looping, "confirm the next step" makes it
+#      end with a next step. Each is a plain append (no Jinja, no template markers).
+#   c) rewrites one sentence that occurs exactly once in the prompt; the stub bot ignores it, so it
+#      is the candidate that does not help.
+candidates:
+  - mode: append
+    text: >-
+      Never repeat the same question: if the buyer already answered, move on to the next detail.
+    rationale: >-
+      Calls show the bot asking the same question again after the buyer answered it; a rule to move
+      on after an answer removes the loop.
+    targets: [looping]
+
+  - mode: append
+    text: >-
+      Before ending the call, confirm the next step with the buyer: say that the seller will call
+      them back with a quote.
+    rationale: >-
+      Many calls end without the buyer knowing what happens next; closing with the seller's callback
+      gives the call a clear next step.
+    targets: [closure]
+
+  - mode: replace_text
+    find: >-
+      Collect only information relevant to the buyer's requirement. Never ask unnecessary questions.
+    replace: >-
+      Collect the product, quantity and city of the buyer's requirement before anything else, and
+      only then any other relevant detail. Never ask unnecessary questions.
+    rationale: >-
+      Product, quantity and city are what a seller needs to act on a lead; asking for them first
+      raises how completely the requirement is captured.
+    targets: [requirement_captured]
