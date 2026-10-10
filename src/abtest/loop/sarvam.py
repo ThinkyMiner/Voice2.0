@@ -49,9 +49,12 @@ log = logging.getLogger(__name__)
 MODEL = "sarvam-105b"
 # Measured 10 Oct with the 18k-token rendered buyer prompt: sarvam-105b spent 3,558 reasoning tokens
 # (15.7 s) on one bot line and returned nothing at max_tokens=4096; sarvam-105b-conversations, the
-# dialogue variant, answered in 1.1 s with 28 tokens. So the two conversation roles use it; the
-# judge, proposer and gate keep the reasoning model.
-ROLE_MODELS = {"bot": "sarvam-105b-conversations", "buyer": "sarvam-105b-conversations"}
+# dialogue variant, answered in 1.1 s with 28 tokens. So the two conversation roles use it. The
+# proposer reads the whole 24k-word prompt: on the reasoning model it exhausted 16,384 tokens at both
+# high and low effort (generation 2, 10 Oct), so it uses the dialogue variant too; its proposals are
+# filtered by the pre-checks, the gate and the bot tests anyway. Judge and gate keep sarvam-105b.
+ROLE_MODELS = {"bot": "sarvam-105b-conversations", "buyer": "sarvam-105b-conversations",
+               "proposer": "sarvam-105b-conversations"}
 CHAT_URL = "https://api.sarvam.ai/v1/chat/completions"
 STT_ENDPOINT = "speech-to-text-job"
 STUB_DIR = ROOT / "tests" / "loop" / "fixtures" / "stub"
