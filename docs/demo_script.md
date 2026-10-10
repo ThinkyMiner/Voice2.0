@@ -169,7 +169,9 @@ shows the experiment disappear for a moment and come back from day 1.
 
 - The morning run in [docs/runbook.md](runbook.md) has finished: cycle 1 is at **PENDING_APPROVAL**.
   Do not approve it yet; the approval happens on camera.
-- `make platform` is running; open http://127.0.0.1:8600 in a second tab, light theme.
+- The platform is running with the go-ahead, so its buttons can run cycle 2 (whose replay calls are
+  built from real buyers): `LOOP_ALLOW_REAL=1 make platform`. Open http://127.0.0.1:8600 in a second
+  tab, light theme.
 - **Customer calls on camera.** The Calls and call pages show real customer transcripts. For the
   video, either show those two screens from the demo copy (`python3 -m http.server -d
   src/abtest/ext/web 8611`, then http://127.0.0.1:8611/#/calls: invented calls, labelled as demo
@@ -231,7 +233,8 @@ approve."
 
 ## 6:05 to 6:30: the loop starts again
 
-**Do:** open **Prompts** (v2 is production), then the **Loop** home: cycle 2 has opened on v2. End
+**Do:** open **Prompts** (v2 is production), then the **Loop** home: cycle 2 has opened on v2. Press
+**Run until it needs you** and confirm (the next cycle costs about $2–3 and runs in the background). End
 on the **Docs** tab.
 
 "Prompt B is now production, and the loop starts again on it: every call teaches the next prompt.
