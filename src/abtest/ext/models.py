@@ -286,3 +286,23 @@ def load(path: Path, model=None, default=None):
     if model is None:
         return data
     return [model.model_validate(d) for d in data] if isinstance(data, list) else model.model_validate(data)
+
+
+REAL_SOURCES = ("production", "audited")  # Transcript sources that are real customer calls
+
+
+def is_real(t: Transcript) -> bool:
+    """Real customer content: a real call, or a replay built from one (its simulated buyer was given that
+    buyer's persona and lines). The chain is followed through TRANSCRIPTS_DIR; a replay whose origin cannot
+    be found there counts as real. A replay with no origin at all is a hand-made fixture."""
+    seen: set[str] = set()
+    while t.source == "replay":
+        origin = t.meta.get("replay_of")
+        if not origin:
+            return False
+        if origin in seen or not origin.replace("-", "").replace("_", "").isalnum():
+            return True
+        seen.add(origin)
+        if (t := load(TRANSCRIPTS_DIR / f"{origin}.json", Transcript)) is None:
+            return True
+    return t.source in REAL_SOURCES
