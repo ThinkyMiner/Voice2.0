@@ -208,17 +208,6 @@ document.addEventListener("keydown", (e) => {
 if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) $("#kbd-hint").textContent = "Ctrl K";
 
 // -------------------------------------------------------------------------------------- boot
-/** Demo data only when there is no platform at all: nothing answers, or a plain static server 404s
- *  the API with a page of its own. Any other failure is the platform's: the pages that need the
- *  overview show its words with a Retry, the rest work, and nothing invented is ever shown as real. */
-async function start() {
-  let r = null;
-  try { r = await fetch("/api/overview", { headers: { accept: "application/json" } }); } catch { /* nothing answers */ }
-  const json = (r?.headers.get("content-type") || "").includes("application/json");
-  if (!r || (!json && (r.status === 404 || r.ok))) return boot();  // boot() asks again, then loads demo.json
-  if (r.ok) state.overview = await r.json();  // else the platform's own error: stay live; pages that need it show it
-}
-
 function foot() {
   $("#foot-prod").textContent = state.overview?.production?.version || "—";
   $("#foot-mode").textContent = state.demo ? "demo" : "live";
@@ -234,7 +223,7 @@ window.addEventListener("vani:changed", async () => {
   if (location.protocol === "file:") return;
   $("#brand-ring").setAttribute("d", brandRingPath());
   try {
-    await start();
+    await boot();
   } catch (err) {
     bootFailed = true;
     mount(view, failState(err));

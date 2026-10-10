@@ -104,7 +104,7 @@ function facetsHTML(f, items, count, moreOpen) {
       html`<option value="${v}" ${f[key] === v ? raw("selected") : ""}>${l}${v ? ` · ${int(n(v))}` : ""}</option>`)}</select></label>`;
   };
   const disps = [...new Set(items.map((c) => c.disposition).filter(Boolean))].sort();
-  const on = MORE.filter((k) => f[k]).length, open = moreOpen || on > 0;
+  const on = MORE.filter((k) => f[k]).length, open = moreOpen;  // folded filters still apply: the button counts them
   return html`${seg("source")}${seg("overall")}<button type="button" class="btn sm more-f" data-more aria-expanded="${open ? "true" : "false"}" aria-controls="fselects">${open ? "Fewer filters" : "More filters"}${on ? ` · ${on} on` : ""}</button>
     <div class="fselects${open ? " open" : ""}" id="fselects">
     ${sel("human", [...GRADES, ["none", "Not audited"]])}${sel("vs", [["", "Any"], ["disagree", "Disagree"], ["agree", "Agree"]])}
@@ -127,11 +127,11 @@ export async function renderList(el, { params }) {
     <div id="list"></div>`);
 
   const host = $("#list", el), facets = $("#facets", el), q = $("#q", el);
-  let items = null, ids = [], t = 0, alive = true, moreOpen = false;
+  let items = null, total = 0, ids = [], t = 0, alive = true, moreOpen = MORE.some((k) => f[k]);
   const load = async () => {
     mount(host, html`<div class="skeleton" aria-busy="true"><i style="width:24%"></i><i></i><i></i><i style="width:70%"></i></div>`);
     try {
-      items = (await get("/api/calls?limit=5000")).items;
+      ({ items, total } = await get("/api/calls?limit=5000"));  // ponytail: one fetch, filtered here; page on the server past 5,000
       return alive;
     } catch (err) {
       if (alive) mount(host, empty({ title: "Calls could not load", body: err.message, glyph: "lock", compact: true, action: html`<button type="button" class="btn sm" data-retry>Try again</button>` }));
@@ -140,6 +140,7 @@ export async function renderList(el, { params }) {
   };
   const sig = (n) => (n && n !== q && el.contains(n) && n.matches("button, select") ? `${n.tagName}|${Object.entries(n.dataset).filter(([k]) => k !== "page").join("|")}` : null);
   const draw = () => {
+    if (!items || !el.isConnected) return;  // still loading, or the reader already left for another page
     const focus = sig(document.activeElement);  // re-rendering must not drop a keyboard user's place
     const count = (key) => { const base = items.filter((c) => keep(c, f, key)); return (v) => (v ? base.filter((c) => TESTS[key](c, v)).length : base.length); };
     mount(facets, facetsHTML(f, items, count, moreOpen));
@@ -154,7 +155,7 @@ export async function renderList(el, { params }) {
         ? empty({ title: "No calls match these filters", body: f.source === "replay" ? REPLAY_NOTE : "Loosen a filter or change the search.", compact: true, glyph: "wave", action: html`<button type="button" class="btn sm" data-clear>Clear filters</button>` })
         : html`${empty({ title: "No transcripts yet", body: "Listen turns the call recordings into transcripts the judge can read; they appear here.", glyph: "wave" })}${forEngineers("make listen")}`);
     } else {
-      mount(host, html`<div class="calls-bar"><p class="calls-count" tabindex="-1"><b>${int(rows.length)}</b> ${rows.length === 1 ? "call" : "calls"}${KEYS.some((k) => f[k]) ? " match" : ""} · showing ${int(from + 1)}–${int(from + shown.length)}</p>
+      mount(host, html`<div class="calls-bar"><p class="calls-count" tabindex="-1"><b>${int(rows.length)}</b> ${rows.length === 1 ? "call" : "calls"}${KEYS.some((k) => f[k]) ? " match" : ""} · showing ${int(from + 1)}–${int(from + shown.length)}${total > items.length ? ` · searching the first ${int(items.length)} of ${int(total)}` : ""}</p>
           <label class="fsel"><span class="flbl">Sort</span><select class="select" data-sort-sel>${Object.entries(SORTS).map(([k, [l]]) => html`<option value="${k}" ${k === f.sort ? raw("selected") : ""}>${l}</option>`)}</select></label>
           ${pages > 1 ? pager(f.page, pages) : ""}</div>
         <div class="card calls-card"><table class="table calls-table">
@@ -177,7 +178,7 @@ export async function renderList(el, { params }) {
       if (top < 0) scrollTo({ top: scrollY + top - 72 });
       return $(".calls-count", host)?.focus({ preventScroll: true });
     }
-    if (b && "more" in b.dataset) { moreOpen = b.getAttribute("aria-expanded") !== "true"; if (!moreOpen) for (const k of MORE) f[k] = ""; return redraw({}); }
+    if (b && "more" in b.dataset) { moreOpen = b.getAttribute("aria-expanded") !== "true"; return draw(); }  // folding keeps the filters; Clear filters clears
     if (b && "clear" in b.dataset) { q.value = ""; return redraw(Object.fromEntries(KEYS.map((k) => [k, ""]))); }
     if (b && "retry" in b.dataset) return load().then((ok) => ok && draw());
     const tr = e.target.closest("tr[data-id]");

@@ -1,6 +1,7 @@
-// The platform API (docs/loop_api.md). When there is no API (a plain static server answers 404, or
-// nothing answers) the app runs on ./demo.json instead: same shapes, invented calls, real engine runs.
-// A platform that answers with an error gets an error page, never demo data standing in for real.
+// The platform API (docs/loop_api.md). When there is no platform (nothing answers, or a static server
+// answers /api/overview with a page of its own) the app runs on ./demo.json instead: same shapes,
+// invented calls, real engine runs. A platform that answers with an error stays live: the pages that
+// need the overview show its words with a Retry, and nothing invented is ever shown as real.
 // Demo writes stay in this tab, except custom rubrics, which persist in localStorage.
 
 export class ApiError extends Error {
@@ -15,11 +16,11 @@ export async function boot() {
   try {
     r = await fetch("/api/overview", { headers: { accept: "application/json" } });
   } catch { /* nothing answers: a static copy of the site */ }
-  if (r?.ok) {
-    state.overview = await r.json();
+  const json = (r?.headers.get("content-type") || "").includes("application/json");
+  if (r && (json || !(r.ok || r.status === 404))) {  // the platform answered, even if with an error
+    if (r.ok) state.overview = await r.json();
     return state;
   }
-  if (r && r.status !== 404) throw await fail(r);
   r = await fetch("demo.json");
   if (!r.ok) throw new ApiError(r.status, "The platform API is not running and demo.json is missing.");
   demo = await r.json();
