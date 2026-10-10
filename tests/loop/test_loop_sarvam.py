@@ -1187,3 +1187,14 @@ def test_stub_is_selected_by_the_environment_and_works_without_a_key(base_cfg, m
 def test_spend_row_ids_are_deterministic_sha256_of_generation_step_and_key():
     assert sha256_json([1, "judge", "k"]) == sha256_json([1, "judge", "k"]) != sha256_json([2, "judge", "k"])
     assert SpendRow(spend_id="x", generation=1, step="s", state="reserved", estimate_inr=0).actual_inr is None
+
+
+def test_conversation_roles_use_the_dialogue_model_and_the_judge_keeps_the_reasoning_model(tmp_path, base_cfg):
+    # measured 10 Oct: sarvam-105b reasoned 3,558 tokens for one bot line; the conversations variant answered at once
+    api = FakeApi(reply("Namaste."), reply("Haan ji."), reply(GOOD))
+    p = make(tmp_path, api, make_cfg(base_cfg))
+    p.chat("bot", [{"role": "system", "content": "S"}, {"role": "user", "content": "<call connected>"}])
+    p.chat("buyer", [{"role": "system", "content": "P"}, {"role": "user", "content": "Namaste."}])
+    p.complete_json("judge", "s", "u", SCHEMA)
+    assert [r["body"]["model"] for r in api.requests] == [
+        "sarvam-105b-conversations", "sarvam-105b-conversations", "sarvam-105b"]

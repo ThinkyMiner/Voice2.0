@@ -47,6 +47,11 @@ from abtest.loop.contracts import (CACHE_DIR, DEFAULT_LOOP_CONFIG, PRICES, ROOT,
 log = logging.getLogger(__name__)
 
 MODEL = "sarvam-105b"
+# Measured 10 Oct with the 18k-token rendered buyer prompt: sarvam-105b spent 3,558 reasoning tokens
+# (15.7 s) on one bot line and returned nothing at max_tokens=4096; sarvam-105b-conversations, the
+# dialogue variant, answered in 1.1 s with 28 tokens. So the two conversation roles use it; the
+# judge, proposer and gate keep the reasoning model.
+ROLE_MODELS = {"bot": "sarvam-105b-conversations", "buyer": "sarvam-105b-conversations"}
 CHAT_URL = "https://api.sarvam.ai/v1/chat/completions"
 STT_ENDPOINT = "speech-to-text-job"
 STUB_DIR = ROOT / "tests" / "loop" / "fixtures" / "stub"
@@ -525,22 +530,26 @@ class SarvamProvider:
 
     def _body(self, role: str, messages: Sequence[Mapping[str, str]], max_tokens: int, json_mode: bool) -> dict:
         settings = self._role_settings(role)
-        body: dict[str, Any] = {"model": MODEL, "messages": [dict(m) for m in messages],
+        body: dict[str, Any] = {"model": ROLE_MODELS.get(role, MODEL), "messages": [dict(m) for m in messages],
                                 "temperature": TEMPERATURE.get(role, 0.0),
                                 "reasoning_effort": settings.reasoning_effort, "max_tokens": max_tokens}
         if json_mode:
             body["response_format"] = {"type": "json_object"}
         return body
 
+    def _price(self, model: str) -> dict[str, float]:
+        """List price of `model`; a variant without its own entry is priced as the base model."""
+        return self._prices.llm.get(model) or self._prices.llm[MODEL]
+
     def _estimate_inr(self, body: Mapping[str, Any]) -> float:
-        price = self._prices.llm[body["model"]]
+        price = self._price(body["model"])
         in_chars = sum(len(str(m.get("content") or "")) for m in body["messages"])
         return (in_chars / CHARS_PER_TOKEN / 1e6 * price["input_per_million_tokens"]
                 + body["max_tokens"] / 2 / 1e6 * price["output_per_million_tokens"])
 
     def _call(self, body: dict) -> dict:
         """cache -> reserve -> request -> settle -> cache. Returns {content, finish_reason, usage}."""
-        key = sha256_json({"provider": self.name, "model": MODEL, "endpoint": CHAT_URL, "body": body})
+        key = sha256_json({"provider": self.name, "model": body["model"], "endpoint": CHAT_URL, "body": body})
         if (hit := self._cache.get(key)) is not None:
             return hit
         generation, step = self._context
@@ -556,7 +565,7 @@ class SarvamProvider:
         usage = resp["usage"]
         tokens_in, tokens_out = usage.get("prompt_tokens"), usage.get("completion_tokens")
         if isinstance(tokens_in, int) and isinstance(tokens_out, int):
-            price = self._prices.llm[MODEL]
+            price = self._price(body["model"])
             cost = (tokens_in / 1e6 * price["input_per_million_tokens"]
                     + tokens_out / 1e6 * price["output_per_million_tokens"])
             self._spend.settle(spend_id, cost, tokens_in, tokens_out)
