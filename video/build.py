@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "out"
 FFMPEG = os.environ.get("FFMPEG", "/opt/homebrew/bin/ffmpeg")
-FPS, TAIL, XF = 30, 0.6, 0.35
+FPS, TAIL, XF = 30, 1.7, 0.35  # TAIL as in capture.py
 
 
 def ff(*args) -> None:
