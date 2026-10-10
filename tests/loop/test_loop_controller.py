@@ -638,3 +638,28 @@ def test_the_gate_fails_closed_when_it_cannot_answer():
     c = Candidate(candidate_id="g1-c1", generation=1, patch=patch, patch_hash="h", rationale="r", targets=("closure",))
     out = controller._gate_or_block(BrokenGate, "prompt", c, provider=None, cfg=None)
     assert out.status == "gate_blocked" and out.gate == {"gate_unavailable": 1.0}
+
+
+def test_a_retest_generation_re_evaluates_stored_candidates_without_the_proposer(tmp_path, monkeypatch):
+    import dataclasses
+    from abtest.loop import cli, live_ab, sarvam
+    monkeypatch.setattr(controller, "LOOP_DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(controller, "LOOP_REPORTS_DIR", tmp_path / "reports")
+    monkeypatch.setattr(live_ab, "LOOP_DATA_DIR", tmp_path / "data")
+    monkeypatch.setenv("LOOP_PROVIDER", "stub")
+    monkeypatch.delenv("ABT_LOOP_PAUSE", raising=False)
+    cfg = sarvam.load_loop_config(DEFAULT_LOOP_CONFIG)
+    ctx = cli.build_context(cfg, provider="stub", db=tmp_path / "loop.db", quiet=True)
+    controller.run_loop(ctx, 1)
+    first = {c.candidate_id for c in store.get_candidates(ctx.conn, cfg.loop.id, 1)}
+    target = sorted(first)[-1]
+
+    calls = []
+    from abtest.loop import proposer
+    real_propose = proposer.propose
+    monkeypatch.setattr(proposer, "propose", lambda *a, **k: calls.append(1) or real_propose(*a, **k))
+    gens = controller.run_loop(dataclasses.replace(ctx, retest=(target,), retest_from=cfg.loop.id), 1)
+    assert not calls                                    # no proposer call in a re-test
+    again = store.get_candidates(ctx.conn, cfg.loop.id, gens[-1].generation)
+    assert [c.candidate_id for c in again] == [f"g{gens[-1].generation}-r1"]
+    assert again[0].rationale.startswith(f"Re-test of {target}") and again[0].status != "proposed"

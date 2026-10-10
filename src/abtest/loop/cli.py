@@ -13,6 +13,7 @@ stays under data/derived/loop/. The default DB is data/derived/loop/loop.db, nev
 """
 
 import argparse
+import dataclasses
 import contextlib
 import json
 import os
@@ -218,6 +219,25 @@ def cmd_run(args: argparse.Namespace) -> int:
         _close(ctx.provider, ctx.conn)
 
 
+def cmd_retest(args: argparse.Namespace) -> int:
+    """One generation that re-evaluates stored candidates (no proposer) with --personas buyers:
+    a near-miss on 3 simulated buyers gets a tighter interval before the bar decides."""
+    cfg = _load_cfg(args.config)
+    if args.personas:
+        cfg = cfg.model_copy(update={"bot_tests": cfg.bot_tests.model_copy(update={"personas": args.personas})})
+    ctx = build_context(cfg, provider=args.provider, db=args.db, quiet=args.quiet)
+    ctx = dataclasses.replace(ctx, retest=tuple(args.candidates), retest_from=args.from_loop or cfg.loop.id)
+    try:
+        gens, reason = controller.run_until_stop(ctx, 1)
+        for g in gens:
+            print(generation_line(g))
+        print(f"stopped: {reason}")
+        print(_spend_line(ctx.conn, cfg))
+        return 0
+    finally:
+        _close(ctx.provider, ctx.conn)
+
+
 def cmd_demo(args: argparse.Namespace) -> int:
     cfg = _load_cfg(args.config)
     # Four bot turns: the stub bot only shows the closure fix from its fourth turn, so the demo can
@@ -310,6 +330,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("run", cmd_run, "run generations on the loop DB", db=True, provider=True)
     s.add_argument("--generations", type=int, default=1)
     s.add_argument("--quiet", action="store_true", help="one line per generation only")
+
+    s = add("retest", cmd_retest, "one generation re-testing stored candidates (no proposer)", db=True, provider=True)
+    s.add_argument("--candidates", nargs="+", required=True, help="stored candidate ids, e.g. g1-c1")
+    s.add_argument("--from-loop", help="loop the candidates were stored under (default: the config's loop)")
+    s.add_argument("--personas", type=int, help="seed personas for the bot tests (default: the config's)")
+    s.add_argument("--quiet", action="store_true")
 
     s = add("demo", cmd_demo, "three generations, stub provider, fresh demo DB, offline")
     s.add_argument("--quiet", action="store_true")

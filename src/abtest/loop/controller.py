@@ -47,6 +47,10 @@ class LoopContext:
     loop_id: str
     base_prompt_path: str              # relative to ROOT: the template's variant A base (generation 1's production prompt)
     quiet: bool = False
+    # Re-test generation: re-evaluate these stored candidates (candidate ids of loop `retest_from`)
+    # instead of proposing new ones; they pass the gate again and need a fresh bot-test verdict.
+    retest: tuple[str, ...] = ()
+    retest_from: str | None = None
 
 
 @dataclass(frozen=True)
@@ -286,6 +290,14 @@ def _generation_steps(run: _Run) -> None:
 
     _set_context(ctx, g, "propose")
     ledger = loop_module("ledger")
+    if ctx.retest:
+        proposed = _retest_candidates(run)
+        for c in proposed:
+            run.save(c)
+        run.note("PROPOSED", f"Re-test of {len(proposed)} stored candidate(s) from loop "
+                             f"`{ctx.retest_from or ctx.loop_id}` ({', '.join(ctx.retest)}) instead of new proposals.")
+        run.advance("PROPOSED")
+        return _after_proposed(run, proposed)
     try:
         proposed = loop_module("proposer").propose(
             run.prod.text, run.diagnosis, excerpts, ctx.rubric, ledger.ledger_summary(ctx.conn, ctx.loop_id),
@@ -301,6 +313,32 @@ def _generation_steps(run: _Run) -> None:
         run.save(c)  # failed pre-checks too: the ledger records them
     run.note("PROPOSED", f"{len(proposed)} proposed, {sum(map(_eligible, proposed))} passed the pre-checks.")
     run.advance("PROPOSED")
+    return _after_proposed(run, proposed)
+
+
+def _retest_candidates(run: _Run) -> list[Candidate]:
+    """Stored candidates to re-evaluate, renamed into this generation and re-checked against the
+    current production prompt (a re-test is a fresh verdict, never a carried-over one)."""
+    ctx, g = run.ctx, run.gen.generation
+    store, render = loop_module("store_loop"), loop_module("render")
+    stored = {c.candidate_id: c for c in store.get_candidates(ctx.conn, ctx.retest_from or ctx.loop_id)}
+    if missing := [i for i in ctx.retest if i not in stored]:
+        raise ValueError(f"re-test: no stored candidate {missing} in loop {ctx.retest_from or ctx.loop_id}")
+    fixtures = render.fixture_variable_sets()
+    out = []
+    for n, cid in enumerate(ctx.retest, start=1):
+        c = stored[cid]
+        checks = render.precheck(run.prod.text, c.patch, fixtures, ctx.cfg.propose.max_patch_chars)
+        out.append(c.model_copy(update={
+            "candidate_id": f"g{g}-r{n}", "generation": g, "prechecks": {**checks, "not_tried": True},
+            "gate": None, "bot_test_score": None, "bot_test_ci": None,
+            "rationale": f"Re-test of {cid}: {c.rationale}",
+            "status": "proposed" if all(checks.values()) else "precheck_failed"}))
+    return out
+
+
+def _after_proposed(run: _Run, proposed: list[Candidate]) -> None:
+    ctx, cfg, g = run.ctx, run.ctx.cfg, run.gen.generation
     survivors = [c for c in proposed if _eligible(c)]
     if not survivors:
         return _no_candidate(run, "No proposed candidate passed the pre-checks.")
