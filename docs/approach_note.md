@@ -64,13 +64,26 @@ auditors. The 250-call production sample is the seller-side Vani, so it is trans
 used to fix the buyer prompt.
 
 - **Agreement with the auditors** (learned on the first audited calls, measured on the held-out
-  rest): on the checks a transcript can show, the judge agrees with the auditors 82–92% of the time
-  on most columns (quantity, units, specs, product change, AstBuy transfer; kappa 0.66–0.77).
-  Agreement on the call's overall grade is low (kappa ≈ 0): the auditors also judge what the bot
+  rest: calibrated on 40 calls, measured on 120 others): the judge agrees well with the auditors on
+  6 of 16 checks, 82–92% of the time (quantity, units, both specs, product change, AstBuy transfer;
+  kappa 0.63–0.78).
+  Agreement on the call's overall grade is low (47.5%, kappa 0.04): the auditors also judge what the bot
   saved into the lead record, which the judge cannot see, and audio-only columns (dead air,
   pronunciation) cannot be graded from text. The full table is in `reports/judge_agreement.md`.
-- **Cycle 1:** _to fill in after the cycle-1 run: the top root cause and its priority, the edits
-  in Prompt B, the gate result, the replay before/after, and the A/B decision._
+- **Cycle 1 (10 Oct):** 160 calls judged on v1 (21 fatal, 113 non-fatal, 26 pass; fatal rate
+  13.1%), grouped into 28 root causes (19 prompt, 2 flow, 4 speech, 2 catalogue, 1 platform).
+  - Try 1, "Bot misstates or alters buyer's spec value" (priority 2.5, 4 fatal calls): the fix (v2)
+    passed the gate but changed nothing in replay, so the loop dropped it by itself.
+  - Try 2, "Buyer-volunteered specs ignored or deferred" (priority 2.5): v3, three cited edits;
+    the gate passed (Jev); in replay the failure fell from 25% to 0%, but over only 4
+    conversations, and Looping Behavior got worse (+75 pts). The simulated A/B test (an assumed
+    +20% effect for B) crossed the win line on day 5 and now waits for a person; our
+    recommendation is to reject it because of the looping regression, and the demo video shows that
+    rejection, after which cycle 2 opens on v1.
+- **Live calls through Sarvam:** the router places real outbound calls through the Sarvam agent
+  (`Outbound-8a963506-5435`), A on agent version 1 and B on version 2, logging each lead's arm
+  before the phone rings; a test call to a team member connected on 10 Oct. The video's live scene
+  is an offline rehearsal with a simulated Sarvam, labelled as such.
 
 ## Honest limits
 
