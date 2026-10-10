@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vani Lab · adoption</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="card.css">
+<style>
+  .lead { position: absolute; left: 120px; top: 214px; }
+  .grid { position: absolute; left: 120px; right: 120px; top: 296px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 110px; row-gap: 84px; }
+  .cell { border-top: 1px solid var(--hairline-2); padding-top: 30px; position: relative; }
+  .cell::before { content: ""; position: absolute; left: 0; top: -1px; height: 3px; width: 0; background: var(--accent); transition: width 1200ms var(--ease) 200ms; }
+  .cell.on::before { width: 120px; }
+  .cell .n { font: 500 17px var(--f-mono); letter-spacing: .12em; color: var(--accent); }
+  .cell h2 { margin-top: 20px; font: 400 70px/1.02 var(--f-display); letter-spacing: -.02em; }
+  .cell h2 em { font-style: italic; }
+  .cell h2 .fig { font-size: .92em; }
+  .cell p { margin-top: 16px; font: 400 26px/1.4 var(--f-ui); color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="top"><span class="brand"><svg class="logo"></svg><b>Vani <em>Lab</em></b></span><span class="team">Team Hare &amp; Tortoise</span></div>
+<div class="eyebrow accent lead" data-step>What makes change adoptable</div>
+<div class="grid">
+  <div class="cell" data-step data-cue="proven on a tenth"><div class="n">01</div><h2>Proven on <span class="fig">10%</span> before <span class="fig">100%</span>.</h2><p>Every prompt change, on a tenth of traffic first.</p></div>
+  <div class="cell" data-step data-cue="Harm is caught"><div class="n">02</div><h2>Harm caught in <em>days</em>.</h2><p>Not quarters.</p></div>
+  <div class="cell" data-step data-cue="A person signs off"><div class="n">03</div><h2>A person signs off. Every decision&nbsp;<em>logged</em>.</h2><p>In an append-only log.</p></div>
+  <div class="cell" data-step data-cue="every call teaches"><div class="n">04</div><h2>Every call teaches the next&nbsp;<em>prompt</em>.</h2><p>Vani keeps getting better, without anyone guessing.</p></div>
+</div>
+<script src="card.js"></script>
+</body>
+</html>
